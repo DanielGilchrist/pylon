@@ -6,6 +6,12 @@ module Pylon::CLI
     end
 
     def report(report : Session::Report) : Nil
+      if (halt = report.halt)
+        @io.puts("halted: #{halt.explain}")
+        @io.puts("  nothing was changed on either side; run again once it looks right")
+        return
+      end
+
       return if report.quiet? && !@verbose
 
       applied_to_local = report.local_outcomes.count(&.applied?)

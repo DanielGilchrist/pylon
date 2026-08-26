@@ -8,12 +8,18 @@ module Pylon::Session
     getter conflicts : Array(Core::Conflict)
     getter local_outcomes : Array(Write::Outcome)
     getter remote_outcomes : Array(Write::Outcome)
+    getter halt : Core::Safety::Reason?
 
     def initialize(
       @conflicts : Array(Core::Conflict),
       @local_outcomes : Array(Write::Outcome),
       @remote_outcomes : Array(Write::Outcome),
+      @halt : Core::Safety::Reason? = nil,
     )
+    end
+
+    def halted? : Bool
+      !halt.nil?
     end
 
     def skipped : Array(Write::Outcome)
@@ -51,6 +57,22 @@ module Pylon::Session
         remote_snapshot.root,
         @mode,
       )
+
+      halt = Core::Safety.check(
+        @base,
+        local_snapshot.root,
+        remote_snapshot.root,
+        reconciliation.local_changes + reconciliation.remote_changes,
+      )
+
+      if halt
+        return Report.new(
+          reconciliation.conflicts,
+          [] of Write::Outcome,
+          [] of Write::Outcome,
+          halt,
+        )
+      end
 
       local_contents = @remote.contents(Core::Digests.required(reconciliation.local_changes))
       remote_contents = @local.contents(Core::Digests.required(reconciliation.remote_changes))

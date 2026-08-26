@@ -4,6 +4,7 @@ require "../../../src/pylon/session/local_endpoint"
 require "../../../src/pylon/session/session"
 
 include Pylon::Session
+include Pylon::Core
 
 private NOW = Time.utc.to_unix_ns.to_i64
 
@@ -147,6 +148,52 @@ describe Pylon::Session::Session do
       session.cycle(tick)
 
       File.read(File.join(local, "kept.rb")).should eq("edited")
+    end
+  end
+end
+
+describe "safety halts" do
+  it "refuses to mirror one side losing everything" do
+    in_pair do |local, remote, session|
+      File.write(File.join(local, "one.rb"), "1")
+      File.write(File.join(local, "two.rb"), "2")
+      File.write(File.join(local, "three.rb"), "3")
+      session.cycle(tick)
+
+      Dir.children(local).each { |name| File.delete(File.join(local, name)) }
+      report = session.cycle(tick)
+
+      report.halted?.should be_true
+      report.halt.should eq(Safety::Reason::EndpointEmptiedRoot)
+      Dir.children(remote).size.should eq(3)
+    end
+  end
+
+  it "keeps refusing until a human intervenes" do
+    in_pair do |local, remote, session|
+      3.times { |index| File.write(File.join(local, "f#{index}.rb"), "x") }
+      session.cycle(tick)
+
+      Dir.children(local).each { |name| File.delete(File.join(local, name)) }
+
+      session.cycle(tick).halted?.should be_true
+      session.cycle(tick).halted?.should be_true
+      Dir.children(remote).size.should eq(3)
+    end
+  end
+
+  it "propagates the deletion once the other side agrees" do
+    in_pair do |local, remote, session|
+      3.times { |index| File.write(File.join(local, "f#{index}.rb"), "x") }
+      session.cycle(tick)
+
+      Dir.children(local).each { |name| File.delete(File.join(local, name)) }
+      Dir.children(remote).each { |name| File.delete(File.join(remote, name)) }
+
+      report = session.cycle(tick)
+
+      report.halted?.should be_false
+      Dir.children(remote).should be_empty
     end
   end
 end
