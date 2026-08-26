@@ -92,6 +92,36 @@ describe Pylon::Write::Writer do
     target.nodes["script.sh"].executable.should be_true
   end
 
+  it "replaces a file with a single write and never clears the path first" do
+    target = MemoryTarget.new
+    original = target.seed_file("notes.txt", "before")
+    cache = cache_for(target, ["notes.txt"])
+    staging = MemoryStaging.new
+    incoming = staging.add("after")
+
+    outcome = Writer.new(target, staging, cache)
+      .apply([Change.new("notes.txt", Entry.file(original), Entry.file(incoming))]).first
+
+    outcome.applied?.should be_true
+    target.operations.should eq(["write notes.txt"])
+  end
+
+  it "clears the path first when a directory is involved" do
+    target = MemoryTarget.new
+    target.seed_directory("app")
+    digest = target.seed_file("app/user.rb", "x")
+    cache = cache_for(target, ["app/user.rb"])
+    staging = MemoryStaging.new
+    incoming = staging.add("now a file")
+
+    old = Entry.directory({"user.rb" => Entry.file(digest)})
+    outcome = Writer.new(target, staging, cache)
+      .apply([Change.new("app", old, Entry.file(incoming))]).first
+
+    outcome.applied?.should be_true
+    target.operations.should eq(["remove app", "write app"])
+  end
+
   it "removes a deleted path" do
     target = MemoryTarget.new
     digest = target.seed_file("gone.txt", "bye")

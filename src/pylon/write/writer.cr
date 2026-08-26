@@ -41,13 +41,21 @@ module Pylon::Write
         return swapped
       end
 
-      @filesystem.remove(change.path) unless change.old.nil?
+      @filesystem.remove(change.path) if clear_first?(change.old, change.new)
 
       created = create(change.path, change.new)
 
       return Outcome.new(change.path, created, "staged content missing") if incomplete?(change.new, created)
 
       Outcome.new(change.path, created)
+    end
+
+    private def clear_first?(old : Core::Entry?, new : Core::Entry?) : Bool
+      return false if old.nil?
+      return true if new.nil?
+      return true if old.kind.directory? || new.kind.directory?
+
+      false
     end
 
     private def swap_permissions(change : Core::Change) : Outcome?
