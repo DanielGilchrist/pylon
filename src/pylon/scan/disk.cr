@@ -31,6 +31,12 @@ module Pylon::Scan
       nil
     end
 
+    def read(relative_path : String) : Bytes?
+      File.read(absolute(relative_path)).to_slice
+    rescue File::Error
+      nil
+    end
+
     def link_target(relative_path : String) : String?
       File.readlink(absolute(relative_path))
     rescue File::Error
