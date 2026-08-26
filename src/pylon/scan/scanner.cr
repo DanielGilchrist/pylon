@@ -1,3 +1,4 @@
+require "wait_group"
 require "../core/entry"
 require "./cache_entry"
 require "./ignores"
@@ -15,6 +16,19 @@ module Pylon::Scan
 
   struct Scanner(F)
     DEFAULT_GRANULARITY_NS = 1_000_000_000_i64
+    DEFAULT_PARALLELISM    = System.cpu_count.to_i * 2
+
+    private record Surveyed,
+      kind : Core::Entry::Kind,
+      metadata : Metadata? = nil,
+      target : String? = nil
+
+    private class Survey
+      getter nodes = {} of String => Surveyed
+      getter children = {} of String => Array(String)
+      getter pending = [] of String
+      getter reused = {} of String => Bytes
+    end
 
     def initialize(
       @filesystem : F,
@@ -22,58 +36,140 @@ module Pylon::Scan
       @now_ns : Int64,
       @ignores : Ignores = Ignores::NONE,
       @granularity_ns : Int64 = DEFAULT_GRANULARITY_NS,
+      @parallelism : Int32 = DEFAULT_PARALLELISM,
     )
       @next_cache = Cache.new
     end
 
     def scan : Snapshot
-      Snapshot.new(visit(""), @next_cache)
+      survey = Survey.new
+      look(survey, "")
+
+      digests = survey.reused
+      hash_pending(survey, digests)
+
+      Snapshot.new(build(survey, digests, ""), @next_cache)
     end
 
-    private def visit(path : String) : Core::Entry?
-      return Core::Entry.untracked if @ignores.ignore?(path)
+    private def look(survey : Survey, path : String) : Nil
+      if @ignores.ignore?(path)
+        survey.nodes[path] = Surveyed.new(kind: Core::Entry::Kind::Untracked)
+        return
+      end
 
       observed = @filesystem.metadata(path)
-      return nil if observed.nil?
+      return if observed.nil?
 
       case observed.kind
-      in Core::Entry::Kind::Directory    then directory(path)
-      in Core::Entry::Kind::File         then file(path, observed)
-      in Core::Entry::Kind::SymbolicLink then symlink(path)
-      in Core::Entry::Kind::Untracked    then Core::Entry.untracked
-      in Core::Entry::Kind::Problematic  then Core::Entry.problematic("unreadable")
+      in Core::Entry::Kind::Directory
+        survey.nodes[path] = Surveyed.new(kind: Core::Entry::Kind::Directory)
+        names = [] of String
+
+        @filesystem.each_child(path) do |name|
+          child = join(path, name)
+          look(survey, child)
+          names << name if survey.nodes.has_key?(child)
+        end
+
+        survey.children[path] = names
+      in Core::Entry::Kind::File
+        survey.nodes[path] = Surveyed.new(kind: Core::Entry::Kind::File, metadata: observed)
+
+        if (digest = @cache[path]?.try(&.reuse(observed, @now_ns, @granularity_ns)))
+          survey.reused[path] = digest
+        else
+          survey.pending << path
+        end
+      in Core::Entry::Kind::SymbolicLink
+        survey.nodes[path] = Surveyed.new(
+          kind: Core::Entry::Kind::SymbolicLink,
+          target: @filesystem.link_target(path),
+        )
+      in Core::Entry::Kind::Untracked, Core::Entry::Kind::Problematic
+        survey.nodes[path] = Surveyed.new(kind: Core::Entry::Kind::Untracked)
       end
     end
 
-    private def directory(path : String) : Core::Entry
-      contents = {} of String => Core::Entry
+    private def hash_pending(survey : Survey, digests : Hash(String, Bytes)) : Nil
+      pending = survey.pending
+      return if pending.empty?
 
-      @filesystem.each_child(path) do |name|
-        if (child = visit(join(path, name)))
-          contents[name] = child
+      workers = Math.min(@parallelism, pending.size)
+
+      if workers <= 1
+        pending.each do |path|
+          if (digest = @filesystem.digest(path))
+            digests[path] = digest
+          end
+        end
+
+        return
+      end
+
+      partials = Array.new(workers) { {} of String => Bytes }
+      context = Fiber::ExecutionContext::Parallel.new("scan-digest", workers)
+      waiting = WaitGroup.new(workers)
+
+      workers.times do |worker|
+        context.spawn do
+          begin
+            local = partials[worker]
+            index = worker
+
+            while index < pending.size
+              path = pending[index]
+
+              if (digest = @filesystem.digest(path))
+                local[path] = digest
+              end
+
+              index += workers
+            end
+          ensure
+            waiting.done
+          end
         end
       end
 
-      Core::Entry.directory(contents)
+      waiting.wait
+      partials.each { |partial| digests.merge!(partial) }
     end
 
-    private def file(path : String, observed : Metadata) : Core::Entry
-      digest = @cache[path]?.try(&.reuse(observed, @now_ns, @granularity_ns))
-      digest ||= @filesystem.digest(path)
+    private def build(survey : Survey, digests : Hash(String, Bytes), path : String) : Core::Entry?
+      node = survey.nodes[path]?
+      return nil if node.nil?
 
-      return Core::Entry.problematic("unreadable") if digest.nil?
+      case node.kind
+      in Core::Entry::Kind::Directory
+        contents = {} of String => Core::Entry
 
-      @next_cache[path] = CacheEntry.new(observed, digest)
+        survey.children[path]?.try &.each do |name|
+          if (child = build(survey, digests, join(path, name)))
+            contents[name] = child
+          end
+        end
 
-      Core::Entry.file(digest, executable: observed.executable?)
-    end
+        Core::Entry.directory(contents)
+      in Core::Entry::Kind::File
+        observed = node.metadata
+        digest = digests[path]?
 
-    private def symlink(path : String) : Core::Entry
-      target = @filesystem.link_target(path)
+        return Core::Entry.problematic("unreadable") if observed.nil? || digest.nil?
 
-      return Core::Entry.problematic("unreadable link") if target.nil?
+        @next_cache[path] = CacheEntry.new(observed, digest)
 
-      Core::Entry.symlink(target)
+        Core::Entry.file(digest, executable: observed.executable?)
+      in Core::Entry::Kind::SymbolicLink
+        target = node.target
+
+        return Core::Entry.problematic("unreadable link") if target.nil?
+
+        Core::Entry.symlink(target)
+      in Core::Entry::Kind::Untracked
+        Core::Entry.untracked
+      in Core::Entry::Kind::Problematic
+        Core::Entry.problematic("unreadable")
+      end
     end
 
     private def join(path : String, name : String) : String

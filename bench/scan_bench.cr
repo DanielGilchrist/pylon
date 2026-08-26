@@ -13,12 +13,13 @@ IGNORES = Ignores.new(%w[
 
 root = ARGV[0]? || abort("usage: scan_bench <root>")
 now = Time.utc.to_unix_ns.to_i64
+parallelism = (ARGV[1]? || Scanner::DEFAULT_PARALLELISM).to_i
 filesystem = PosixFilesystem.new(root)
 
-puts "root: #{root}"
+puts "root: #{root} (parallelism #{parallelism})"
 
 started = Time.instant
-cold = Scanner.new(filesystem, Cache.new, now, IGNORES).scan
+cold = Scanner.new(filesystem, Cache.new, now, IGNORES, parallelism: parallelism).scan
 cold_elapsed = Time.instant - started
 
 files = cold.cache.size

@@ -11,7 +11,7 @@ private def scan(
   cache : Cache = Cache.new,
   ignores : Ignores = Ignores::NONE,
 ) : Snapshot
-  Scanner.new(filesystem, cache, NOW, ignores).scan
+  Scanner.new(filesystem, cache, NOW, ignores, parallelism: 1).scan
 end
 
 private def sample : MemoryFilesystem
@@ -44,7 +44,7 @@ describe Pylon::Scan::Scanner do
     warm = scan(filesystem).cache
 
     rescanned = MemoryFilesystem.new(filesystem.@nodes)
-    Scanner.new(rescanned, warm, NOW).scan
+    Scanner.new(rescanned, warm, NOW, parallelism: 1).scan
 
     rescanned.reads.should be_empty
   end
@@ -54,7 +54,7 @@ describe Pylon::Scan::Scanner do
     warm = scan(filesystem).cache
 
     changed = filesystem.with("README.md", content: "goodbye", inode: 99_u64)
-    Scanner.new(changed, warm, NOW).scan
+    Scanner.new(changed, warm, NOW, parallelism: 1).scan
 
     changed.reads.should eq(["README.md"])
   end
@@ -64,7 +64,7 @@ describe Pylon::Scan::Scanner do
     warm = scan(filesystem).cache
 
     racy = filesystem.with("README.md", mtime_ns: NOW)
-    Scanner.new(racy, warm, NOW).scan
+    Scanner.new(racy, warm, NOW, parallelism: 1).scan
 
     racy.reads.should eq(["README.md"])
   end
@@ -74,7 +74,7 @@ describe Pylon::Scan::Scanner do
     warm = scan(filesystem).cache
 
     executable = filesystem.with("README.md", executable: true)
-    snapshot = Scanner.new(executable, warm, NOW).scan
+    snapshot = Scanner.new(executable, warm, NOW, parallelism: 1).scan
     root = snapshot.root.should_not be_nil
     next if root.nil?
 
