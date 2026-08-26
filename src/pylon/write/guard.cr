@@ -1,13 +1,8 @@
 require "../core/entry"
 require "../scan/cache_entry"
+require "./verdict"
 
 module Pylon::Write
-  enum Verdict
-    Proceed
-    ModificationDetected
-    UnknownState
-  end
-
   module Guard
     extend self
 

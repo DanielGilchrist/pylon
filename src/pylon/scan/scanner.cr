@@ -2,18 +2,9 @@ require "wait_group"
 require "../core/entry"
 require "./cache_entry"
 require "./ignores"
+require "./snapshot"
 
 module Pylon::Scan
-  alias Cache = Hash(String, CacheEntry)
-
-  struct Snapshot
-    getter root : Core::Entry?
-    getter cache : Cache
-
-    def initialize(@root : Core::Entry?, @cache : Cache)
-    end
-  end
-
   struct Scanner(F)
     DEFAULT_GRANULARITY_NS = 1_000_000_000_i64
     DEFAULT_PARALLELISM    = System.cpu_count.to_i * 2

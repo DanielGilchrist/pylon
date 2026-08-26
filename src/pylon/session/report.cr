@@ -1,0 +1,34 @@
+require "../core/safety"
+require "../write/writer"
+
+module Pylon::Session
+  struct Report
+    getter conflicts : Array(Core::Conflict)
+    getter local_outcomes : Array(Write::Outcome)
+    getter remote_outcomes : Array(Write::Outcome)
+    getter halt : Core::Safety::Reason?
+
+    def initialize(
+      @conflicts : Array(Core::Conflict),
+      @local_outcomes : Array(Write::Outcome),
+      @remote_outcomes : Array(Write::Outcome),
+      @halt : Core::Safety::Reason? = nil,
+    )
+    end
+
+    def halted? : Bool
+      !halt.nil?
+    end
+
+    def skipped : Array(Write::Outcome)
+      (local_outcomes + remote_outcomes).reject(&.applied?)
+    end
+
+    def quiet? : Bool
+      conflicts.empty? &&
+        local_outcomes.empty? &&
+        remote_outcomes.empty? &&
+        !halted?
+    end
+  end
+end

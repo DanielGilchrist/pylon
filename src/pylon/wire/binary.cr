@@ -1,13 +1,11 @@
 require "../core/change"
+require "./truncated"
 require "../core/entry"
 require "../scan/cache_entry"
 require "../write/writer"
 
 module Pylon::Wire
   FORMAT = IO::ByteFormat::LittleEndian
-
-  class Truncated < Exception
-  end
 
   module Binary
     extend self
