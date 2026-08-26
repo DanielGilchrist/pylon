@@ -1,0 +1,9 @@
+name: pylon
+version: 0.1.0
+
+authors:
+  - Daniel Gilchrist <danniieelg@gmail.com>
+
+crystal: ">= 1.21.0"
+
+license: MIT
