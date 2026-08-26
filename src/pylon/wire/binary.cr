@@ -1,5 +1,6 @@
 require "../core/change"
 require "../core/entry"
+require "../scan/cache_entry"
 require "../write/writer"
 
 module Pylon::Wire
@@ -136,6 +137,41 @@ module Pylon::Wire
       end
 
       outcomes
+    end
+
+    def write_cache(io : IO, cache : Scan::Cache) : Nil
+      io.write_bytes(cache.size.to_u32, FORMAT)
+
+      cache.each do |path, entry|
+        metadata = entry.metadata
+
+        write_string(io, path)
+        io.write_bytes(metadata.mode, FORMAT)
+        io.write_bytes(metadata.size, FORMAT)
+        io.write_bytes(metadata.mtime_ns, FORMAT)
+        io.write_bytes(metadata.inode, FORMAT)
+        write_bytes(io, entry.digest)
+      end
+    end
+
+    def read_cache(io : IO) : Scan::Cache
+      count = read_u32(io)
+      cache = Scan::Cache.new(initial_capacity: count)
+
+      count.times do
+        path = read_string(io) || ""
+
+        metadata = Scan::Metadata.new(
+          mode: io.read_bytes(UInt32, FORMAT),
+          size: io.read_bytes(UInt64, FORMAT),
+          mtime_ns: io.read_bytes(Int64, FORMAT),
+          inode: io.read_bytes(UInt64, FORMAT),
+        )
+
+        cache[path] = Scan::CacheEntry.new(metadata, read_bytes(io) || Bytes.empty)
+      end
+
+      cache
     end
 
     private def read_byte(io : IO) : UInt8
