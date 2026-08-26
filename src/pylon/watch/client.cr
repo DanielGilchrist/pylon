@@ -108,6 +108,7 @@ module Pylon::Watch
           json.string(name)
 
           json.object do
+            json.field("defer_vcs", false)
             json.field("fields") do
               json.array { FIELDS.each { |field| json.string(field) } }
             end

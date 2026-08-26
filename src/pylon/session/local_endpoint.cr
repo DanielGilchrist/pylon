@@ -10,17 +10,43 @@ module Pylon::Session
     getter root : String
     property cache : Scan::Cache
 
+    @baseline : Core::Entry?
+    @recheck : Set(String)
+
     def initialize(@root : String, @ignores : Scan::Ignores = Scan::Ignores::NONE)
       @cache = Scan::Cache.new
       @by_digest = {} of Bytes => String
+      @baseline = nil
+      @recheck = Set(String).new
+      @accelerated = false
       @filesystem = Scan::Disk.new(@root)
       @target = Write::DiskTarget.new(@root)
     end
 
+    def accelerate! : Nil
+      @accelerated = true
+    end
+
+    def mark_dirty(paths : Enumerable(String)) : Nil
+      paths.each { |path| @recheck << path }
+    end
+
+    def invalidate : Nil
+      @baseline = nil
+      @recheck.clear
+    end
+
     def scan(now_ns : Int64) : Scan::Snapshot
-      snapshot = Scan::Scanner.new(@filesystem, @cache, now_ns, @ignores).scan
+      snapshot = Scan::Scanner.new(
+        @filesystem, @cache, now_ns, @ignores,
+        baseline: @baseline,
+        recheck: @recheck,
+      ).scan
+
       @cache = snapshot.cache
       @by_digest = index(snapshot.cache)
+      @baseline = @accelerated ? snapshot.root : nil
+      @recheck = Set(String).new
       snapshot
     end
 

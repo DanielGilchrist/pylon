@@ -121,3 +121,100 @@ describe Pylon::Scan::Ignores do
     ignores.ignore?("").should be_false
   end
 end
+
+describe "accelerated scanning" do
+  it "does no filesystem work at all when nothing is dirty" do
+    filesystem = sample
+    first = scan(filesystem)
+
+    quiet = MemoryFilesystem.new(filesystem.@nodes)
+    second = Scanner.new(quiet, first.cache, NOW, parallelism: 1, baseline: first.root).scan
+
+    quiet.reads.should be_empty
+    Entry.equal?(second.root, first.root, true).should be_true
+    second.cache.size.should eq(first.cache.size)
+  end
+
+  it "rebuilds only the dirty subtree" do
+    filesystem = sample
+    first = scan(filesystem)
+
+    changed = filesystem.with("app/models/pay.rb", content: "class Pay2; end", inode: 77_u64)
+    second = Scanner.new(
+      changed, first.cache, NOW,
+      parallelism: 1,
+      baseline: first.root,
+      recheck: Set{"app/models/pay.rb"},
+    ).scan
+
+    changed.reads.should eq(["app/models/pay.rb"])
+
+    root = second.root.should_not be_nil
+    next if root.nil?
+
+    root.contents["README.md"].digest.should eq(first.root.not_nil!.contents["README.md"].digest)
+    root.contents["app"].contents["models"].contents.keys.sort!.should eq(["pay.rb", "user.rb"])
+  end
+
+  it "carries cache entries forward for untouched subtrees" do
+    filesystem = sample
+    first = scan(filesystem)
+
+    changed = filesystem.with("README.md", content: "new", inode: 88_u64)
+    second = Scanner.new(
+      changed, first.cache, NOW,
+      parallelism: 1,
+      baseline: first.root,
+      recheck: Set{"README.md"},
+    ).scan
+
+    second.cache.keys.sort!.should eq(["README.md", "app/models/pay.rb", "app/models/user.rb"])
+    second.cache["app/models/user.rb"].digest.should eq(first.cache["app/models/user.rb"].digest)
+  end
+
+  it "notices a file that appeared inside a dirty directory" do
+    filesystem = sample
+    first = scan(filesystem)
+
+    added = MemoryFilesystem.build({
+      "app/models/user.rb" => "class User; end",
+      "app/models/pay.rb"  => "class Pay; end",
+      "app/models/new.rb"  => "class New; end",
+      "README.md"          => "hello",
+    })
+
+    second = Scanner.new(
+      added, first.cache, NOW,
+      parallelism: 1,
+      baseline: first.root,
+      recheck: Set{"app/models/new.rb"},
+    ).scan
+
+    root = second.root.should_not be_nil
+    next if root.nil?
+
+    root.contents["app"].contents["models"].contents.keys.sort!.should eq(["new.rb", "pay.rb", "user.rb"])
+  end
+
+  it "notices a deletion inside a dirty directory" do
+    filesystem = sample
+    first = scan(filesystem)
+
+    remaining = MemoryFilesystem.build({
+      "app/models/user.rb" => "class User; end",
+      "README.md"          => "hello",
+    })
+
+    second = Scanner.new(
+      remaining, first.cache, NOW,
+      parallelism: 1,
+      baseline: first.root,
+      recheck: Set{"app/models/pay.rb"},
+    ).scan
+
+    root = second.root.should_not be_nil
+    next if root.nil?
+
+    root.contents["app"].contents["models"].contents.keys.should eq(["user.rb"])
+  end
+end

@@ -1,3 +1,4 @@
+require "sync"
 require "./client"
 
 module Pylon::Watch
@@ -21,7 +22,21 @@ module Pylon::Watch
       new(client, signals)
     end
 
+    record Changes, paths : Array(String), fresh : Bool
+
+    def drain : Changes
+      @lock.synchronize do
+        changes = Changes.new(@paths.to_a, @fresh)
+        @paths.clear
+        @fresh = false
+        changes
+      end
+    end
+
     def initialize(@client : Client(UNIXSocket), @signals : Channel(Nil) = Channel(Nil).new(1))
+      @paths = Set(String).new
+      @lock = Sync::Mutex.new
+      @fresh = false
       @stopping = false
       @first = true
 
@@ -41,8 +56,12 @@ module Pylon::Watch
 
         case pdu
         in PDU::Snapshot
-          signal unless first_snapshot?
+          next if first_snapshot?
+
+          @lock.synchronize { @fresh = true }
+          signal
         in PDU::Delta
+          record(pdu.observations)
           signal
         in PDU::Failure
           break
@@ -52,6 +71,12 @@ module Pylon::Watch
       end
     rescue IO::Error
       nil
+    end
+
+    private def record(observations : Array(Observation)) : Nil
+      @lock.synchronize do
+        observations.each { |observation| @paths << observation.name }
+      end
     end
 
     private def first_snapshot? : Bool

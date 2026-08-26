@@ -1,3 +1,4 @@
+require "wait_group"
 require "../core"
 require "../core/digests"
 require "../write/writer"
@@ -36,8 +37,13 @@ module Pylon::Session
     end
 
     def cycle(now_ns : Int64) : Report
-      local_snapshot = @local.scan(now_ns)
-      remote_snapshot = @remote.scan(now_ns)
+      local_snapshot = uninitialized Scan::Snapshot
+      remote_snapshot = uninitialized Scan::Snapshot
+
+      WaitGroup.wait do |waiting|
+        waiting.spawn { local_snapshot = @local.scan(now_ns) }
+        waiting.spawn { remote_snapshot = @remote.scan(now_ns) }
+      end
 
       reconciliation = Core::Reconciler.reconcile(
         @base,

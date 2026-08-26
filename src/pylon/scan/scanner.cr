@@ -18,6 +18,9 @@ module Pylon::Scan
     DEFAULT_GRANULARITY_NS = 1_000_000_000_i64
     DEFAULT_PARALLELISM    = System.cpu_count.to_i * 2
 
+    @next_cache : Cache
+    @dirty : Set(String)
+
     private record Surveyed,
       kind : Core::Entry::Kind,
       metadata : Metadata? = nil,
@@ -28,6 +31,7 @@ module Pylon::Scan
       getter children = {} of String => Array(String)
       getter pending = [] of String
       getter reused = {} of String => Bytes
+      getter carried = {} of String => Core::Entry
     end
 
     def initialize(
@@ -37,13 +41,20 @@ module Pylon::Scan
       @ignores : Ignores = Ignores::NONE,
       @granularity_ns : Int64 = DEFAULT_GRANULARITY_NS,
       @parallelism : Int32 = DEFAULT_PARALLELISM,
+      @baseline : Core::Entry? = nil,
+      @recheck : Set(String) = Set(String).new,
     )
       @next_cache = Cache.new
+      @dirty = expand(@recheck)
     end
 
     def scan : Snapshot
+      baseline = @baseline
+
+      return Snapshot.new(baseline, @cache) if baseline && @recheck.empty?
+
       survey = Survey.new
-      look(survey, "")
+      look(survey, "", baseline)
 
       digests = survey.reused
       hash_pending(survey, digests)
@@ -51,7 +62,34 @@ module Pylon::Scan
       Snapshot.new(build(survey, digests, ""), @next_cache)
     end
 
-    private def look(survey : Survey, path : String) : Nil
+    private def expand(recheck : Set(String)) : Set(String)
+      dirty = Set(String).new
+
+      recheck.each do |path|
+        dirty << path
+        offset = 0
+
+        while (separator = path.index('/', offset))
+          dirty << path[0, separator]
+          offset = separator + 1
+        end
+      end
+
+      dirty << ""
+      dirty
+    end
+
+    private def trusted?(path : String) : Bool
+      !@baseline.nil? && !@dirty.includes?(path)
+    end
+
+    private def look(survey : Survey, path : String, baseline : Core::Entry?) : Nil
+      if baseline && trusted?(path)
+        survey.carried[path] = baseline
+        carry_cache(path, baseline)
+        return
+      end
+
       if @ignores.ignore?(path)
         survey.nodes[path] = Surveyed.new(kind: Core::Entry::Kind::Untracked)
         return
@@ -64,11 +102,12 @@ module Pylon::Scan
       in Core::Entry::Kind::Directory
         survey.nodes[path] = Surveyed.new(kind: Core::Entry::Kind::Directory)
         names = [] of String
+        baseline_contents = baseline.try { |entry| entry.directory? ? entry.contents : nil }
 
         @filesystem.each_child(path) do |name|
           child = join(path, name)
-          look(survey, child)
-          names << name if survey.nodes.has_key?(child)
+          look(survey, child, baseline_contents.try(&.[name]?))
+          names << name if survey.nodes.has_key?(child) || survey.carried.has_key?(child)
         end
 
         survey.children[path] = names
@@ -88,6 +127,18 @@ module Pylon::Scan
       in Core::Entry::Kind::Untracked, Core::Entry::Kind::Problematic
         survey.nodes[path] = Surveyed.new(kind: Core::Entry::Kind::Untracked)
       end
+    end
+
+    private def carry_cache(path : String, entry : Core::Entry) : Nil
+      if entry.kind.file?
+        if (cached = @cache[path]?)
+          @next_cache[path] = cached
+        end
+
+        return
+      end
+
+      entry.contents.each { |name, child| carry_cache(join(path, name), child) }
     end
 
     private def hash_pending(survey : Survey, digests : Hash(String, Bytes)) : Nil
@@ -136,6 +187,10 @@ module Pylon::Scan
     end
 
     private def build(survey : Survey, digests : Hash(String, Bytes), path : String) : Core::Entry?
+      if (carried = survey.carried[path]?)
+        return carried
+      end
+
       node = survey.nodes[path]?
       return nil if node.nil?
 

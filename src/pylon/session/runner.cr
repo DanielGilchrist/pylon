@@ -12,6 +12,7 @@ module Pylon::Session
       @debounce : Time::Span = DEFAULT_DEBOUNCE,
       @poll : Time::Span = DEFAULT_POLL,
       @remote_poll : Proc(Bool)? = nil,
+      @before : Proc(Nil)? = nil,
     )
       @stopping = false
     end
@@ -26,8 +27,20 @@ module Pylon::Session
       until @stopping
         next unless wait_for_work
 
+        woke = Time.instant
         settle
-        block.call(cycle)
+        settled = Time.instant
+        report = cycle
+        done = Time.instant
+
+        if ENV["PYLON_TIMING"]?
+          STDERR.puts("settle=%.1fms cycle=%.1fms" % [
+            (settled - woke).total_milliseconds,
+            (done - settled).total_milliseconds,
+          ])
+        end
+
+        block.call(report)
       end
     end
 
@@ -61,6 +74,7 @@ module Pylon::Session
     end
 
     private def cycle : Report
+      @before.try(&.call)
       @session.cycle(Time.utc.to_unix_ns.to_i64)
     end
   end

@@ -76,15 +76,20 @@ module Pylon::CLI
       end
 
       signals = Channel(Nil).new(16)
-      subscribers = [local, remote].compact_map { |root| Watch::Subscriber.open(root, ignore, signals) }
+      watchers = [{left, local}, {right, remote}].compact_map do |endpoint, root|
+        subscriber = Watch::Subscriber.open(root, ignore, signals)
+        subscriber.nil? ? nil : {endpoint, subscriber}
+      end
 
-      if subscribers.size < 2
-        subscribers.each(&.close)
+      if watchers.size < 2
+        watchers.each { |_, subscriber| subscriber.close }
         STDERR.puts("pylon: watching needs watchman on this machine")
         exit(1)
       end
 
-      runner = Session::Runner.new(session, signals)
+      watchers.each { |endpoint, _| endpoint.accelerate! }
+
+      runner = Session::Runner.new(session, signals, before: -> { drain(watchers) })
       Signal::INT.trap { runner.stop }
 
       runner.run do |report|
@@ -92,7 +97,19 @@ module Pylon::CLI
         save.call
       end
 
-      subscribers.each(&.close)
+      watchers.each { |_, subscriber| subscriber.close }
+    end
+
+    private def drain(watchers) : Nil
+      watchers.each do |endpoint, subscriber|
+        changes = subscriber.drain
+
+        if changes.fresh
+          endpoint.invalidate
+        else
+          endpoint.mark_dirty(changes.paths)
+        end
+      end
     end
   end
 
@@ -158,13 +175,13 @@ module Pylon::CLI
         reporter = Reporter.new(STDOUT, verbose?)
         save = -> { state.try { |path| Session::Store.save(path, Session::State.new(session.base, left.cache, restored.remote_cache)) } }
 
-        drive(session, reporter, save, remote_endpoint, target)
+        drive(session, reporter, save, remote_endpoint, left, target)
       ensure
         transport.close
       end
     end
 
-    private def drive(session, reporter, save, remote_endpoint, target) : Nil
+    private def drive(session, reporter, save, remote_endpoint, local_endpoint, target) : Nil
       run = ->(body : Proc(Nil)) do
         begin
           body.call
