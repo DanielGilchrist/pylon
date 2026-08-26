@@ -114,3 +114,29 @@ describe "a session over the wire protocol" do
     end
   end
 end
+
+describe "a session whose remote pushes tree updates" do
+  it "still sees remote changes when no pusher exists, at the cost of a round trip" do
+    in_remote_pair do |local, remote, session|
+      File.write(File.join(remote, "pushed.rb"), "from the box")
+
+      session.cycle(tick)
+
+      File.read(File.join(local, "pushed.rb")).should eq("from the box")
+    end
+  end
+
+  it "keeps its cached remote tree correct after its own write" do
+    in_remote_pair do |local, remote, session|
+      File.write(File.join(local, "one.rb"), "1")
+      session.cycle(tick)
+      session.cycle(tick).quiet?.should be_true
+
+      File.write(File.join(local, "two.rb"), "2")
+      session.cycle(tick)
+
+      File.read(File.join(remote, "two.rb")).should eq("2")
+      session.cycle(tick).quiet?.should be_true
+    end
+  end
+end

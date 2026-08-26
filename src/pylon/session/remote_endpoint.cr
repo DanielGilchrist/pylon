@@ -1,3 +1,4 @@
+require "../core/applier"
 require "../wire/message"
 
 module Pylon::Session
@@ -5,12 +6,24 @@ module Pylon::Session
     class ProtocolError < Exception
     end
 
-    def initialize(@input : IO, @output : IO)
+    getter exchanges = 0
+
+    def initialize(@input : IO, @output : IO, @signals : Channel(Nil)? = nil)
+      @responses = Channel(Wire::Message).new
+      @failure = nil.as(Exception?)
+      @tree = nil.as(Core::Entry?)
+      @known = false
+
+      spawn { listen }
     end
 
     def scan(now_ns : Int64) : Scan::Snapshot
+      return Scan::Snapshot.new(@tree, Scan::Cache.new) if @known
+
       reply = exchange(Wire::ScanRequest.new(now_ns))
       raise ProtocolError.new("expected a scan response") unless reply.is_a?(Wire::ScanResponse)
+
+      @tree = reply.root
 
       Scan::Snapshot.new(reply.root, Scan::Cache.new)
     end
@@ -37,13 +50,44 @@ module Pylon::Session
       reply = exchange(Wire::WriteRequest.new(changes, contents))
       raise ProtocolError.new("expected a write response") unless reply.is_a?(Wire::WriteResponse)
 
+      @tree = Core::Applier.apply(@tree, reply.outcomes.map { |outcome| Core::Change.new(outcome.path, nil, outcome.entry) })
       reply.outcomes
     end
 
-    private def exchange(request : Wire::Message) : Wire::Message
-      request.write(@output)
-      reply = Wire.read_message(@input)
+    private def listen : Nil
+      loop do
+        message = Wire.read_message(@input)
 
+        if message.is_a?(Wire::TreeUpdate)
+          @tree = message.root
+          @known = true
+          signal
+          next
+        end
+
+        @responses.send(message)
+      end
+    rescue error : Wire::Truncated | IO::Error
+      @failure = error
+      @responses.close
+    end
+
+    private def signal : Nil
+      signals = @signals
+      return if signals.nil?
+
+      select
+      when signals.send(nil)
+      else
+      end
+    end
+
+    private def exchange(request : Wire::Message) : Wire::Message
+      @exchanges += 1
+      request.write(@output)
+
+      reply = @responses.receive?
+      raise(@failure || Wire::Truncated.new("the remote stopped responding")) if reply.nil?
       raise ProtocolError.new(reply.message) if reply.is_a?(Wire::Failure)
 
       reply

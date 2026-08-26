@@ -72,6 +72,9 @@ module Pylon::Session
           (written - fetched).total_milliseconds,
           (Time.instant - written).total_milliseconds,
         ])
+        {% if B.has_method?(:exchanges) %}
+          STDERR.puts("  round trips so far=#{@remote.exchanges}")
+        {% end %}
       end
 
       Report.new(reconciliation.conflicts, local_outcomes, remote_outcomes)

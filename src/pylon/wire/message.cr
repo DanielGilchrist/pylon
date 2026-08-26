@@ -7,6 +7,7 @@ require "./scan_request"
 require "./scan_response"
 require "./write_request"
 require "./write_response"
+require "./tree_update"
 
 module Pylon::Wire
   alias Message = Failure |
@@ -17,7 +18,8 @@ module Pylon::Wire
                   ContentsRequest |
                   ContentsResponse |
                   WriteRequest |
-                  WriteResponse
+                  WriteResponse |
+                  TreeUpdate
 
   def self.read_message(io : IO) : Message
     byte = io.read_byte
@@ -33,6 +35,7 @@ module Pylon::Wire
     in Tag::WriteResponse then WriteResponse.new(Binary.read_outcomes(io))
     in Tag::PollRequest        then PollRequest.new
     in Tag::PollResponse       then PollResponse.new(Binary.read_bool(io))
+    in Tag::TreeUpdate         then TreeUpdate.new(Binary.read_entry(io))
     end
   end
 

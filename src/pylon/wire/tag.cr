@@ -9,5 +9,6 @@ module Pylon::Wire
     WriteResponse
     PollRequest
     PollResponse
+    TreeUpdate
   end
 end

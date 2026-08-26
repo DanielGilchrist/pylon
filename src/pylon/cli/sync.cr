@@ -71,7 +71,8 @@ struct Pylon::CLI
         left = Session::LocalEndpoint.new(local, ignores)
         left.cache = restored.local_cache
 
-        remote_endpoint = Session::RemoteEndpoint.new(transport.reader, transport.writer)
+        signals = Channel(Nil).new(16)
+        remote_endpoint = Session::RemoteEndpoint.new(transport.reader, transport.writer, signals)
         session = Session::Session.new(left, remote_endpoint, base: restored.base)
 
         reporter = Reporter.new(STDOUT, verbose?)
@@ -79,13 +80,13 @@ struct Pylon::CLI
           Session::Persister.new(path, -> { Session::State.new(session.base, left.cache, restored.remote_cache) })
         end
 
-        drive(session, reporter, persister, remote_endpoint, left, target)
+        drive(session, reporter, persister, remote_endpoint, left, target, signals)
       ensure
         transport.close
       end
     end
 
-    private def drive(session, reporter, persister, remote_endpoint, local_endpoint, target) : Nil
+    private def drive(session, reporter, persister, remote_endpoint, local_endpoint, target, signals) : Nil
       run = ->(body : Proc(Nil)) do
         begin
           body.call
@@ -101,7 +102,6 @@ struct Pylon::CLI
         return
       end
 
-      signals = Channel(Nil).new(16)
       subscriber = Watch::Subscriber.open(local, ignore, signals)
 
       if subscriber.nil?
@@ -114,7 +114,6 @@ struct Pylon::CLI
       runner = Session::Runner.new(
         session,
         signals,
-        remote_poll: -> { remote_endpoint.changed? },
         before: -> { drain(local_endpoint, subscriber) },
       )
 

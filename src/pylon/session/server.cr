@@ -1,5 +1,6 @@
-require "../wire/message"
+require "sync"
 require "../watch/subscriber"
+require "../wire/message"
 require "./local_endpoint"
 require "./persister"
 
@@ -12,16 +13,44 @@ module Pylon::Session
       @subscriber : Watch::Subscriber? = nil,
       @persister : Persister? = nil,
     )
+      @lock = Sync::Mutex.new
+      @stopping = false
     end
 
     def run : Nil
+      announce
+
       loop do
         break unless serve(Wire.read_message(@input))
       end
     rescue Wire::Truncated | IO::Error
       nil
     ensure
+      @stopping = true
       @persister.try(&.flush)
+    end
+
+    private def announce : Nil
+      subscriber = @subscriber
+      return if subscriber.nil?
+
+      push
+
+      spawn do
+        until @stopping
+          subscriber.signals.receive?
+          push
+        end
+      end
+    end
+
+    private def push : Nil
+      @lock.synchronize do
+        drain
+        Wire::TreeUpdate.new(@endpoint.scan(Time.utc.to_unix_ns.to_i64).root).write(@output)
+      end
+    rescue IO::Error
+      nil
     end
 
     private def drain : Nil
@@ -35,31 +64,30 @@ module Pylon::Session
     private def serve(request : Wire::Message) : Bool
       case request
       in Wire::ScanRequest
-        started = Time.instant
-        drain
-        drained = Time.instant
-        root = @endpoint.scan(request.now_ns).root
-        scanned = Time.instant
-        Wire::ScanResponse.new(root).write(@output)
-
-        if ENV["PYLON_TIMING"]?
-          STDERR.puts("  server drain=%.1fms scan=%.1fms write=%.1fms" % [
-            (drained - started).total_milliseconds,
-            (scanned - drained).total_milliseconds,
-            (Time.instant - scanned).total_milliseconds,
-          ])
+        @lock.synchronize do
+          drain
+          Wire::ScanResponse.new(@endpoint.scan(request.now_ns).root).write(@output)
         end
       in Wire::ContentsRequest
-        Wire::ContentsResponse.new(@endpoint.contents(request.digests)).write(@output)
-      in Wire::PollRequest
-        Wire::PollResponse.new(@subscriber.try(&.pending?) != false).write(@output)
+        @lock.synchronize do
+          Wire::ContentsResponse.new(@endpoint.contents(request.digests)).write(@output)
+        end
       in Wire::WriteRequest
-        outcomes = @endpoint.write(request.changes, request.contents)
-        Wire::WriteResponse.new(outcomes).write(@output)
-        @persister.try(&.maybe)
-      in Wire::Failure, Wire::ScanResponse, Wire::PollResponse,
+        @lock.synchronize do
+          outcomes = @endpoint.write(request.changes, request.contents)
+          Wire::WriteResponse.new(outcomes).write(@output)
+          @persister.try(&.maybe)
+        end
+      in Wire::PollRequest
+        @lock.synchronize do
+          Wire::PollResponse.new(@subscriber.try(&.pending?) != false).write(@output)
+        end
+      in Wire::Failure, Wire::ScanResponse, Wire::PollResponse, Wire::TreeUpdate,
          Wire::ContentsResponse, Wire::WriteResponse
-        Wire::Failure.new("unexpected message from the client").write(@output)
+        @lock.synchronize do
+          Wire::Failure.new("unexpected message from the client").write(@output)
+        end
+
         return false
       end
 
