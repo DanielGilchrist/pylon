@@ -11,6 +11,8 @@ module Pylon::Wire
     ContentsResponse
     WriteRequest
     WriteResponse
+    PollRequest
+    PollResponse
   end
 
   module Writable
@@ -146,7 +148,37 @@ module Pylon::Wire
     end
   end
 
+  struct PollRequest
+    include Writable
+
+    def tag : Tag
+      Tag::PollRequest
+    end
+
+    def write_payload(io : IO) : Nil
+    end
+  end
+
+  struct PollResponse
+    include Writable
+
+    getter? changed : Bool
+
+    def initialize(@changed : Bool)
+    end
+
+    def tag : Tag
+      Tag::PollResponse
+    end
+
+    def write_payload(io : IO) : Nil
+      Binary.write_bool(io, changed?)
+    end
+  end
+
   alias Message = Failure |
+                  PollRequest |
+                  PollResponse |
                   ScanRequest |
                   ScanResponse |
                   ContentsRequest |
@@ -166,6 +198,8 @@ module Pylon::Wire
     in Tag::ContentsResponse   then ContentsResponse.new(read_contents(io))
     in Tag::WriteRequest  then WriteRequest.new(Binary.read_changes(io), read_contents(io))
     in Tag::WriteResponse then WriteResponse.new(Binary.read_outcomes(io))
+    in Tag::PollRequest        then PollRequest.new
+    in Tag::PollResponse       then PollResponse.new(Binary.read_bool(io))
     end
   end
 

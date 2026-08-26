@@ -27,27 +27,31 @@ module Pylon::Watch
     def initialize(@io : T)
     end
 
-    def watch_project(root : String) : PDU
+    def watch_project(root : String) : PDU::Any
       resolved = canonical(root)
       send(JSON.build { |json| json.array { json.string("watch-project"); json.string(resolved) } })
     end
 
-    def clock(root : String) : PDU
+    def clock(root : String) : PDU::Any
       resolved = canonical(root)
       send(JSON.build { |json| json.array { json.string("clock"); json.string(resolved) } })
     end
 
-    def subscribe(root : String, name : String, ignores : Array(String)) : PDU
+    def since(root : String, clock : String, ignores : Array(String)) : PDU::Any
+      send(since_request(canonical(root), clock, ignores))
+    end
+
+    def subscribe(root : String, name : String, ignores : Array(String)) : PDU::Any
       send(subscribe_request(canonical(root), name, ignores))
     end
 
-    def send(request : String) : PDU
+    def send(request : String) : PDU::Any
       @io.puts(request)
       @io.flush
       read
     end
 
-    def read : PDU
+    def read : PDU::Any
       PDU.parse(@io.gets)
     end
 
@@ -59,6 +63,41 @@ module Pylon::Watch
       File.realpath(root)
     rescue File::Error
       root
+    end
+
+    private def since_request(root : String, clock : String, ignores : Array(String)) : String
+      JSON.build do |json|
+        json.array do
+          json.string("query")
+          json.string(root)
+
+          json.object do
+            json.field("since", clock)
+            json.field("fields") { json.array { json.string("name") } }
+            write_expression(json, ignores)
+          end
+        end
+      end
+    end
+
+    private def write_expression(json : JSON::Builder, ignores : Array(String)) : Nil
+      return if ignores.empty?
+
+      json.field("expression") do
+        json.array do
+          json.string("not")
+          json.array do
+            json.string("anyof")
+
+            ignores.each do |pattern|
+              json.array do
+                json.string("dirname")
+                json.string(pattern)
+              end
+            end
+          end
+        end
+      end
     end
 
     private def subscribe_request(root : String, name : String, ignores : Array(String)) : String

@@ -2,8 +2,56 @@ require "json"
 require "./observation"
 
 module Pylon::Watch
-  abstract struct PDU
-    def self.parse(line : String?) : PDU
+  module PDU
+    extend self
+
+    struct Failure
+      getter message : String
+
+      def initialize(@message : String)
+      end
+    end
+
+    struct Response
+      getter body : JSON::Any
+
+      def initialize(@body : JSON::Any)
+      end
+    end
+
+    struct Snapshot
+      getter subscription : String
+      getter clock : String
+      getter observations : Array(Observation)
+      getter warning : String?
+
+      def initialize(
+        @subscription : String,
+        @clock : String,
+        @observations : Array(Observation),
+        @warning : String? = nil,
+      )
+      end
+    end
+
+    struct Delta
+      getter subscription : String
+      getter clock : String
+      getter observations : Array(Observation)
+      getter warning : String?
+
+      def initialize(
+        @subscription : String,
+        @clock : String,
+        @observations : Array(Observation),
+        @warning : String? = nil,
+      )
+      end
+    end
+
+    alias Any = Failure | Response | Snapshot | Delta
+
+    def parse(line : String?) : Any
       return Failure.new("connection closed") if line.nil?
 
       json =
@@ -31,45 +79,11 @@ module Pylon::Watch
       end
     end
 
-    private def self.observations_in(json : JSON::Any) : Array(Observation)
+    private def observations_in(json : JSON::Any) : Array(Observation)
       files = json["files"]?.try(&.as_a?)
       return [] of Observation if files.nil?
 
       files.compact_map { |file| Observation.from(file) }
-    end
-
-    struct Failure < PDU
-      getter message : String
-
-      def initialize(@message : String)
-      end
-    end
-
-    struct Response < PDU
-      getter body : JSON::Any
-
-      def initialize(@body : JSON::Any)
-      end
-    end
-
-    struct Snapshot < PDU
-      getter subscription : String
-      getter clock : String
-      getter observations : Array(Observation)
-      getter warning : String?
-
-      def initialize(@subscription : String, @clock : String, @observations : Array(Observation), @warning : String? = nil)
-      end
-    end
-
-    struct Delta < PDU
-      getter subscription : String
-      getter clock : String
-      getter observations : Array(Observation)
-      getter warning : String?
-
-      def initialize(@subscription : String, @clock : String, @observations : Array(Observation), @warning : String? = nil)
-      end
     end
   end
 end

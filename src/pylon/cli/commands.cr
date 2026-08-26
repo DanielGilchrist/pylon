@@ -5,7 +5,9 @@ require "../session/process_transport"
 require "../session/remote_endpoint"
 require "../session/session"
 require "../session/ssh"
+require "../session/runner"
 require "../session/store"
+require "../watch/subscriber"
 require "./reporter"
 require "./target"
 
@@ -48,6 +50,9 @@ module Pylon::CLI
     @[Kebab::Option(description: "Where to keep sync state")]
     getter state : String?
 
+    @[Kebab::Option(short: 'w', description: "Keep running and sync on every change")]
+    getter? watch : Bool = false
+
     @[Kebab::Option(short: 'v', description: "Explain every skipped path")]
     getter? verbose : Bool = false
 
@@ -61,13 +66,33 @@ module Pylon::CLI
       right.cache = restored.remote_cache
 
       session = Session::Session.new(left, right, base: restored.base)
-      report = session.cycle(Time.utc.to_unix_ns.to_i64)
+      reporter = Reporter.new(STDOUT, verbose?)
+      save = -> { state.try { |path| Session::Store.save(path, Session::State.new(session.base, left.cache, right.cache)) } }
 
-      Reporter.new(STDOUT, verbose?).report(report)
-
-      state.try do |path|
-        Session::Store.save(path, Session::State.new(session.base, left.cache, right.cache))
+      unless watch?
+        reporter.report(session.cycle(Time.utc.to_unix_ns.to_i64))
+        save.call
+        return
       end
+
+      signals = Channel(Nil).new(16)
+      subscribers = [local, remote].compact_map { |root| Watch::Subscriber.open(root, ignore, signals) }
+
+      if subscribers.size < 2
+        subscribers.each(&.close)
+        STDERR.puts("pylon: watching needs watchman on this machine")
+        exit(1)
+      end
+
+      runner = Session::Runner.new(session, signals)
+      Signal::INT.trap { runner.stop }
+
+      runner.run do |report|
+        reporter.report(report)
+        save.call
+      end
+
+      subscribers.each(&.close)
     end
   end
 
@@ -95,6 +120,9 @@ module Pylon::CLI
 
     @[Kebab::Option(description: "Where to keep sync state")]
     getter state : String?
+
+    @[Kebab::Option(short: 'w', description: "Keep running and sync on every change")]
+    getter? watch : Bool = false
 
     @[Kebab::Option(short: 'v', description: "Explain every skipped path")]
     getter? verbose : Bool = false
@@ -124,29 +152,47 @@ module Pylon::CLI
         left = Session::LocalEndpoint.new(local, ignores)
         left.cache = restored.local_cache
 
-        session = Session::Session.new(
-          left,
-          Session::RemoteEndpoint.new(transport.reader, transport.writer),
-          base: restored.base,
-        )
+        remote_endpoint = Session::RemoteEndpoint.new(transport.reader, transport.writer)
+        session = Session::Session.new(left, remote_endpoint, base: restored.base)
 
-        report =
-          begin
-            session.cycle(Time.utc.to_unix_ns.to_i64)
-          rescue Wire::Truncated
-            abort_with("the remote server did not start; check that #{remote_command.inspect} exists on #{target.host}")
-          rescue error : Session::RemoteEndpoint::ProtocolError
-            abort_with("the remote server misbehaved: #{error.message}")
-          end
+        reporter = Reporter.new(STDOUT, verbose?)
+        save = -> { state.try { |path| Session::Store.save(path, Session::State.new(session.base, left.cache, restored.remote_cache)) } }
 
-        Reporter.new(STDOUT, verbose?).report(report)
-
-        state.try do |path|
-          Session::Store.save(path, Session::State.new(session.base, left.cache, restored.remote_cache))
-        end
+        drive(session, reporter, save, remote_endpoint, target)
       ensure
         transport.close
       end
+    end
+
+    private def drive(session, reporter, save, remote_endpoint, target) : Nil
+      run = ->(body : Proc(Nil)) do
+        begin
+          body.call
+        rescue Wire::Truncated
+          abort_with("the remote server stopped; check that #{remote_command.inspect} exists on #{target.host}")
+        rescue error : Session::RemoteEndpoint::ProtocolError
+          abort_with("the remote server misbehaved: #{error.message}")
+        end
+      end
+
+      unless watch?
+        run.call(-> { reporter.report(session.cycle(Time.utc.to_unix_ns.to_i64)); save.call; nil })
+        return
+      end
+
+      signals = Channel(Nil).new(16)
+      subscriber = Watch::Subscriber.open(local, ignore, signals)
+
+      if subscriber.nil?
+        STDERR.puts("pylon: watching needs watchman on this machine")
+        exit(1)
+      end
+
+      runner = Session::Runner.new(session, signals, remote_poll: -> { remote_endpoint.changed? })
+      Signal::INT.trap { runner.stop }
+
+      run.call(-> { runner.run { |report| reporter.report(report); save.call }; nil })
+      subscriber.close
     end
 
     private def abort_with(message : String) : NoReturn

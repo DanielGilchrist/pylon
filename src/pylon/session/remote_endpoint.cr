@@ -15,6 +15,13 @@ module Pylon::Session
       Scan::Snapshot.new(reply.root, Scan::Cache.new)
     end
 
+    def changed? : Bool
+      reply = exchange(Wire::PollRequest.new)
+      raise ProtocolError.new("expected a poll response") unless reply.is_a?(Wire::PollResponse)
+
+      reply.changed?
+    end
+
     def contents(digests : Array(Bytes)) : Wire::Contents
       return Wire::Contents.new if digests.empty?
 
