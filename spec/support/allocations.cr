@@ -10,14 +10,21 @@ end
 
 def assert_allocates_under(budget : Int, what : String, &) : Nil
   used = allocations { yield }
+  scale, suffix = unit_for(Math.max(used, budget.to_u64))
 
   used.should be < budget,
-    "#{what} allocated #{humanise(used)}, budget was #{humanise(budget.to_u64)}"
+    "#{what} allocated #{in_unit(used, scale, suffix)}, budget was #{in_unit(budget, scale, suffix)}"
 end
 
-def humanise(bytes : Int) : String
-  return "#{bytes} B" if bytes < KIB
-  return "#{(bytes / KIB).round(1)} KiB" if bytes < MIB
+def unit_for(bytes : Int) : {UInt64, String}
+  return {MIB, "MiB"} if bytes >= MIB
+  return {KIB, "KiB"} if bytes >= KIB
 
-  "#{(bytes / MIB).round(1)} MiB"
+  {1_u64, "B"}
+end
+
+def in_unit(bytes : Int, scale : UInt64, suffix : String) : String
+  return "#{bytes} #{suffix}" if scale == 1
+
+  "#{(bytes / scale).round(1)} #{suffix}"
 end
