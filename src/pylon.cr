@@ -1,3 +1,3 @@
-require "./pylon/cli/root"
+require "./pylon/cli"
 
-exit(1) unless Pylon::CLI::Root.run(ARGV)
+exit(1) unless Pylon::CLI.run(ARGV)

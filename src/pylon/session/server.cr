@@ -35,8 +35,20 @@ module Pylon::Session
     private def serve(request : Wire::Message) : Bool
       case request
       in Wire::ScanRequest
+        started = Time.instant
         drain
-        Wire::ScanResponse.new(@endpoint.scan(request.now_ns).root).write(@output)
+        drained = Time.instant
+        root = @endpoint.scan(request.now_ns).root
+        scanned = Time.instant
+        Wire::ScanResponse.new(root).write(@output)
+
+        if ENV["PYLON_TIMING"]?
+          STDERR.puts("  server drain=%.1fms scan=%.1fms write=%.1fms" % [
+            (drained - started).total_milliseconds,
+            (scanned - drained).total_milliseconds,
+            (Time.instant - scanned).total_milliseconds,
+          ])
+        end
       in Wire::ContentsRequest
         Wire::ContentsResponse.new(@endpoint.contents(request.digests)).write(@output)
       in Wire::PollRequest
