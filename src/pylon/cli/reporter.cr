@@ -1,6 +1,6 @@
 require "../session/session"
 
-module Pylon::CLI
+struct Pylon::CLI
   struct Reporter
     def initialize(@io : IO, @verbose : Bool = false)
     end

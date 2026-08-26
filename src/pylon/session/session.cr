@@ -17,6 +17,7 @@ module Pylon::Session
     end
 
     def cycle(now_ns : Int64) : Report
+      started = Time.instant
       local_snapshot = uninitialized Scan::Snapshot
       remote_snapshot = uninitialized Scan::Snapshot
 
@@ -25,12 +26,16 @@ module Pylon::Session
         waiting.spawn { remote_snapshot = @remote.scan(now_ns) }
       end
 
+      scanned = Time.instant
+
       reconciliation = Core::Reconciler.reconcile(
         @base,
         local_snapshot.root,
         remote_snapshot.root,
         @mode,
       )
+
+      reconciled = Time.instant
 
       halt = Core::Safety.check(
         @base,
@@ -51,10 +56,23 @@ module Pylon::Session
       local_contents = @remote.contents(Core::Digests.required(reconciliation.local_changes))
       remote_contents = @local.contents(Core::Digests.required(reconciliation.remote_changes))
 
+      fetched = Time.instant
+
       local_outcomes = @local.write(reconciliation.local_changes, local_contents)
       remote_outcomes = @remote.write(reconciliation.remote_changes, remote_contents)
 
+      written = Time.instant
       commit(reconciliation.base_changes, local_outcomes, remote_outcomes)
+
+      if ENV["PYLON_TIMING"]?
+        STDERR.puts("  client scans=%.1f reconcile=%.1f contents=%.1f write=%.1f commit=%.1f" % [
+          (scanned - started).total_milliseconds,
+          (reconciled - scanned).total_milliseconds,
+          (fetched - reconciled).total_milliseconds,
+          (written - fetched).total_milliseconds,
+          (Time.instant - written).total_milliseconds,
+        ])
+      end
 
       Report.new(reconciliation.conflicts, local_outcomes, remote_outcomes)
     end

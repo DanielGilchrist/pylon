@@ -8,7 +8,7 @@ require "../session/store"
 require "../watch/subscriber"
 require "./reporter"
 
-module Pylon::CLI
+struct Pylon::CLI
   @[Kebab::Command(summary: "Sync two directories on this machine")]
   struct Local
     include Kebab::Parseable

@@ -6,7 +6,7 @@ require "../session/persister"
 require "../session/store"
 require "../watch/subscriber"
 
-module Pylon::CLI
+struct Pylon::CLI
   @[Kebab::Command(summary: "Serve a directory to a pylon client over stdin and stdout")]
   struct Server
     include Kebab::Parseable

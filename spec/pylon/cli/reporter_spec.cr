@@ -1,8 +1,6 @@
 require "../../spec_helper"
 require "../../../src/pylon/cli/reporter"
 
-include Pylon::CLI
-
 private def report_of(
   conflicts = [] of Conflict,
   local = [] of Pylon::Write::Outcome,
@@ -13,7 +11,7 @@ end
 
 private def rendered(report, verbose = false) : String
   io = IO::Memory.new
-  Reporter.new(io, verbose).report(report)
+  Pylon::CLI::Reporter.new(io, verbose).report(report)
   io.to_s
 end
 

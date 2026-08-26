@@ -12,7 +12,7 @@ require "../watch/subscriber"
 require "./reporter"
 require "./target"
 
-module Pylon::CLI
+struct Pylon::CLI
   DEFAULT_REMOTE_COMMAND = "pylon server"
 
   @[Kebab::Command(summary: "Sync a local directory with one on a remote host")]
@@ -109,11 +109,29 @@ module Pylon::CLI
         exit(1)
       end
 
-      runner = Session::Runner.new(session, signals, remote_poll: -> { remote_endpoint.changed? })
+      local_endpoint.accelerate!
+
+      runner = Session::Runner.new(
+        session,
+        signals,
+        remote_poll: -> { remote_endpoint.changed? },
+        before: -> { drain(local_endpoint, subscriber) },
+      )
+
       Signal::INT.trap { runner.stop }
 
       run.call(-> { runner.run { |report| reporter.report(report); persister.try(&.maybe) }; persister.try(&.flush); nil })
       subscriber.close
+    end
+
+    private def drain(endpoint, subscriber) : Nil
+      changes = subscriber.drain
+      changes.fresh ? endpoint.invalidate : endpoint.mark_dirty(changes.paths)
+    end
+
+    private def drain(endpoint, subscriber) : Nil
+      changes = subscriber.drain
+      changes.fresh ? endpoint.invalidate : endpoint.mark_dirty(changes.paths)
     end
 
     private def abort_with(message : String) : NoReturn
@@ -127,6 +145,4 @@ module Pylon::CLI
       parts.join(' ')
     end
   end
-
-  @[Kebab::Command(name: "pylon", summary: "Two way file sync between a laptop and a dev box")]
 end
