@@ -17,34 +17,34 @@ private INCREMENTAL = <<-JSON
             {"name":"sub/b.txt","exists":false,"new":false,"mode":33188,"size":6,"mtime_ns":9}]}
   JSON
 
-describe Pylon::Watch::Pdu do
+describe Pylon::Watch::PDU do
   it "parses a command response" do
-    pdu = Pdu.parse(SUBSCRIBE_REPLY)
-    pdu.should be_a(Pdu::Response)
+    pdu = PDU.parse(SUBSCRIBE_REPLY)
+    pdu.should be_a(PDU::Response)
   end
 
   it "parses an error response" do
-    pdu = Pdu.parse(%({"error":"unable to resolve root: not a directory"}))
+    pdu = PDU.parse(%({"error":"unable to resolve root: not a directory"}))
 
-    pdu.should be_a(Pdu::Failure)
-    pdu.as(Pdu::Failure).message.should eq("unable to resolve root: not a directory")
+    pdu.should be_a(PDU::Failure)
+    pdu.as(PDU::Failure).message.should eq("unable to resolve root: not a directory")
   end
 
   it "treats a closed connection as a failure rather than an exception" do
-    Pdu.parse(nil).should be_a(Pdu::Failure)
+    PDU.parse(nil).should be_a(PDU::Failure)
   end
 
   it "treats malformed json as a failure rather than an exception" do
-    Pdu.parse("{not json").should be_a(Pdu::Failure)
+    PDU.parse("{not json").should be_a(PDU::Failure)
   end
 
   it "distinguishes a fresh instance from an incremental update by type" do
-    Pdu.parse(FRESH).should be_a(Pdu::Snapshot)
-    Pdu.parse(INCREMENTAL).should be_a(Pdu::Delta)
+    PDU.parse(FRESH).should be_a(PDU::Snapshot)
+    PDU.parse(INCREMENTAL).should be_a(PDU::Delta)
   end
 
   it "reads names, kinds and the executable bit from observations" do
-    snapshot = Pdu.parse(FRESH).as(Pdu::Snapshot)
+    snapshot = PDU.parse(FRESH).as(PDU::Snapshot)
 
     snapshot.clock.should eq("c:1:2:3:9")
     snapshot.observations.map(&.name).should eq(["a.txt", "app"])
@@ -54,7 +54,7 @@ describe Pylon::Watch::Pdu do
   end
 
   it "reads a deletion as an observation that no longer exists" do
-    delta = Pdu.parse(INCREMENTAL).as(Pdu::Delta)
+    delta = PDU.parse(INCREMENTAL).as(PDU::Delta)
 
     live, gone = delta.observations
 
@@ -92,8 +92,8 @@ describe Pylon::Watch::Client do
     io = IO::Stapled.new(IO::Memory.new("#{FRESH.gsub('\n', "")}\n#{INCREMENTAL.gsub('\n', "")}\n"), IO::Memory.new)
     client = Client.new(io)
 
-    client.read.should be_a(Pdu::Snapshot)
-    client.read.should be_a(Pdu::Delta)
-    client.read.should be_a(Pdu::Failure)
+    client.read.should be_a(PDU::Snapshot)
+    client.read.should be_a(PDU::Delta)
+    client.read.should be_a(PDU::Failure)
   end
 end

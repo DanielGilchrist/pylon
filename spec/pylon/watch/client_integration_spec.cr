@@ -24,12 +24,12 @@ describe "Pylon::Watch::Client against a live daemon" do
       next unless client.is_a?(Client(UNIXSocket))
 
       begin
-        client.watch_project(root).should be_a(Pdu::Response)
-        client.subscribe(root, "pylon-spec", ["ignored"]).should be_a(Pdu::Response)
+        client.watch_project(root).should be_a(PDU::Response)
+        client.subscribe(root, "pylon-spec", ["ignored"]).should be_a(PDU::Response)
 
         first = client.read
-        first.should be_a(Pdu::Snapshot)
-        next unless first.is_a?(Pdu::Snapshot)
+        first.should be_a(PDU::Snapshot)
+        next unless first.is_a?(PDU::Snapshot)
 
         first.observations.map(&.name).should contain("keep/seed.txt")
         first.clock.should start_with("c:")
@@ -39,7 +39,7 @@ describe "Pylon::Watch::Client against a live daemon" do
         seen = [] of String
         4.times do
           pdu = client.read
-          break unless pdu.is_a?(Pdu::Delta)
+          break unless pdu.is_a?(PDU::Delta)
 
           seen.concat(pdu.observations.map(&.name))
           break if seen.includes?("added.txt")

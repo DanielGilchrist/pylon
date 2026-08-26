@@ -2,7 +2,7 @@ require "digest/sha256"
 require "./metadata"
 
 module Pylon::Scan
-  struct PosixFilesystem
+  struct Disk
     READ_BUFFER_BYTES = 64 * 1024
 
     def initialize(@root : String)

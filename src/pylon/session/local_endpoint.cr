@@ -13,8 +13,8 @@ module Pylon::Session
     def initialize(@root : String, @ignores : Scan::Ignores = Scan::Ignores::NONE)
       @cache = Scan::Cache.new
       @by_digest = {} of Bytes => String
-      @filesystem = Scan::PosixFilesystem.new(@root)
-      @target = Write::PosixTarget.new(@root)
+      @filesystem = Scan::Disk.new(@root)
+      @target = Write::DiskTarget.new(@root)
     end
 
     def scan(now_ns : Int64) : Scan::Snapshot

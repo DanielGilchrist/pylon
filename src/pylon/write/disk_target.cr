@@ -1,7 +1,7 @@
 require "../scan/metadata"
 
 module Pylon::Write
-  struct PosixTarget
+  struct DiskTarget
     TEMPORARY_PREFIX = ".pylon-tmp-"
 
     def initialize(@root : String)

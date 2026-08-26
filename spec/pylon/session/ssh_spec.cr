@@ -4,14 +4,14 @@ require "../../../src/pylon/session/ssh"
 
 include Pylon::Session
 
-describe Pylon::Session::Ssh do
+describe Pylon::Session::SSH do
   it "builds a minimal command" do
-    Ssh.command(host: "user@host", remote_command: "pylon server /srv/app")
+    SSH.command(host: "user@host", remote_command: "pylon server /srv/app")
       .should eq(["-q", "user@host", "pylon server /srv/app"])
   end
 
   it "puts options before the host, where every ssh accepts them" do
-    arguments = Ssh.command(
+    arguments = SSH.command(
       host: "user@host",
       remote_command: "pylon server /srv/app",
       config: "/home/me/.ssh/example_ssh_config",
@@ -30,7 +30,7 @@ describe Pylon::Session::Ssh do
   end
 
   it "omits flags that were not asked for" do
-    Ssh.command(host: "h", remote_command: "c", port: "22")
+    SSH.command(host: "h", remote_command: "c", port: "22")
       .should eq(["-q", "-p", "22", "h", "c"])
   end
 end

@@ -1,5 +1,5 @@
 module Pylon::Session
-  module Ssh
+  module SSH
     extend self
 
     def command(

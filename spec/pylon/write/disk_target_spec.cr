@@ -4,18 +4,18 @@ require "../../../src/pylon/write/disk_target"
 
 include Pylon::Write
 
-private def in_sandbox(& : String, PosixTarget ->)
+private def in_sandbox(& : String, DiskTarget ->)
   root = File.join(Dir.tempdir, "pylon-target-#{Random::Secure.hex(8)}")
   Dir.mkdir_p(root)
 
   begin
-    yield root, PosixTarget.new(root)
+    yield root, DiskTarget.new(root)
   ensure
     FileUtils.rm_rf(root)
   end
 end
 
-describe Pylon::Write::PosixTarget do
+describe Pylon::Write::DiskTarget do
   it "writes a file and sets the executable bit" do
     in_sandbox do |root, target|
       target.write_file("script.sh", "#!/bin/sh\n".to_slice, true).should be_true
@@ -43,7 +43,7 @@ describe Pylon::Write::PosixTarget do
       target.write_file("a.txt", "x".to_slice, false)
       target.create_symlink("link", "a.txt")
 
-      strays = Dir.children(root).select(&.starts_with?(PosixTarget::TEMPORARY_PREFIX))
+      strays = Dir.children(root).select(&.starts_with?(DiskTarget::TEMPORARY_PREFIX))
       strays.should be_empty
     end
   end

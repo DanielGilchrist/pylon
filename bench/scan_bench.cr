@@ -14,7 +14,7 @@ IGNORES = Ignores.new(%w[
 root = ARGV[0]? || abort("usage: scan_bench <root>")
 now = Time.utc.to_unix_ns.to_i64
 parallelism = (ARGV[1]? || Scanner::DEFAULT_PARALLELISM).to_i
-filesystem = PosixFilesystem.new(root)
+filesystem = Disk.new(root)
 
 puts "root: #{root} (parallelism #{parallelism})"
 

@@ -2,8 +2,8 @@ require "json"
 require "./observation"
 
 module Pylon::Watch
-  abstract struct Pdu
-    def self.parse(line : String?) : Pdu
+  abstract struct PDU
+    def self.parse(line : String?) : PDU
       return Failure.new("connection closed") if line.nil?
 
       json =
@@ -38,21 +38,21 @@ module Pylon::Watch
       files.compact_map { |file| Observation.from(file) }
     end
 
-    struct Failure < Pdu
+    struct Failure < PDU
       getter message : String
 
       def initialize(@message : String)
       end
     end
 
-    struct Response < Pdu
+    struct Response < PDU
       getter body : JSON::Any
 
       def initialize(@body : JSON::Any)
       end
     end
 
-    struct Snapshot < Pdu
+    struct Snapshot < PDU
       getter subscription : String
       getter clock : String
       getter observations : Array(Observation)
@@ -62,7 +62,7 @@ module Pylon::Watch
       end
     end
 
-    struct Delta < Pdu
+    struct Delta < PDU
       getter subscription : String
       getter clock : String
       getter observations : Array(Observation)

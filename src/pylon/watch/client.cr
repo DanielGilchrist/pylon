@@ -6,10 +6,10 @@ module Pylon::Watch
   FIELDS = %w[name exists new size mode mtime_ns type]
 
   class Client(T)
-    def self.connect(socket_path : String) : Client(UNIXSocket) | Pdu::Failure
+    def self.connect(socket_path : String) : Client(UNIXSocket) | PDU::Failure
       Client.new(UNIXSocket.new(socket_path))
     rescue Socket::Error
-      Pdu::Failure.new("cannot reach the watchman socket at #{socket_path}")
+      PDU::Failure.new("cannot reach the watchman socket at #{socket_path}")
     end
 
     def self.socket_path : String?
@@ -27,28 +27,28 @@ module Pylon::Watch
     def initialize(@io : T)
     end
 
-    def watch_project(root : String) : Pdu
+    def watch_project(root : String) : PDU
       resolved = canonical(root)
       send(JSON.build { |json| json.array { json.string("watch-project"); json.string(resolved) } })
     end
 
-    def clock(root : String) : Pdu
+    def clock(root : String) : PDU
       resolved = canonical(root)
       send(JSON.build { |json| json.array { json.string("clock"); json.string(resolved) } })
     end
 
-    def subscribe(root : String, name : String, ignores : Array(String)) : Pdu
+    def subscribe(root : String, name : String, ignores : Array(String)) : PDU
       send(subscribe_request(canonical(root), name, ignores))
     end
 
-    def send(request : String) : Pdu
+    def send(request : String) : PDU
       @io.puts(request)
       @io.flush
       read
     end
 
-    def read : Pdu
-      Pdu.parse(@io.gets)
+    def read : PDU
+      PDU.parse(@io.gets)
     end
 
     def close : Nil
