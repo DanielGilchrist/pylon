@@ -44,11 +44,12 @@ module Pylon::Write
       return false if mode.nil?
 
       permissions = (mode & 0o7777_u32)
-      permissions = if executable
-                      permissions | ((permissions & 0o444_u32) >> 2)
-                    else
-                      permissions & ~0o111_u32
-                    end
+      permissions =
+        if executable
+          permissions | ((permissions & 0o444_u32) >> 2)
+        else
+          permissions & ~0o111_u32
+        end
 
       File.chmod(path, permissions.to_i32)
       true

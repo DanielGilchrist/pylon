@@ -22,13 +22,14 @@ class MemoryTarget
     node = @nodes[path]?
     return nil if node.nil?
 
-    mode = case node.kind
-           in Pylon::Core::Entry::Kind::Directory    then LibC::S_IFDIR | 0o755
-           in Pylon::Core::Entry::Kind::File         then LibC::S_IFREG | (node.executable ? 0o755 : 0o644)
-           in Pylon::Core::Entry::Kind::SymbolicLink then LibC::S_IFLNK | 0o777
-           in Pylon::Core::Entry::Kind::Untracked    then LibC::S_IFIFO | 0o644
-           in Pylon::Core::Entry::Kind::Problematic  then LibC::S_IFREG | 0o644
-           end
+    mode =
+      case node.kind
+      in Pylon::Core::Entry::Kind::Directory    then LibC::S_IFDIR | 0o755
+      in Pylon::Core::Entry::Kind::File         then LibC::S_IFREG | (node.executable ? 0o755 : 0o644)
+      in Pylon::Core::Entry::Kind::SymbolicLink then LibC::S_IFLNK | 0o777
+      in Pylon::Core::Entry::Kind::Untracked    then LibC::S_IFIFO | 0o644
+      in Pylon::Core::Entry::Kind::Problematic  then LibC::S_IFREG | 0o644
+      end
 
     Pylon::Scan::Metadata.new(
       mode: mode.to_u32,
