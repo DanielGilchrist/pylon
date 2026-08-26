@@ -1,4 +1,5 @@
 require "digest/sha256"
+require "../wire/binary"
 require "./metadata"
 
 module Pylon::Scan
@@ -16,9 +17,8 @@ module Pylon::Scan
       Dir.each_child(absolute(relative_path)) { |name| yield name }
     end
 
-    def digest(relative_path : String) : Bytes?
+    def digest(relative_path : String, buffer : Bytes = Bytes.new(READ_BUFFER_BYTES)) : Bytes?
       digest = Digest::SHA256.new
-      buffer = Bytes.new(READ_BUFFER_BYTES)
 
       File.open(absolute(relative_path)) do |file|
         while (read = file.read(buffer)) > 0
@@ -32,7 +32,33 @@ module Pylon::Scan
     end
 
     def read(relative_path : String) : Bytes?
-      File.read(absolute(relative_path)).to_slice
+      File.open(absolute(relative_path)) do |file|
+        buffer = Bytes.new(file.size)
+        file.read_fully(buffer)
+        buffer
+      end
+    rescue File::Error | IO::EOFError
+      nil
+    end
+
+    def stream(relative_path : String, digest : Bytes, io : IO, buffer : Bytes) : Nil
+      path = absolute(relative_path)
+      size = File.info(path).size
+
+      Pylon::Wire::Binary.write_bytes(io, digest)
+      io.write_bytes(size.to_u32 + 1, Pylon::Wire::FORMAT)
+
+      File.open(path) do |file|
+        remaining = size
+
+        while remaining > 0
+          read = file.read(buffer)
+          break if read == 0
+
+          io.write(buffer[0, read])
+          remaining -= read
+        end
+      end
     rescue File::Error
       nil
     end

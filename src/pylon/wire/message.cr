@@ -29,7 +29,7 @@ module Pylon::Wire
     in Tag::Failure            then Failure.new(Binary.read_string(io) || "")
     in Tag::ScanRequest        then ScanRequest.new(io.read_bytes(Int64, FORMAT))
     in Tag::ScanResponse       then ScanResponse.new(Binary.read_entry(io))
-    in Tag::ContentsRequest    then ContentsRequest.new(read_digests(io))
+    in Tag::ContentsRequest    then read_contents_request(io)
     in Tag::ContentsResponse   then ContentsResponse.new(read_contents(io))
     in Tag::WriteRequest  then WriteRequest.new(Binary.read_changes(io), read_contents(io))
     in Tag::WriteResponse then WriteResponse.new(Binary.read_outcomes(io))
@@ -37,6 +37,11 @@ module Pylon::Wire
     in Tag::PollResponse       then PollResponse.new(Binary.read_bool(io))
     in Tag::TreeUpdate         then TreeUpdate.new(Binary.read_entry(io))
     end
+  end
+
+  def self.read_contents_request(io : IO) : ContentsRequest
+    budget = io.read_bytes(UInt64, FORMAT)
+    ContentsRequest.new(read_digests(io), budget)
   end
 
   def self.read_digests(io : IO) : Array(Bytes)

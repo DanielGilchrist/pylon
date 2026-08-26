@@ -6,6 +6,8 @@ module Pylon::Session
     class ProtocolError < Exception
     end
 
+    TRACKABLE_OUTCOMES = 256
+
     getter exchanges = 0
 
     def initialize(@input : IO, @output : IO, @signals : Channel(Nil)? = nil)
@@ -35,22 +37,27 @@ module Pylon::Session
       reply.changed?
     end
 
-    def contents(digests : Array(Bytes)) : Wire::Contents
-      return Wire::Contents.new if digests.empty?
+    def content_source(digests : Array(Bytes), budget : UInt64) : Wire::ContentSource
+      return Wire::ContentSource.materialised(Wire::Contents.new) if digests.empty?
 
-      reply = exchange(Wire::ContentsRequest.new(digests))
+      reply = exchange(Wire::ContentsRequest.new(digests, budget))
       raise ProtocolError.new("expected a contents response") unless reply.is_a?(Wire::ContentsResponse)
 
-      reply.contents
+      Wire::ContentSource.materialised(reply.contents)
     end
 
-    def write(changes : Array(Core::Change), contents : Wire::Contents) : Array(Write::Outcome)
+    def write(changes : Array(Core::Change), source : Wire::ContentSource) : Array(Write::Outcome)
       return [] of Write::Outcome if changes.empty?
 
-      reply = exchange(Wire::WriteRequest.new(changes, contents))
+      reply = exchange(Wire::WriteRequest.new(changes, source))
       raise ProtocolError.new("expected a write response") unless reply.is_a?(Wire::WriteResponse)
 
-      @tree = Core::Applier.apply(@tree, reply.outcomes.map { |outcome| Core::Change.new(outcome.path, nil, outcome.entry) })
+      if reply.outcomes.size > TRACKABLE_OUTCOMES
+        @known = false
+      else
+        @tree = Core::Applier.apply(@tree, reply.outcomes.map { |outcome| Core::Change.new(outcome.path, nil, outcome.entry) })
+      end
+
       reply.outcomes
     end
 

@@ -6,6 +6,7 @@ require "./snapshot"
 
 module Pylon::Scan
   struct Scanner(F)
+    READ_BUFFER_BYTES      = 64 * 1024
     DEFAULT_GRANULARITY_NS = 1_000_000_000_i64
     DEFAULT_PARALLELISM    = System.cpu_count.to_i * 2
 
@@ -139,8 +140,10 @@ module Pylon::Scan
       workers = Math.min(@parallelism, pending.size)
 
       if workers <= 1
+        buffer = Bytes.new(READ_BUFFER_BYTES)
+
         pending.each do |path|
-          if (digest = @filesystem.digest(path))
+          if (digest = @filesystem.digest(path, buffer))
             digests[path] = digest
           end
         end
@@ -153,28 +156,41 @@ module Pylon::Scan
       waiting = WaitGroup.new(workers)
 
       workers.times do |worker|
-        context.spawn do
-          begin
-            local = partials[worker]
-            index = worker
-
-            while index < pending.size
-              path = pending[index]
-
-              if (digest = @filesystem.digest(path))
-                local[path] = digest
-              end
-
-              index += workers
-            end
-          ensure
-            waiting.done
-          end
-        end
+        hash_slice(context, waiting, pending, partials[worker], worker, workers)
       end
 
       waiting.wait
       partials.each { |partial| digests.merge!(partial) }
+    end
+
+    private def hash_slice(
+      context : Fiber::ExecutionContext::Parallel,
+      waiting : WaitGroup,
+      pending : Array(String),
+      into : Hash(String, Bytes),
+      offset : Int32,
+      stride : Int32,
+    ) : Nil
+      filesystem = @filesystem
+
+      context.spawn do
+        begin
+          buffer = Bytes.new(READ_BUFFER_BYTES)
+          index = offset
+
+          while index < pending.size
+            path = pending[index]
+
+            if (digest = filesystem.digest(path, buffer))
+              into[path] = digest
+            end
+
+            index += stride
+          end
+        ensure
+          waiting.done
+        end
+      end
     end
 
     private def build(survey : Survey, digests : Hash(String, Bytes), path : String) : Core::Entry?

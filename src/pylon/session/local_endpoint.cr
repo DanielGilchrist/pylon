@@ -50,15 +50,65 @@ module Pylon::Session
       snapshot
     end
 
-    def contents(digests : Array(Bytes)) : Wire::Contents
-      contents = Wire::Contents.new(initial_capacity: digests.size)
+    def content_source(digests : Array(Bytes), budget : UInt64) : Wire::ContentSource
+      wanted = within(digests, budget)
+
+      Wire::ContentSource.new(
+        emit: ->(io : IO) do
+          buffer = Bytes.new(Wire::ContentSource::STREAM_BUFFER_BYTES)
+          wanted.each { |digest, path| @filesystem.stream(path, digest, io, buffer) }
+        end,
+        count: wanted.size,
+        materialise: -> { materialise(wanted) },
+        digests: wanted.map(&.first).to_set,
+      )
+    end
+
+    private def materialise(wanted : Array({Bytes, String})) : Wire::Contents
+      contents = Wire::Contents.new(initial_capacity: wanted.size)
+
+      wanted.each do |digest, path|
+        content = @filesystem.read(path)
+        contents[digest] = content if content
+      end
+
+      contents
+    end
+
+    private def within(digests : Array(Bytes), budget : UInt64) : Array({Bytes, String})
+      wanted = [] of {Bytes, String}
+      spent = 0_u64
 
       digests.each do |digest|
         path = @by_digest[digest]?
         next if path.nil?
 
+        weight = @cache[path]?.try(&.metadata.size) || 0_u64
+        break if !wanted.empty? && spent + weight > budget
+
+        wanted << {digest, path}
+        spent += weight
+      end
+
+      wanted
+    end
+
+    def contents(digests : Array(Bytes), budget : UInt64) : Wire::Contents
+      contents = Wire::Contents.new
+      spent = 0_u64
+
+      digests.each do |digest|
+        path = @by_digest[digest]?
+        next if path.nil?
+
+        weight = @cache[path]?.try(&.metadata.size) || 0_u64
+        break if !contents.empty? && spent + weight > budget
+
         content = @filesystem.read(path)
-        contents[digest] = content if content
+        next if content.nil?
+
+        contents[digest] = content
+        spent += weight
       end
 
       contents
@@ -70,8 +120,8 @@ module Pylon::Session
       by_digest
     end
 
-    def write(changes : Array(Core::Change), contents : Wire::Contents) : Array(Write::Outcome)
-      Write::Writer.new(@target, Staging.new(contents), @cache).apply(changes)
+    def write(changes : Array(Core::Change), source : Wire::ContentSource) : Array(Write::Outcome)
+      Write::Writer.new(@target, Staging.new(source.contents), @cache).apply(changes)
     end
   end
 end

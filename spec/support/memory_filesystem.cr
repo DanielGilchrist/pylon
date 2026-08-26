@@ -82,7 +82,7 @@ struct MemoryFilesystem
     end
   end
 
-  def digest(relative_path : String) : Bytes?
+  def digest(relative_path : String, buffer : Bytes = Bytes.empty) : Bytes?
     node = @nodes[relative_path]
     return nil unless node.readable
 

@@ -1,4 +1,5 @@
 require "spec"
+require "./support/allocations"
 require "./support/entries"
 
 include Pylon::Core

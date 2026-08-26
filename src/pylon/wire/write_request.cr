@@ -1,4 +1,4 @@
-require "./contents"
+require "./content_source"
 require "./binary"
 require "./writable"
 
@@ -7,9 +7,17 @@ module Pylon::Wire
     include Writable
 
     getter changes : Array(Core::Change)
-    getter contents : Contents
+    getter source : ContentSource
 
-    def initialize(@changes : Array(Core::Change), @contents : Contents)
+    def self.new(changes : Array(Core::Change), contents : Contents)
+      new(changes, ContentSource.materialised(contents))
+    end
+
+    def initialize(@changes : Array(Core::Change), @source : ContentSource)
+    end
+
+    def contents : Contents
+      source.contents
     end
 
     def tag : Tag
@@ -18,7 +26,7 @@ module Pylon::Wire
 
     def write_payload(io : IO) : Nil
       Binary.write_changes(io, changes)
-      Wire.write_contents(io, contents)
+      source.write(io)
     end
   end
 end

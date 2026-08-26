@@ -6,6 +6,8 @@ require "../write/writer"
 
 module Pylon::Session
   class Session(A, B)
+    TRANSFER_BUDGET = 32_u64 * 1024 * 1024
+
     getter base : Core::Entry?
 
     def initialize(
@@ -53,16 +55,16 @@ module Pylon::Session
         )
       end
 
-      local_contents = @remote.contents(Core::Digests.required(reconciliation.local_changes))
-      remote_contents = @local.contents(Core::Digests.required(reconciliation.remote_changes))
+      local_changes = Core::Changes.expand(reconciliation.local_changes)
+      remote_changes = Core::Changes.expand(reconciliation.remote_changes)
 
       fetched = Time.instant
 
-      local_outcomes = @local.write(reconciliation.local_changes, local_contents)
-      remote_outcomes = @remote.write(reconciliation.remote_changes, remote_contents)
+      local_outcomes = ship(local_changes, @remote, @local)
+      remote_outcomes = ship(remote_changes, @local, @remote)
 
       written = Time.instant
-      commit(reconciliation.base_changes, local_outcomes, remote_outcomes)
+      commit(Core::Changes.expand(reconciliation.base_changes), local_outcomes, remote_outcomes)
 
       if ENV["PYLON_TIMING"]?
         STDERR.puts("  client scans=%.1f reconcile=%.1f contents=%.1f write=%.1f commit=%.1f" % [
@@ -78,6 +80,39 @@ module Pylon::Session
       end
 
       Report.new(reconciliation.conflicts, local_outcomes, remote_outcomes)
+    end
+
+    private def ship(changes : Array(Core::Change), source, target) : Array(Write::Outcome)
+      outcomes = [] of Write::Outcome
+
+      pending = changes
+
+      until pending.empty?
+        wanted = Core::Digests.required(pending)
+        provided = source.content_source(wanted, TRANSFER_BUDGET)
+        batch, pending = split(pending, provided.digests)
+
+        break if batch.empty?
+
+        outcomes.concat(target.write(batch, provided))
+      end
+
+      outcomes
+    end
+
+    private def split(changes : Array(Core::Change), available : Set(Bytes)) : {Array(Core::Change), Array(Core::Change)}
+      taken = 0
+
+      changes.each do |change|
+        entry = change.new
+        digest = entry && entry.kind.file? ? entry.digest : nil
+
+        break if digest && !available.includes?(digest)
+
+        taken += 1
+      end
+
+      {changes[0, taken], changes[taken..]}
     end
 
     private def commit(
