@@ -55,8 +55,11 @@ module Pylon::Session
 
       Wire::ContentSource.new(
         emit: ->(io : IO) do
-          buffer = Bytes.new(Wire::ContentSource::STREAM_BUFFER_BYTES)
-          wanted.each { |digest, path| @filesystem.stream(path, digest, io, buffer) }
+          buffer = Bytes.new(Wire::Chunks::CHUNK_BYTES)
+          scratch = Wire::Chunks.scratch
+          codec = Compress::Zstd.new
+
+          wanted.each { |digest, path| @filesystem.stream(path, digest, io, buffer, codec, scratch) }
         end,
         count: wanted.size,
         materialise: -> { materialise(wanted) },

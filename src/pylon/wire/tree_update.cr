@@ -1,4 +1,4 @@
-require "./binary"
+require "./chunks"
 require "./writable"
 
 module Pylon::Wire
@@ -15,7 +15,7 @@ module Pylon::Wire
     end
 
     def write_payload(io : IO) : Nil
-      Binary.write_entry(io, root)
+      Chunks.write_entry(io, root)
     end
   end
 end

@@ -1,4 +1,5 @@
 require "digest/sha256"
+require "../wire/chunks"
 require "../wire/binary"
 require "./metadata"
 
@@ -41,26 +42,18 @@ module Pylon::Scan
       nil
     end
 
-    def stream(relative_path : String, digest : Bytes, io : IO, buffer : Bytes) : Nil
-      path = absolute(relative_path)
-      size = File.info(path).size
-
+    def stream(relative_path : String, digest : Bytes, io : IO, buffer : Bytes, codec, scratch : Bytes) : Nil
       Pylon::Wire::Binary.write_bytes(io, digest)
-      io.write_bytes(size.to_u32 + 1, Pylon::Wire::FORMAT)
 
-      File.open(path) do |file|
-        remaining = size
-
-        while remaining > 0
-          read = file.read(buffer)
-          break if read == 0
-
-          io.write(buffer[0, read])
-          remaining -= read
+      File.open(absolute(relative_path)) do |file|
+        while (read = file.read(buffer)) > 0
+          Pylon::Wire::Chunks.write_chunk(io, buffer[0, read], codec, scratch)
         end
       end
+
+      Pylon::Wire::Chunks.write_end(io)
     rescue File::Error
-      nil
+      Pylon::Wire::Chunks.write_end(io)
     end
 
     def link_target(relative_path : String) : String?
