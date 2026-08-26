@@ -1,3 +1,4 @@
+require "file_utils"
 require "../scan/metadata"
 
 module Pylon::Write

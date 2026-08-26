@@ -8,7 +8,7 @@ require "./staging"
 module Pylon::Session
   class LocalEndpoint
     getter root : String
-    getter cache : Scan::Cache
+    property cache : Scan::Cache
 
     def initialize(@root : String, @ignores : Scan::Ignores = Scan::Ignores::NONE)
       @cache = Scan::Cache.new

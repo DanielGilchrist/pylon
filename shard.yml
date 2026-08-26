@@ -7,3 +7,11 @@ authors:
 crystal: ">= 1.21.0"
 
 license: MIT
+
+dependencies:
+  kebab:
+    github: DanielGilchrist/kebab
+
+targets:
+  pylon:
+    main: src/pylon.cr
