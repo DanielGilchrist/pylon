@@ -1,5 +1,6 @@
 require "sync"
 require "../watch/subscriber"
+require "../core/differ"
 require "../wire/message"
 require "./local_endpoint"
 require "./persister"
@@ -15,6 +16,8 @@ module Pylon::Session
     )
       @lock = Sync::Mutex.new
       @stopping = false
+      @sent = nil.as(Core::Entry?)
+      @sequence = 0_u32
     end
 
     def run : Nil
@@ -47,7 +50,16 @@ module Pylon::Session
     private def push : Nil
       @lock.synchronize do
         drain
-        Wire::TreeUpdate.new(@endpoint.scan(Time.utc.to_unix_ns.to_i64).root).write(@output)
+        current = @endpoint.scan(Time.utc.to_unix_ns.to_i64).root
+        @sequence += 1
+
+        if @sent.nil?
+          Wire::TreeUpdate.new(@sequence, current).write(@output)
+        else
+          Wire::TreeDelta.new(@sequence, Core::Differ.diff(@sent, current)).write(@output)
+        end
+
+        @sent = current
       end
     rescue IO::Error
       nil
@@ -66,7 +78,9 @@ module Pylon::Session
       in Wire::ScanRequest
         @lock.synchronize do
           drain
-          Wire::ScanResponse.new(@endpoint.scan(request.now_ns).root).write(@output)
+          current = @endpoint.scan(request.now_ns).root
+          @sent = current
+          Wire::ScanResponse.new(current).write(@output)
         end
       in Wire::ContentsRequest
         @lock.synchronize do
@@ -82,7 +96,7 @@ module Pylon::Session
         @lock.synchronize do
           Wire::PollResponse.new(@subscriber.try(&.pending?) != false).write(@output)
         end
-      in Wire::Failure, Wire::ScanResponse, Wire::PollResponse, Wire::TreeUpdate,
+      in Wire::Failure, Wire::ScanResponse, Wire::PollResponse, Wire::TreeUpdate, Wire::TreeDelta,
          Wire::ContentsResponse, Wire::WriteResponse
         @lock.synchronize do
           Wire::Failure.new("unexpected message from the client").write(@output)

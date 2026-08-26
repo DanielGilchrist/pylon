@@ -10,5 +10,6 @@ module Pylon::Wire
     PollRequest
     PollResponse
     TreeUpdate
+    TreeDelta
   end
 end

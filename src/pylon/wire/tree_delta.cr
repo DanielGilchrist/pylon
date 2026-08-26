@@ -1,23 +1,23 @@
-require "./chunks"
+require "./binary"
 require "./writable"
 
 module Pylon::Wire
-  struct TreeUpdate
+  struct TreeDelta
     include Writable
 
     getter sequence : UInt32
-    getter root : Core::Entry?
+    getter changes : Array(Core::Change)
 
-    def initialize(@sequence : UInt32, @root : Core::Entry?)
+    def initialize(@sequence : UInt32, @changes : Array(Core::Change))
     end
 
     def tag : Tag
-      Tag::TreeUpdate
+      Tag::TreeDelta
     end
 
     def write_payload(io : IO) : Nil
       io.write_bytes(sequence, FORMAT)
-      Chunks.write_entry(io, root)
+      Binary.write_changes(io, changes)
     end
   end
 end

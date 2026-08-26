@@ -15,6 +15,7 @@ module Pylon::Session
       @failure = nil.as(Exception?)
       @tree = nil.as(Core::Entry?)
       @known = false
+      @sequence = 0_u32
 
       spawn { listen }
     end
@@ -67,7 +68,20 @@ module Pylon::Session
 
         if message.is_a?(Wire::TreeUpdate)
           @tree = message.root
+          @sequence = message.sequence
           @known = true
+          signal
+          next
+        end
+
+        if message.is_a?(Wire::TreeDelta)
+          if message.sequence == @sequence + 1
+            @tree = Core::Applier.apply(@tree, message.changes)
+            @sequence = message.sequence
+          else
+            @known = false
+          end
+
           signal
           next
         end
