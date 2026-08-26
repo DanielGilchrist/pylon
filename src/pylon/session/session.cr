@@ -1,4 +1,5 @@
 require "../core/applier"
+require "../core/digests"
 require "../core/reconciler"
 require "../write/writer"
 
@@ -46,8 +47,11 @@ module Pylon::Session
         @mode,
       )
 
-      local_outcomes = @local.write(reconciliation.local_changes, @remote)
-      remote_outcomes = @remote.write(reconciliation.remote_changes, @local)
+      local_contents = @remote.contents(Core::Digests.required(reconciliation.local_changes))
+      remote_contents = @local.contents(Core::Digests.required(reconciliation.remote_changes))
+
+      local_outcomes = @local.write(reconciliation.local_changes, local_contents)
+      remote_outcomes = @remote.write(reconciliation.remote_changes, remote_contents)
 
       commit(reconciliation.base_changes, local_outcomes, remote_outcomes)
 

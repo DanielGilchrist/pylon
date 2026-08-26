@@ -2,6 +2,8 @@ require "../scan/scanner"
 require "../scan/disk"
 require "../write/disk_target"
 require "../write/writer"
+require "../wire/message"
+require "./staging"
 
 module Pylon::Session
   class LocalEndpoint
@@ -22,11 +24,18 @@ module Pylon::Session
       snapshot
     end
 
-    def content(digest : Bytes) : Bytes?
-      path = @by_digest[digest]?
-      return nil if path.nil?
+    def contents(digests : Array(Bytes)) : Wire::Contents
+      contents = Wire::Contents.new(initial_capacity: digests.size)
 
-      @filesystem.read(path)
+      digests.each do |digest|
+        path = @by_digest[digest]?
+        next if path.nil?
+
+        content = @filesystem.read(path)
+        contents[digest] = content if content
+      end
+
+      contents
     end
 
     private def index(cache : Scan::Cache) : Hash(Bytes, String)
@@ -35,8 +44,8 @@ module Pylon::Session
       by_digest
     end
 
-    def write(changes : Array(Core::Change), staging) : Array(Write::Outcome)
-      Write::Writer.new(@target, staging, @cache).apply(changes)
+    def write(changes : Array(Core::Change), contents : Wire::Contents) : Array(Write::Outcome)
+      Write::Writer.new(@target, Staging.new(contents), @cache).apply(changes)
     end
   end
 end
