@@ -24,6 +24,10 @@ module Pylon::Watch
 
     record Changes, paths : Array(String), fresh : Bool
 
+    def pending? : Bool
+      @lock.synchronize { @fresh || !@paths.empty? }
+    end
+
     def drain : Changes
       @lock.synchronize do
         changes = Changes.new(@paths.to_a, @fresh)
