@@ -6,7 +6,6 @@ require "../wire/message"
 require "./local_endpoint"
 require "./checkpoint/schedule"
 
-require "./outcomes"
 
 module Pylon::Session
   class Server
@@ -92,7 +91,7 @@ module Pylon::Session
       in Wire::WriteRequest
         @lock.synchronize do
           outcomes = @endpoint.write(request.changes, Wire::ContentSource.materialised(request.contents))
-          @sent = Core::Applier.apply(@sent, Outcomes.changes(outcomes)) unless @sent.nil?
+          @sent = Core::Applier.apply(@sent, Write::Outcome.changes(outcomes)) unless @sent.nil?
           Wire::WriteResponse.new(outcomes).write(@output)
           @checkpoints.try(&.save_if_due)
         end

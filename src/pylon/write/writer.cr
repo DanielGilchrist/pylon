@@ -2,17 +2,9 @@ require "../core/change"
 require "../core/entry"
 require "../scan/cache_entry"
 require "./guard"
+require "./outcome"
 
 module Pylon::Write
-  record Outcome,
-    path : String,
-    entry : Core::Entry?,
-    problem : String? = nil do
-    def applied? : Bool
-      problem.nil?
-    end
-  end
-
   struct Writer(F, S)
     def initialize(@filesystem : F, @staging : S, @cache : Scan::Cache)
     end

@@ -1,7 +1,6 @@
 require "../core/applier"
 require "../wire/message"
 
-require "./outcomes"
 
 module Pylon::Session
   class RemoteEndpoint
@@ -57,7 +56,7 @@ module Pylon::Session
       reply = exchange(Wire::WriteRequest.new(changes, source))
       raise ProtocolError.new("expected a write response") unless reply.is_a?(Wire::WriteResponse)
 
-      @tree = Core::Applier.apply(@tree, Outcomes.changes(reply.outcomes))
+      @tree = Core::Applier.apply(@tree, Write::Outcome.changes(reply.outcomes))
       reply.outcomes
     end
 
