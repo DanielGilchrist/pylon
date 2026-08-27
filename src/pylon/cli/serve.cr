@@ -2,8 +2,8 @@ require "kebab"
 require "../scan/ignores"
 require "../session/server"
 require "../session/local_endpoint"
-require "../session/persister"
-require "../session/store"
+require "../session/checkpoint/schedule"
+require "../session/checkpoint/schedule"
 require "../watch/watcher"
 
 struct Pylon::CLI
@@ -24,21 +24,21 @@ struct Pylon::CLI
       endpoint = Session::LocalEndpoint.new(root, Scan::Ignores.new(ignore))
 
       state.try do |path|
-        restored = Session::Store.load(path)
+        restored = Session::Checkpoint.load(path)
         endpoint.cache = restored.local_cache if restored
       end
 
       subscriber = Watch::Watcher.open(root, ignore, Channel(Nil).new(1), "pylon-server")
       endpoint.accelerate! if subscriber
 
-      persister = state.try do |path|
-        Session::Persister.new(path, -> { Session::State.new(nil, endpoint.cache) })
+      checkpoints = state.try do |path|
+        Session::Checkpoint::Schedule.new(path, -> { Session::Checkpoint.new(nil, endpoint.cache) })
       end
 
       IO::FileDescriptor.set_blocking(STDIN.fd, false)
       IO::FileDescriptor.set_blocking(STDOUT.fd, false)
 
-      Session::Server.new(endpoint, STDIN, STDOUT, subscriber, persister).run
+      Session::Server.new(endpoint, STDIN, STDOUT, subscriber, checkpoints).run
 
       subscriber.try(&.close)
     end

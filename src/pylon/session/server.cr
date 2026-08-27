@@ -4,7 +4,7 @@ require "../core/applier"
 require "../core/differ"
 require "../wire/message"
 require "./local_endpoint"
-require "./persister"
+require "./checkpoint/schedule"
 
 require "./outcomes"
 
@@ -15,7 +15,7 @@ module Pylon::Session
       @input : IO,
       @output : IO,
       @subscriber : Watch::Any? = nil,
-      @persister : Persister? = nil,
+      @checkpoints : Checkpoint::Schedule? = nil,
     )
       @lock = Sync::Mutex.new
       @stopping = false
@@ -33,7 +33,7 @@ module Pylon::Session
       nil
     ensure
       @stopping = true
-      @persister.try(&.flush)
+      @checkpoints.try(&.save)
     end
 
     private def announce : Nil
@@ -94,7 +94,7 @@ module Pylon::Session
           outcomes = @endpoint.write(request.changes, Wire::ContentSource.materialised(request.contents))
           @sent = Core::Applier.apply(@sent, Outcomes.changes(outcomes)) unless @sent.nil?
           Wire::WriteResponse.new(outcomes).write(@output)
-          @persister.try(&.maybe)
+          @checkpoints.try(&.save_if_due)
         end
       in Wire::PollRequest
         @lock.synchronize do

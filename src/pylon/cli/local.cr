@@ -1,10 +1,10 @@
 require "kebab"
 require "../scan/ignores"
 require "../session/local_endpoint"
-require "../session/persister"
+require "../session/checkpoint/schedule"
 require "../session/runner"
 require "../session/session"
-require "../session/store"
+require "../session/checkpoint/schedule"
 require "../watch/watcher"
 require "./reporter"
 
@@ -36,7 +36,7 @@ struct Pylon::CLI
 
     def run : Nil
       ignores = Scan::Ignores.new(ignore)
-      restored = state.try { |path| Session::Store.load(path) } || Session::State.new
+      restored = state.try { |path| Session::Checkpoint.load(path) } || Session::Checkpoint.new
 
       left = Session::LocalEndpoint.new(local, ignores)
       right = Session::LocalEndpoint.new(remote, ignores)
@@ -51,13 +51,13 @@ struct Pylon::CLI
         push_first: restored.base.nil?,
       )
       reporter = Reporter.new(STDOUT, verbose?, dry_run?)
-      persister = state.try do |path|
-        Session::Persister.new(path, -> { Session::State.new(session.base, left.cache, right.cache) })
+      checkpoints = state.try do |path|
+        Session::Checkpoint::Schedule.new(path, -> { Session::Checkpoint.new(session.base, left.cache, right.cache) })
       end
 
       unless watch?
         reporter.report(session.cycle(Time.utc.to_unix_ns.to_i64))
-        persister.try(&.flush)
+        checkpoints.try(&.save)
         return
       end
 
@@ -80,10 +80,10 @@ struct Pylon::CLI
 
       runner.run do |report|
         reporter.report(report)
-        persister.try(&.maybe)
+        checkpoints.try(&.save_if_due)
       end
 
-      persister.try(&.flush)
+      checkpoints.try(&.save)
       watchers.each { |_, subscriber| subscriber.close }
     end
 

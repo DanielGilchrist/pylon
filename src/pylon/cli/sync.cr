@@ -1,13 +1,13 @@
 require "kebab"
 require "../scan/ignores"
 require "../session/local_endpoint"
-require "../session/persister"
+require "../session/checkpoint/schedule"
 require "../session/process_transport"
 require "../session/remote_endpoint"
 require "../session/runner"
 require "../session/session"
 require "../session/ssh"
-require "../session/store"
+require "../session/checkpoint/schedule"
 require "../watch/watcher"
 require "./reporter"
 require "./target"
@@ -58,7 +58,7 @@ struct Pylon::CLI
       end
 
       ignores = Scan::Ignores.new(ignore)
-      restored = state.try { |path| Session::Store.load(path) } || Session::State.new
+      restored = state.try { |path| Session::Checkpoint.load(path) } || Session::Checkpoint.new
 
       transport = Session::ProcessTransport.open(
         "ssh",
@@ -88,17 +88,17 @@ struct Pylon::CLI
           on_progress: ->(done : Int32, total : Int32) { reporter.progress(done, total) },
         )
 
-        persister = state.try do |path|
-          Session::Persister.new(path, -> { Session::State.new(session.base, left.cache, restored.remote_cache) })
+        checkpoints = state.try do |path|
+          Session::Checkpoint::Schedule.new(path, -> { Session::Checkpoint.new(session.base, left.cache, restored.remote_cache) })
         end
 
-        drive(session, reporter, persister, remote_endpoint, left, target, signals)
+        drive(session, reporter, checkpoints, remote_endpoint, left, target, signals)
       ensure
         transport.close
       end
     end
 
-    private def drive(session, reporter, persister, remote_endpoint, local_endpoint, target, signals) : Nil
+    private def drive(session, reporter, checkpoints, remote_endpoint, local_endpoint, target, signals) : Nil
       run = ->(body : Proc(Nil)) do
         begin
           body.call
@@ -110,7 +110,7 @@ struct Pylon::CLI
       end
 
       unless watch?
-        run.call(-> { reporter.report(session.cycle(Time.utc.to_unix_ns.to_i64)); persister.try(&.flush); nil })
+        run.call(-> { reporter.report(session.cycle(Time.utc.to_unix_ns.to_i64)); checkpoints.try(&.save); nil })
         return
       end
 
@@ -143,10 +143,10 @@ struct Pylon::CLI
             reporter.ready(Time.instant - started, local_endpoint.cache.size)
           end
 
-          persister.try(&.maybe)
+          checkpoints.try(&.save_if_due)
         end
 
-        persister.try(&.flush)
+        checkpoints.try(&.save)
         nil
       })
       subscriber.close

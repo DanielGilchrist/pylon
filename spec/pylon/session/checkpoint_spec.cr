@@ -1,6 +1,6 @@
 require "file_utils"
 require "../../spec_helper"
-require "../../../src/pylon/session/store"
+require "../../../src/pylon/session/checkpoint"
 
 include Pylon::Session
 
@@ -26,14 +26,14 @@ private def sample_cache : Pylon::Scan::Cache
   cache
 end
 
-describe Pylon::Session::Store do
+describe Pylon::Session::Checkpoint do
   it "round trips an base and both caches" do
     in_sandbox do |path|
       base = Entry.directory({"app" => Entry.directory({"user.rb" => Fixtures.f1})})
 
-      Store.save(path, State.new(base, sample_cache, Pylon::Scan::Cache.new)).should be_true
+      Checkpoint.new(base, sample_cache, Pylon::Scan::Cache.new).save(path).should be_true
 
-      loaded = Store.load(path).should_not be_nil
+      loaded = Checkpoint.load(path).should_not be_nil
       next if loaded.nil?
 
       Entry.equal?(loaded.base, base, true).should be_true
@@ -49,9 +49,9 @@ describe Pylon::Session::Store do
 
   it "round trips an empty state" do
     in_sandbox do |path|
-      Store.save(path, State.new)
+      Checkpoint.new.save(path)
 
-      loaded = Store.load(path).should_not be_nil
+      loaded = Checkpoint.load(path).should_not be_nil
       next if loaded.nil?
 
       loaded.base.should be_nil
@@ -62,35 +62,35 @@ describe Pylon::Session::Store do
     in_sandbox do |path|
       File.write(path, "not a pylon state file at all")
 
-      Store.load(path).should be_nil
+      Checkpoint.load(path).should be_nil
     end
   end
 
   it "returns nothing for a truncated store rather than half a state" do
     in_sandbox do |path|
-      Store.save(path, State.new(Entry.directory({"a" => Fixtures.f1}), sample_cache, sample_cache))
+      Checkpoint.new(Entry.directory({"a" => Fixtures.f1}), sample_cache, sample_cache).save(path)
       bytes = File.read(path).to_slice.dup
 
       File.write(path, bytes[0, bytes.size // 2])
 
-      Store.load(path).should be_nil
+      Checkpoint.load(path).should be_nil
     end
   end
 
   it "returns nothing when the format version moves on" do
     in_sandbox do |path|
-      Store.save(path, State.new)
+      Checkpoint.new.save(path)
       bytes = File.read(path).to_slice.dup
-      bytes[Store::MAGIC.bytesize] = 99_u8
+      bytes[Checkpoint::MAGIC.bytesize] = 99_u8
       File.write(path, bytes)
 
-      Store.load(path).should be_nil
+      Checkpoint.load(path).should be_nil
     end
   end
 
   it "leaves no temporary files behind" do
     in_sandbox do |path|
-      Store.save(path, State.new(nil, sample_cache, sample_cache))
+      Checkpoint.new(nil, sample_cache, sample_cache).save(path)
 
       Dir.children(File.dirname(path)).should eq(["state"])
     end
