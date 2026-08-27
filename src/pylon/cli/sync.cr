@@ -71,6 +71,9 @@ struct Pylon::CLI
       )
 
       begin
+        reporter = Reporter.new(STDOUT, verbose?, dry_run?)
+        reporter.starting(local, remote) unless dry_run?
+
         left = Session::LocalEndpoint.new(local, ignores)
         left.cache = restored.local_cache
 
@@ -82,9 +85,9 @@ struct Pylon::CLI
           base: restored.base,
           dry_run: dry_run?,
           push_first: restored.base.nil?,
+          on_progress: ->(done : Int32, total : Int32) { reporter.progress(done, total) },
         )
 
-        reporter = Reporter.new(STDOUT, verbose?, dry_run?)
         persister = state.try do |path|
           Session::Persister.new(path, -> { Session::State.new(session.base, left.cache, restored.remote_cache) })
         end
@@ -128,7 +131,24 @@ struct Pylon::CLI
 
       Signal::INT.trap { runner.stop }
 
-      run.call(-> { runner.run { |report| reporter.report(report); persister.try(&.maybe) }; persister.try(&.flush); nil })
+      started = Time.instant
+      first = true
+
+      run.call(-> {
+        runner.run do |report|
+          reporter.report(report)
+
+          if first
+            first = false
+            reporter.ready(Time.instant - started, local_endpoint.cache.size)
+          end
+
+          persister.try(&.maybe)
+        end
+
+        persister.try(&.flush)
+        nil
+      })
       subscriber.close
     end
 

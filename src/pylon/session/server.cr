@@ -1,9 +1,12 @@
 require "sync"
 require "../watch/watcher"
+require "../core/applier"
 require "../core/differ"
 require "../wire/message"
 require "./local_endpoint"
 require "./persister"
+
+require "./outcomes"
 
 module Pylon::Session
   class Server
@@ -89,6 +92,7 @@ module Pylon::Session
       in Wire::WriteRequest
         @lock.synchronize do
           outcomes = @endpoint.write(request.changes, Wire::ContentSource.materialised(request.contents))
+          @sent = Core::Applier.apply(@sent, Outcomes.changes(outcomes)) unless @sent.nil?
           Wire::WriteResponse.new(outcomes).write(@output)
           @persister.try(&.maybe)
         end

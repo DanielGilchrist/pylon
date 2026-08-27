@@ -1,12 +1,12 @@
 require "../core/applier"
 require "../wire/message"
 
+require "./outcomes"
+
 module Pylon::Session
   class RemoteEndpoint
     class ProtocolError < Exception
     end
-
-    TRACKABLE_OUTCOMES = 256
 
     # the reader fiber must never block, or it stops draining the socket
     # while the server is mid-push, which deadlocks both ends
@@ -57,12 +57,7 @@ module Pylon::Session
       reply = exchange(Wire::WriteRequest.new(changes, source))
       raise ProtocolError.new("expected a write response") unless reply.is_a?(Wire::WriteResponse)
 
-      if reply.outcomes.size > TRACKABLE_OUTCOMES
-        @known = false
-      else
-        @tree = Core::Applier.apply(@tree, reply.outcomes.map { |outcome| Core::Change.new(outcome.path, nil, outcome.entry) })
-      end
-
+      @tree = Core::Applier.apply(@tree, Outcomes.changes(reply.outcomes))
       reply.outcomes
     end
 

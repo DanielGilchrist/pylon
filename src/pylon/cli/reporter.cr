@@ -1,76 +1,135 @@
+require "colorize"
 require "../session/session"
 
 struct Pylon::CLI
   struct Reporter
-    PREVIEW_LIMIT = 40
+    NAMED_PATHS   =  6
+    PREVIEW_PATHS = 40
 
     def initialize(@io : IO, @verbose : Bool = false, @dry_run : Bool = false)
+      @progress_shown = false
+    end
+
+    def starting(local : String, remote : String) : Nil
+      @io.puts
+      @io.puts "#{"pylon".colorize.bold} #{File.basename(local).colorize.cyan} #{"→".colorize.dark_gray} #{remote.colorize.cyan}"
+      @io.puts "#{indent}#{"connecting and scanning both sides".colorize.dark_gray}"
+    end
+
+    def progress(done : Int32, total : Int32) : Nil
+      return unless @io.tty?
+
+      @progress_shown = true
+      @io.print "\r#{indent}sending #{done}/#{total}".colorize.dark_gray
+      @io.flush
+    end
+
+    def ready(elapsed : Time::Span, watching : Int32) : Nil
+      clear_progress
+
+      @io.puts "#{indent}#{"ready".colorize.green.bold} #{"·".colorize.dark_gray} #{watching} files in sync #{"·".colorize.dark_gray} #{format(elapsed)}"
+      @io.puts "#{indent}#{"watching for changes, ctrl-c to stop".colorize.dark_gray}"
+      @io.puts
     end
 
     def report(report : Session::Report) : Nil
+      clear_progress
+
       if (halt = report.halt)
-        @io.puts("halted: #{halt.explain}")
-        @io.puts("  nothing was changed on either side; run again once it looks right")
+        @io.puts "#{indent}#{"halted".colorize.red.bold} #{halt.explain}"
+        @io.puts "#{indent}#{"nothing was changed on either side".colorize.dark_gray}"
         return
       end
 
-      return if report.quiet? && !@verbose
       return preview(report) if @dry_run
+      return if report.quiet?
 
-      applied_to_local = report.local_outcomes.count(&.applied?)
-      applied_to_remote = report.remote_outcomes.count(&.applied?)
+      show("↑", :green, report.remote_outcomes.select(&.applied?))
+      show("↓", :blue, report.local_outcomes.select(&.applied?))
+
+      report.conflicts.each do |conflict|
+        @io.puts "#{indent}#{"!".colorize.yellow.bold} #{"conflict".colorize.yellow} #{conflict.root} #{"— left alone on both sides".colorize.dark_gray}"
+      end
+
       skipped = report.skipped
+      return if skipped.empty?
 
-      parts = [] of String
-      parts << "#{applied_to_remote} out" if applied_to_remote > 0
-      parts << "#{applied_to_local} in" if applied_to_local > 0
-      parts << "#{report.conflicts.size} conflicted" unless report.conflicts.empty?
-      parts << "#{skipped.size} skipped" unless skipped.empty?
-
-      @io.puts(parts.empty? ? "nothing to do" : parts.join(", "))
-
-      report.conflicts.each { |conflict| @io.puts("  conflict  #{conflict.root}") }
+      @io.puts "#{indent}#{"·".colorize.dark_gray} #{skipped.size} skipped#{@verbose ? "" : ", run with PYLON_VERBOSE=1 for detail"}".colorize.dark_gray
 
       return unless @verbose
 
-      skipped.each { |outcome| @io.puts("  skipped   #{outcome.path}  (#{outcome.problem})") }
+      skipped.each { |outcome| @io.puts "#{indent}  #{outcome.path} #{"(#{outcome.problem})".colorize.dark_gray}" }
+    end
+
+    private def show(arrow : String, colour : Symbol, outcomes : Array(Write::Outcome)) : Nil
+      return if outcomes.empty?
+
+      named = @verbose ? outcomes.size : NAMED_PATHS
+
+      outcomes.first(named).each do |outcome|
+        @io.puts "#{indent}#{arrow.colorize(colour)} #{outcome.path}"
+      end
+
+      remaining = outcomes.size - named
+      return if remaining <= 0
+
+      @io.puts "#{indent}#{arrow.colorize(colour)} #{"and #{remaining} more".colorize.dark_gray}"
     end
 
     private def preview(report : Session::Report) : Nil
       outgoing = report.remote_outcomes
       incoming = report.local_outcomes
 
-      parts = [] of String
-      parts << "#{outgoing.size} would go up" unless outgoing.empty?
-      parts << "#{incoming.size} would come down" unless incoming.empty?
-      parts << "#{report.conflicts.size} would conflict" unless report.conflicts.empty?
+      if outgoing.empty? && incoming.empty? && report.conflicts.empty?
+        @io.puts "#{indent}#{"nothing to do".colorize.dark_gray}"
+        return
+      end
 
-      @io.puts(parts.empty? ? "nothing to do" : "dry run: #{parts.join(", ")}")
+      @io.puts "#{indent}#{"dry run".colorize.yellow.bold} #{"nothing will be changed".colorize.dark_gray}"
 
-      report.conflicts.each { |conflict| @io.puts("  conflict  #{conflict.root}") }
+      listing("↑", :green, outgoing)
+      listing("↓", :blue, incoming)
 
-      list("up  ", outgoing)
-      list("down", incoming)
+      report.conflicts.each do |conflict|
+        @io.puts "#{indent}#{"!".colorize.yellow} conflict #{conflict.root}"
+      end
+    end
+
+    private def listing(arrow : String, colour : Symbol, outcomes : Array(Write::Outcome)) : Nil
+      return if outcomes.empty?
+
+      outcomes.first(PREVIEW_PATHS).each do |outcome|
+        @io.puts "#{indent}#{arrow.colorize(colour)} #{verb(outcome)} #{outcome.path}"
+      end
+
+      remaining = outcomes.size - PREVIEW_PATHS
+      @io.puts "#{indent}#{arrow.colorize(colour)} #{"and #{remaining} more".colorize.dark_gray}" if remaining > 0
     end
 
     private def verb(outcome : Write::Outcome) : String
       entry = outcome.entry
 
-      return "delete " if entry.nil?
-      return "mkdir  " if entry.kind.directory?
+      return "delete".colorize.red.to_s if entry.nil?
+      return "mkdir ".colorize.dark_gray.to_s if entry.kind.directory?
 
-      "write  "
+      "write ".colorize.dark_gray.to_s
     end
 
-    private def list(direction : String, outcomes : Array(Write::Outcome)) : Nil
-      return if outcomes.empty? || !@verbose
+    private def clear_progress : Nil
+      return unless @progress_shown
 
-      outcomes.first(PREVIEW_LIMIT).each do |outcome|
-        @io.puts("  #{direction}  #{verb(outcome)} #{outcome.path}")
-      end
+      @progress_shown = false
+      @io.print "\r\033[K"
+    end
 
-      remaining = outcomes.size - PREVIEW_LIMIT
-      @io.puts("  ... and #{remaining} more") if remaining > 0
+    private def format(elapsed : Time::Span) : String
+      return "#{elapsed.total_milliseconds.round.to_i} ms" if elapsed.total_seconds < 1
+
+      "#{elapsed.total_seconds.round(1)} s"
+    end
+
+    private def indent : String
+      "  "
     end
   end
 end

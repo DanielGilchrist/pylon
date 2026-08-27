@@ -140,3 +140,41 @@ describe "a session whose remote pushes tree updates" do
     end
   end
 end
+
+describe "a large push followed by more cycles" do
+  it "does not delete what it just sent" do
+    in_remote_pair do |local, remote, session|
+      Dir.mkdir_p(File.join(local, "app", "models"))
+      Dir.mkdir_p(File.join(local, "db"))
+      400.times { |index| File.write(File.join(local, "app", "models", "f#{index}.rb"), "class F#{index}; end") }
+      File.write(File.join(local, "db", "structure.sql"), "-- schema")
+
+      session.cycle(tick)
+      File.exists?(File.join(remote, "db", "structure.sql")).should be_true
+
+      3.times do
+        report = session.cycle(tick)
+        report.halted?.should be_false
+      end
+
+      Dir.exists?(File.join(local, "app", "models")).should be_true
+      Dir.exists?(File.join(local, "db")).should be_true
+      Dir.children(File.join(local, "app", "models")).size.should eq(400)
+      Dir.children(File.join(remote, "app", "models")).size.should eq(400)
+    end
+  end
+
+  it "keeps both sides settled after a burst in each direction" do
+    in_remote_pair do |local, remote, session|
+      300.times { |index| File.write(File.join(local, "up_#{index}.rb"), "up #{index}") }
+      session.cycle(tick)
+
+      300.times { |index| File.write(File.join(remote, "down_#{index}.rb"), "down #{index}") }
+      session.cycle(tick)
+
+      session.cycle(tick).quiet?.should be_true
+      Dir.children(local).size.should eq(600)
+      Dir.children(remote).size.should eq(600)
+    end
+  end
+end

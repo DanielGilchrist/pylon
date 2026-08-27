@@ -1,0 +1,68 @@
+#!/bin/bash
+# Drives the real binaries over a stand-in for ssh. Catches failures that
+# in-process specs cannot, because the server runs as a separate process.
+set -euo pipefail
+
+cd "$(dirname "$0")/.."
+PYLON="$PWD/bin/pylon"
+
+[[ -x "$PYLON" ]] || { echo "build first: crystal build --release -o bin/pylon src/pylon.cr"; exit 1; }
+
+WORK="$(mktemp -d)"
+trap 'kill "${PID:-0}" 2>/dev/null || true; rm -rf "$WORK"' EXIT
+
+mkdir -p "$WORK"/{a,b,stub}
+printf '#!/bin/sh\neval "$(eval echo \\${$#})"\n' > "$WORK/stub/ssh"
+chmod +x "$WORK/stub/ssh"
+export PATH="$WORK/stub:$PATH"
+
+mkdir -p "$WORK/a/app/models" "$WORK/a/db"
+for i in $(seq 1 400); do echo "class F$i; end" > "$WORK/a/app/models/f$i.rb"; done
+echo "-- schema" > "$WORK/a/db/structure.sql"
+echo "stale" > "$WORK/b/old.rb"
+
+failures=0
+check() {
+  local what="$1" expected="$2" actual="$3"
+  if [[ "$expected" == "$actual" ]]; then
+    echo "  ok    $what"
+  else
+    echo "  FAIL  $what: expected $expected, got $actual"
+    failures=$((failures + 1))
+  fi
+}
+
+"$PYLON" sync "$WORK/a" "user@host:$WORK/b" --state "$WORK/state" --watch \
+  --remote-command "$PYLON server --state $WORK/rstate" > "$WORK/log" 2>&1 &
+PID=$!
+disown 2>/dev/null || true
+sleep 5
+
+check "initial push landed"        401 "$(find "$WORK/b" -type f | wc -l | tr -d ' ')"
+check "local tree intact"          401 "$(find "$WORK/a" -type f | wc -l | tr -d ' ')"
+check "box only file removed"      0   "$(find "$WORK/b" -name old.rb | wc -l | tr -d ' ')"
+
+echo "class New; end" > "$WORK/a/app/models/new_model.rb"
+sleep 2
+check "local add went up"          402 "$(find "$WORK/b" -type f | wc -l | tr -d ' ')"
+check "local still intact"         402 "$(find "$WORK/a" -type f | wc -l | tr -d ' ')"
+
+echo "generated" > "$WORK/b/from_box.rbi"
+sleep 2
+check "box add came down"          403 "$(find "$WORK/a" -type f | wc -l | tr -d ' ')"
+
+sleep 2
+check "nothing drifted"            403 "$(find "$WORK/b" -type f | wc -l | tr -d ' ')"
+
+if grep -q "halted" "$WORK/log"; then
+  echo "  FAIL  a cycle halted"
+  failures=$((failures + 1))
+fi
+
+if [[ "$failures" -gt 0 ]]; then
+  echo
+  echo "pylon log:"; sed 's/^/    /' "$WORK/log"
+  exit 1
+fi
+
+echo "end to end ok"

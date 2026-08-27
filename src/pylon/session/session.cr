@@ -6,7 +6,8 @@ require "../write/writer"
 
 module Pylon::Session
   class Session(A, B)
-    TRANSFER_BUDGET = 32_u64 * 1024 * 1024
+    TRANSFER_BUDGET    = 32_u64 * 1024 * 1024
+    PROGRESS_THRESHOLD = 200
 
     getter base : Core::Entry?
 
@@ -17,6 +18,7 @@ module Pylon::Session
       @base : Core::Entry? = nil,
       @dry_run : Bool = false,
       @push_first : Bool = false,
+      @on_progress : Proc(Int32, Int32, Nil)? = nil,
     )
     end
 
@@ -101,7 +103,7 @@ module Pylon::Session
 
     private def ship(changes : Array(Core::Change), source, target) : Array(Write::Outcome)
       outcomes = [] of Write::Outcome
-
+      total = changes.size
       pending = changes
 
       until pending.empty?
@@ -112,6 +114,7 @@ module Pylon::Session
         break if batch.empty?
 
         outcomes.concat(target.write(batch, provided))
+        @on_progress.try(&.call(outcomes.size, total)) if total > PROGRESS_THRESHOLD
       end
 
       outcomes
