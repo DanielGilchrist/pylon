@@ -11,7 +11,7 @@ module Pylon::Watch
   module Watcher
     extend self
 
-    # Linux watches inotify directly, so the dev box needs nothing installed.
+    # Linux watches inotify directly, so the remote needs nothing installed.
     # macOS goes through watchman, which owns FSEvents for us.
     def open(root : String, ignores : Array(String), signals : Channel(Nil), name : String = "pylon") : Any?
       {% if flag?(:linux) %}

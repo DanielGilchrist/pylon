@@ -215,14 +215,14 @@ describe "the first cycle when there is no saved state" do
 
   it "lets the local copy win without reporting a conflict" do
     in_pair do |local, remote, _|
-      File.write(File.join(local, "shared.rb"), "from the laptop")
+      File.write(File.join(local, "shared.rb"), "from the local side")
       File.write(File.join(remote, "shared.rb"), "from the box")
 
       session = Session.new(LocalEndpoint.new(local), LocalEndpoint.new(remote), push_first: true)
       report = session.cycle(tick)
 
       report.conflicts.should be_empty
-      File.read(File.join(remote, "shared.rb")).should eq("from the laptop")
+      File.read(File.join(remote, "shared.rb")).should eq("from the local side")
     end
   end
 

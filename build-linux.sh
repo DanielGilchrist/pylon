@@ -1,6 +1,4 @@
 #!/bin/sh
-# Builds statically linked pylon binaries for the dev box.
-# Needs docker; produces dist/pylon-linux-<arch>.
 set -e
 
 cd "$(dirname "$0")"
