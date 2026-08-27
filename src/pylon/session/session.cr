@@ -15,6 +15,8 @@ module Pylon::Session
       @remote : B,
       @mode : Core::SyncMode = Core::SyncMode::TwoWaySafe,
       @base : Core::Entry? = nil,
+      @dry_run : Bool = false,
+      @push_first : Bool = false,
     )
     end
 
@@ -29,6 +31,13 @@ module Pylon::Session
       end
 
       scanned = Time.instant
+
+      # With no saved state the local side is the source of truth: adopting
+      # the remote tree as the base makes this first cycle push only.
+      if @push_first
+        @base = remote_snapshot.root if @base.nil?
+        @push_first = false
+      end
 
       reconciliation = Core::Reconciler.reconcile(
         @base,
@@ -57,6 +66,14 @@ module Pylon::Session
 
       local_changes = Core::Changes.expand(reconciliation.local_changes)
       remote_changes = Core::Changes.expand(reconciliation.remote_changes)
+
+      if @dry_run
+        return Report.new(
+          reconciliation.conflicts,
+          local_changes.map { |change| Write::Outcome.new(change.path, change.new, "dry run") },
+          remote_changes.map { |change| Write::Outcome.new(change.path, change.new, "dry run") },
+        )
+      end
 
       fetched = Time.instant
 

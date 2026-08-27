@@ -2,7 +2,9 @@ require "../session/session"
 
 struct Pylon::CLI
   struct Reporter
-    def initialize(@io : IO, @verbose : Bool = false)
+    PREVIEW_LIMIT = 40
+
+    def initialize(@io : IO, @verbose : Bool = false, @dry_run : Bool = false)
     end
 
     def report(report : Session::Report) : Nil
@@ -13,6 +15,7 @@ struct Pylon::CLI
       end
 
       return if report.quiet? && !@verbose
+      return preview(report) if @dry_run
 
       applied_to_local = report.local_outcomes.count(&.applied?)
       applied_to_remote = report.remote_outcomes.count(&.applied?)
@@ -30,9 +33,44 @@ struct Pylon::CLI
 
       return unless @verbose
 
-      skipped.each do |outcome|
-        @io.puts("  skipped   #{outcome.path}  (#{outcome.problem})")
+      skipped.each { |outcome| @io.puts("  skipped   #{outcome.path}  (#{outcome.problem})") }
+    end
+
+    private def preview(report : Session::Report) : Nil
+      outgoing = report.remote_outcomes
+      incoming = report.local_outcomes
+
+      parts = [] of String
+      parts << "#{outgoing.size} would go up" unless outgoing.empty?
+      parts << "#{incoming.size} would come down" unless incoming.empty?
+      parts << "#{report.conflicts.size} would conflict" unless report.conflicts.empty?
+
+      @io.puts(parts.empty? ? "nothing to do" : "dry run: #{parts.join(", ")}")
+
+      report.conflicts.each { |conflict| @io.puts("  conflict  #{conflict.root}") }
+
+      list("up  ", outgoing)
+      list("down", incoming)
+    end
+
+    private def verb(outcome : Write::Outcome) : String
+      entry = outcome.entry
+
+      return "delete " if entry.nil?
+      return "mkdir  " if entry.kind.directory?
+
+      "write  "
+    end
+
+    private def list(direction : String, outcomes : Array(Write::Outcome)) : Nil
+      return if outcomes.empty? || !@verbose
+
+      outcomes.first(PREVIEW_LIMIT).each do |outcome|
+        @io.puts("  #{direction}  #{verb(outcome)} #{outcome.path}")
       end
+
+      remaining = outcomes.size - PREVIEW_LIMIT
+      @io.puts("  ... and #{remaining} more") if remaining > 0
     end
   end
 end

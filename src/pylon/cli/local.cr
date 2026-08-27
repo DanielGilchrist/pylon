@@ -28,6 +28,9 @@ struct Pylon::CLI
     @[Kebab::Option(short: 'w', description: "Keep running and sync on every change")]
     getter? watch : Bool = false
 
+    @[Kebab::Option(short: 'n', description: "Show what would happen and change nothing")]
+    getter? dry_run : Bool = false
+
     @[Kebab::Option(short: 'v', description: "Explain every skipped path")]
     getter? verbose : Bool = false
 
@@ -40,8 +43,14 @@ struct Pylon::CLI
       left.cache = restored.local_cache
       right.cache = restored.remote_cache
 
-      session = Session::Session.new(left, right, base: restored.base)
-      reporter = Reporter.new(STDOUT, verbose?)
+      session = Session::Session.new(
+        left,
+        right,
+        base: restored.base,
+        dry_run: dry_run?,
+        push_first: restored.base.nil?,
+      )
+      reporter = Reporter.new(STDOUT, verbose?, dry_run?)
       persister = state.try do |path|
         Session::Persister.new(path, -> { Session::State.new(session.base, left.cache, right.cache) })
       end

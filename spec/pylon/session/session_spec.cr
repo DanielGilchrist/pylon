@@ -197,3 +197,56 @@ describe "safety halts" do
     end
   end
 end
+
+describe "the first cycle when there is no saved state" do
+  it "pushes local files up and removes ones only the remote had" do
+    in_pair do |local, remote, _|
+      File.write(File.join(local, "mine.rb"), "local")
+      File.write(File.join(remote, "stale.rb"), "left over on the box")
+
+      session = Session.new(LocalEndpoint.new(local), LocalEndpoint.new(remote), push_first: true)
+      session.cycle(tick)
+
+      File.exists?(File.join(remote, "mine.rb")).should be_true
+      File.exists?(File.join(remote, "stale.rb")).should be_false
+      File.exists?(File.join(local, "stale.rb")).should be_false
+    end
+  end
+
+  it "lets the local copy win without reporting a conflict" do
+    in_pair do |local, remote, _|
+      File.write(File.join(local, "shared.rb"), "from the laptop")
+      File.write(File.join(remote, "shared.rb"), "from the box")
+
+      session = Session.new(LocalEndpoint.new(local), LocalEndpoint.new(remote), push_first: true)
+      report = session.cycle(tick)
+
+      report.conflicts.should be_empty
+      File.read(File.join(remote, "shared.rb")).should eq("from the laptop")
+    end
+  end
+
+  it "goes two way from the second cycle onwards" do
+    in_pair do |local, remote, _|
+      File.write(File.join(local, "mine.rb"), "local")
+
+      session = Session.new(LocalEndpoint.new(local), LocalEndpoint.new(remote), push_first: true)
+      session.cycle(tick)
+
+      File.write(File.join(remote, "generated.rbi"), "made on the box")
+      session.cycle(tick)
+
+      File.read(File.join(local, "generated.rbi")).should eq("made on the box")
+    end
+  end
+
+  it "still pulls remote files down when state already exists" do
+    in_pair do |local, remote, session|
+      File.write(File.join(remote, "from_box.rb"), "box")
+
+      session.cycle(tick)
+
+      File.exists?(File.join(local, "from_box.rb")).should be_true
+    end
+  end
+end
