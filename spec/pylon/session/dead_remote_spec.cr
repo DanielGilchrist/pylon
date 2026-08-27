@@ -1,0 +1,29 @@
+require "file_utils"
+require "socket"
+require "../../spec_helper"
+require "../../../src/pylon/session/local_endpoint"
+require "../../../src/pylon/session/remote_endpoint"
+require "../../../src/pylon/session/session"
+
+include Pylon::Session
+
+describe "a remote that is not there" do
+  it "reports the remote stopping rather than taking the process down" do
+    root = File.join(Dir.tempdir, "pylon-dead-#{Random::Secure.hex(8)}")
+    Dir.mkdir_p(root)
+
+    client, socket = UNIXSocket.pair
+    socket.close
+    client.close
+
+    session = Session.new(LocalEndpoint.new(root), RemoteEndpoint.new(client, client))
+
+    begin
+      expect_raises(Pylon::Wire::Truncated) do
+        session.cycle(Time.utc.to_unix_ns.to_i64)
+      end
+    ensure
+      FileUtils.rm_rf(root)
+    end
+  end
+end

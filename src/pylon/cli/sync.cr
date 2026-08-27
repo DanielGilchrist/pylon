@@ -13,7 +13,7 @@ require "./reporter"
 require "./target"
 
 struct Pylon::CLI
-  DEFAULT_REMOTE_COMMAND = "pylon server"
+  DEFAULT_REMOTE_COMMAND = "pylon serve"
 
   @[Kebab::Command(summary: "Sync a local directory with one on a remote host")]
   struct Sync

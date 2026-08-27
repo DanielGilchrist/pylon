@@ -103,7 +103,13 @@ module Pylon::Session
 
     private def exchange(request : Wire::Message) : Wire::Message
       @exchanges += 1
-      request.write(@output)
+
+      begin
+        request.write(@output)
+      rescue error : IO::Error
+        @failure ||= error
+        raise Wire::Truncated.new("the remote stopped responding")
+      end
 
       reply = @responses.receive?
       raise(@failure || Wire::Truncated.new("the remote stopped responding")) if reply.nil?

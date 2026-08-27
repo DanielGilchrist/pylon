@@ -27,9 +27,30 @@ module Pylon::Session
       local_snapshot = uninitialized Scan::Snapshot
       remote_snapshot = uninitialized Scan::Snapshot
 
+      failure = nil.as(Exception?)
+
+      # A fiber that raises inside WaitGroup takes the process down with it,
+      # so each side hands its error back instead.
       WaitGroup.wait do |waiting|
-        waiting.spawn { local_snapshot = @local.scan(now_ns) }
-        waiting.spawn { remote_snapshot = @remote.scan(now_ns) }
+        waiting.spawn do
+          begin
+            local_snapshot = @local.scan(now_ns)
+          rescue error
+            failure ||= error
+          end
+        end
+
+        waiting.spawn do
+          begin
+            remote_snapshot = @remote.scan(now_ns)
+          rescue error
+            failure ||= error
+          end
+        end
+      end
+
+      if (scan_failure = failure)
+        raise scan_failure
       end
 
       scanned = Time.instant
