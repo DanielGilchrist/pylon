@@ -1,6 +1,6 @@
 require "file_utils"
 require "../../spec_helper"
-require "../../../src/pylon/watch/client"
+require "../../../src/pylon/watch/watchman/client"
 
 include Pylon::Watch
 
@@ -8,7 +8,7 @@ private def watchman_socket : String?
   Client(UNIXSocket).socket_path
 end
 
-describe "Pylon::Watch::Client against a live daemon" do
+describe "Pylon::Watch::Watchman::Client against a live daemon" do
   socket = watchman_socket
 
   if socket.nil?

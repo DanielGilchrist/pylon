@@ -1,7 +1,7 @@
 require "json"
 require "./observation"
 
-module Pylon::Watch
+module Pylon::Watch::Watchman
   module PDU
     extend self
 

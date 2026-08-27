@@ -1,8 +1,8 @@
 require "sync"
-require "./dirty"
+require "../dirty"
 require "./client"
 
-module Pylon::Watch
+module Pylon::Watch::Watchman
   class Subscriber
     getter signals : Channel(Nil)
 

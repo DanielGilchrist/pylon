@@ -1,7 +1,7 @@
 require "json"
-require "../core/entry"
+require "../../core/entry"
 
-module Pylon::Watch
+module Pylon::Watch::Watchman
   struct Observation
     def self.from(json : JSON::Any) : Observation?
       name = json["name"]?.try(&.as_s?)

@@ -1,11 +1,11 @@
 require "./inotify"
-require "./subscriber"
+require "./watchman/subscriber"
 
 module Pylon::Watch
   {% if flag?(:linux) %}
     alias Any = Inotify
   {% else %}
-    alias Any = Subscriber
+    alias Any = Watchman::Subscriber
   {% end %}
 
   module Watcher
@@ -17,7 +17,7 @@ module Pylon::Watch
       {% if flag?(:linux) %}
         Inotify.open(root, ignores, signals)
       {% else %}
-        Subscriber.open(root, ignores, signals, name)
+        Watchman::Subscriber.open(root, ignores, signals, name)
       {% end %}
     end
   end

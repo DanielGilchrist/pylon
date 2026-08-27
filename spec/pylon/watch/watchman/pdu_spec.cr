@@ -1,7 +1,7 @@
-require "../../spec_helper"
-require "../../../src/pylon/watch/client"
+require "../../../spec_helper"
+require "../../../../src/pylon/watch/watchman/client"
 
-include Pylon::Watch
+include Pylon::Watch::Watchman
 
 private SUBSCRIBE_REPLY = %({"clock":"c:1787606121:779:3:9","subscribe":"pylon","version":"2026.04.27.00"})
 
@@ -17,7 +17,7 @@ private INCREMENTAL = <<-JSON
             {"name":"sub/b.txt","exists":false,"new":false,"mode":33188,"size":6,"mtime_ns":9}]}
   JSON
 
-describe Pylon::Watch::PDU do
+describe Pylon::Watch::Watchman::PDU do
   it "parses a command response" do
     pdu = PDU.parse(SUBSCRIBE_REPLY)
     pdu.should be_a(PDU::Response)
@@ -65,7 +65,7 @@ describe Pylon::Watch::PDU do
   end
 end
 
-describe Pylon::Watch::Client do
+describe Pylon::Watch::Watchman::Client do
   it "sends a subscribe command carrying the ignore patterns" do
     written = IO::Memory.new
     io = IO::Stapled.new(IO::Memory.new("#{SUBSCRIBE_REPLY}\n"), written)

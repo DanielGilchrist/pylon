@@ -2,7 +2,7 @@ require "json"
 require "socket"
 require "./pdu"
 
-module Pylon::Watch
+module Pylon::Watch::Watchman
   FIELDS = %w[name exists new size mode mtime_ns type]
 
   class Client(T)
