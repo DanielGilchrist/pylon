@@ -1,5 +1,5 @@
 require "../src/pylon/scan/scanner"
-require "../src/pylon/scan/disk"
+require "../src/pylon/disk"
 require "../src/pylon/wire/binary"
 
 include Pylon
@@ -7,7 +7,7 @@ include Pylon
 IGNORES = Scan::Ignores.new(%w[.git node_modules tmp log vendor/bundle .ruby-lsp flow-typed .idea])
 
 root = ARGV[0]
-snapshot = Scan::Scanner.new(Scan::Disk.new(root), Scan::Cache.new, Time.utc.to_unix_ns.to_i64, IGNORES).scan
+snapshot = Scan::Scanner.new(Pylon::Disk.new(root), Scan::Cache.new, Time.utc.to_unix_ns.to_i64, IGNORES).scan
 
 buffer = IO::Memory.new
 started = Time.instant

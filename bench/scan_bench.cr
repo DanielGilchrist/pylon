@@ -1,7 +1,7 @@
 require "benchmark"
 require "../src/pylon/core"
 require "../src/pylon/scan/scanner"
-require "../src/pylon/scan/disk"
+require "../src/pylon/disk"
 
 include Pylon::Core
 include Pylon::Scan
@@ -14,7 +14,7 @@ IGNORES = Ignores.new(%w[
 root = ARGV[0]? || abort("usage: scan_bench <root>")
 now = Time.utc.to_unix_ns.to_i64
 parallelism = (ARGV[1]? || Scanner::DEFAULT_PARALLELISM).to_i
-filesystem = Disk.new(root)
+filesystem = Pylon::Disk.new(root)
 
 puts "root: #{root} (parallelism #{parallelism})"
 

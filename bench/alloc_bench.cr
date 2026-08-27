@@ -1,6 +1,6 @@
 require "../src/pylon/scan/scanner"
-require "../src/pylon/scan/disk"
-require "../src/pylon/session/store"
+require "../src/pylon/disk"
+require "../src/pylon/session/checkpoint"
 
 include Pylon
 
@@ -14,7 +14,7 @@ def allocated(label, &)
 end
 
 root = ARGV[0]
-filesystem = Scan::Disk.new(root)
+filesystem = Pylon::Disk.new(root)
 now = Time.utc.to_unix_ns.to_i64
 
 puts "cold scan of #{root}:"
@@ -33,8 +33,8 @@ allocated("contents of 500 files") do
 end
 
 puts "state file:"
-state = Pylon::Session::State.new(cold.root, cold.cache)
+state = Pylon::Session::Checkpoint.new(cold.root, cold.cache)
 path = File.join(Dir.tempdir, "alloc-state-#{Random::Secure.hex(4)}")
-allocated("save") { Pylon::Session::Store.save(path, state) }
-allocated("load") { Pylon::Session::Store.load(path) }
+allocated("save") { state.save(path) }
+allocated("load") { Pylon::Session::Checkpoint.load(path) }
 File.delete?(path)
