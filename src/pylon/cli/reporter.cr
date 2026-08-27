@@ -3,11 +3,13 @@ require "../session/session"
 
 struct Pylon::CLI
   struct Reporter
-    NAMED_PATHS   =  6
-    PREVIEW_PATHS = 40
+    NAMED_PATHS    =  6
+    SUMMARISE_OVER = 12
+    PREVIEW_PATHS  = 40
 
     def initialize(@io : IO, @verbose : Bool = false, @dry_run : Bool = false)
       @progress_shown = false
+      @announced = Set(String).new
     end
 
     def starting(local : String, remote : String) : Nil
@@ -42,14 +44,13 @@ struct Pylon::CLI
       end
 
       return preview(report) if @dry_run
+
+      announce(report.conflicts)
+
       return if report.quiet?
 
       show("↑", :green, report.remote_outcomes.select(&.applied?))
       show("↓", :blue, report.local_outcomes.select(&.applied?))
-
-      report.conflicts.each do |conflict|
-        @io.puts "#{indent}#{"!".colorize.yellow.bold} #{"conflict".colorize.yellow} #{conflict.root} #{"— left alone on both sides".colorize.dark_gray}"
-      end
 
       skipped = report.skipped
       return if skipped.empty?
@@ -61,19 +62,69 @@ struct Pylon::CLI
       skipped.each { |outcome| @io.puts "#{indent}  #{outcome.path} #{"(#{outcome.problem})".colorize.dark_gray}" }
     end
 
+    # A conflict persists until someone acts on it, so say it once rather than
+    # on every cycle, and say when it clears.
+    private def announce(conflicts : Array(Core::Conflict)) : Nil
+      current = conflicts.map(&.root).to_set
+
+      (current - @announced).to_a.sort!.each do |root|
+        @io.puts "#{indent}#{"!".colorize.yellow.bold} #{"conflict".colorize.yellow} #{root}"
+        @io.puts "#{indent}  #{"both sides changed it; delete the copy you do not want".colorize.dark_gray}"
+      end
+
+      (@announced - current).to_a.sort!.each do |root|
+        @io.puts "#{indent}#{"✓".colorize.green} #{"conflict resolved".colorize.dark_gray} #{root}"
+      end
+
+      @announced = current
+    end
+
     private def show(arrow : String, colour : Symbol, outcomes : Array(Write::Outcome)) : Nil
       return if outcomes.empty?
 
-      named = @verbose ? outcomes.size : NAMED_PATHS
+      written = outcomes.select { |outcome| outcome.entry.try(&.kind.file?) }
+      deleted = outcomes.select { |outcome| outcome.entry.nil? }
 
-      outcomes.first(named).each do |outcome|
-        @io.puts "#{indent}#{arrow.colorize(colour)} #{outcome.path}"
+      if outcomes.size > SUMMARISE_OVER && !@verbose
+        unless written.empty?
+          @io.puts "#{indent}#{arrow.colorize(colour)} #{written.size} files #{summarise(written).colorize.dark_gray}"
+        end
+
+        unless deleted.empty?
+          @io.puts "#{indent}#{arrow.colorize(colour)} #{"#{deleted.size} removed".colorize.dark_gray}"
+        end
+
+        return
       end
 
-      remaining = outcomes.size - named
+      listed = (written + deleted).sort_by!(&.path)
+      named = @verbose ? listed.size : NAMED_PATHS
+
+      listed.first(named).each do |outcome|
+        note = outcome.entry.nil? ? " #{"removed".colorize.dark_gray}" : ""
+        @io.puts "#{indent}#{arrow.colorize(colour)} #{outcome.path}#{note}"
+      end
+
+      remaining = listed.size - named
       return if remaining <= 0
 
       @io.puts "#{indent}#{arrow.colorize(colour)} #{"and #{remaining} more".colorize.dark_gray}"
+    end
+
+    # name the directories rather than 250 individual files
+    private def summarise(outcomes : Array(Write::Outcome)) : String
+      counts = Hash(String, Int32).new(0)
+      outcomes.each { |outcome| counts[File.dirname(outcome.path)] += 1 }
+      counts.delete(".")
+
+      return "" if counts.empty?
+
+      busiest = counts.to_a.sort_by! { |directory, count| {-count, directory} }
+      shown = busiest.first(3).map(&.first)
+      extra = busiest.size - shown.size
+      suffix = extra > 0 ? " and #{extra} more" : ""
+
+      "in #{shown.join(", ")}#{suffix}"
     end
 
     private def preview(report : Session::Report) : Nil
