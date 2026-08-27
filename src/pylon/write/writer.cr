@@ -26,7 +26,6 @@ module Pylon::Write
       in Verdict::UnknownState
         return Outcome.new(change.path, change.old, "unknown state")
       in Verdict::Proceed
-        # fall through
       end
 
       if (swapped = swap_permissions(change))

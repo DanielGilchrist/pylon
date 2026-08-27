@@ -3,12 +3,11 @@ require "../scan/ignores"
 require "../session/server"
 require "../session/local_endpoint"
 require "../session/checkpoint/schedule"
-require "../session/checkpoint/schedule"
 require "../watch/watcher"
 
 struct Pylon::CLI
   @[Kebab::Command(summary: "Serve a directory to a pylon client over stdin and stdout")]
-  struct Server
+  struct Serve
     include Kebab::Parseable
 
     @[Kebab::Argument(description: "Directory to serve")]
