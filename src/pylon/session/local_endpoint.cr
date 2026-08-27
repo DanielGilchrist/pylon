@@ -1,6 +1,5 @@
 require "../scan/scanner"
-require "../scan/disk"
-require "../write/disk_target"
+require "../disk"
 require "../write/writer"
 require "../wire/message"
 require "./staging"
@@ -19,8 +18,7 @@ module Pylon::Session
       @baseline = nil
       @recheck = Set(String).new
       @accelerated = false
-      @filesystem = Scan::Disk.new(@root)
-      @target = Write::DiskTarget.new(@root)
+      @disk = Disk.new(@root)
     end
 
     def accelerate! : Nil
@@ -38,7 +36,7 @@ module Pylon::Session
 
     def scan(now_ns : Int64) : Scan::Snapshot
       snapshot = Scan::Scanner.new(
-        @filesystem, @cache, now_ns, @ignores,
+        @disk, @cache, now_ns, @ignores,
         baseline: @baseline,
         recheck: @recheck,
       ).scan
@@ -59,7 +57,7 @@ module Pylon::Session
           scratch = Wire::Chunks.scratch
           codec = Compress::Zstd.new
 
-          wanted.each { |digest, path| @filesystem.stream(path, digest, io, buffer, codec, scratch) }
+          wanted.each { |digest, path| @disk.stream(path, digest, io, buffer, codec, scratch) }
         end,
         count: wanted.size,
         materialise: -> { materialise(wanted) },
@@ -71,7 +69,7 @@ module Pylon::Session
       contents = Wire::Contents.new(initial_capacity: wanted.size)
 
       wanted.each do |digest, path|
-        content = @filesystem.read(path)
+        content = @disk.read(path)
         contents[digest] = content if content
       end
 
@@ -107,7 +105,7 @@ module Pylon::Session
         weight = @cache[path]?.try(&.metadata.size) || 0_u64
         break if !contents.empty? && spent + weight > budget
 
-        content = @filesystem.read(path)
+        content = @disk.read(path)
         next if content.nil?
 
         contents[digest] = content
@@ -124,7 +122,7 @@ module Pylon::Session
     end
 
     def write(changes : Array(Core::Change), source : Wire::ContentSource) : Array(Write::Outcome)
-      Write::Writer.new(@target, Staging.new(source.contents), @cache).apply(changes)
+      Write::Writer.new(@disk, Staging.new(source.contents), @cache).write(changes)
     end
   end
 end

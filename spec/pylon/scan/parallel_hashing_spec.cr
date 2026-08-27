@@ -2,7 +2,7 @@ require "digest/sha256"
 require "file_utils"
 require "../../spec_helper"
 require "../../../src/pylon/scan/scanner"
-require "../../../src/pylon/scan/disk"
+require "../../../src/pylon/disk"
 
 include Pylon::Scan
 
@@ -26,7 +26,7 @@ end
 
 private def digests(root : String, parallelism : Int32) : Hash(String, String)
   snapshot = Scanner.new(
-    Disk.new(root),
+    Pylon::Disk.new(root),
     Cache.new,
     Time.utc.to_unix_ns.to_i64,
     parallelism: parallelism,

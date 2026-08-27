@@ -1,21 +1,21 @@
 require "file_utils"
-require "../../spec_helper"
-require "../../../src/pylon/write/disk_target"
+require "../spec_helper"
+require "../../src/pylon/disk"
 
-include Pylon::Write
+include Pylon
 
-private def in_sandbox(& : String, DiskTarget ->)
+private def in_sandbox(& : String, Disk ->)
   root = File.join(Dir.tempdir, "pylon-target-#{Random::Secure.hex(8)}")
   Dir.mkdir_p(root)
 
   begin
-    yield root, DiskTarget.new(root)
+    yield root, Disk.new(root)
   ensure
     FileUtils.rm_rf(root)
   end
 end
 
-describe Pylon::Write::DiskTarget do
+describe Pylon::Disk do
   it "writes a file and sets the executable bit" do
     in_sandbox do |root, target|
       target.write_file("script.sh", "#!/bin/sh\n".to_slice, true).should be_true
@@ -43,7 +43,7 @@ describe Pylon::Write::DiskTarget do
       target.write_file("a.txt", "x".to_slice, false)
       target.create_symlink("link", "a.txt")
 
-      strays = Dir.children(root).select(&.starts_with?(DiskTarget::TEMPORARY_PREFIX))
+      strays = Dir.children(root).select(&.starts_with?(Disk::TEMPORARY_PREFIX))
       strays.should be_empty
     end
   end

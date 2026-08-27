@@ -17,11 +17,11 @@ module Pylon::Write
     def initialize(@filesystem : F, @staging : S, @cache : Scan::Cache)
     end
 
-    def apply(changes : Array(Core::Change)) : Array(Outcome)
-      changes.map { |change| write(change) }
+    def write(changes : Array(Core::Change)) : Array(Outcome)
+      changes.map { |change| write_one(change) }
     end
 
-    private def write(change : Core::Change) : Outcome
+    private def write_one(change : Core::Change) : Outcome
       verdict = Guard.check(
         change.old,
         @cache[change.path]?,
