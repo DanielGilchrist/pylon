@@ -1,5 +1,5 @@
 require "../../spec_helper"
-require "../../../src/pylon/core/changes"
+require "../../../src/pylon/core/change"
 
 private CONTENTS = {nil, Fixtures.f1, Fixtures.f2, Fixtures.f1x}
 private NAMES    = {"a", "b"}
@@ -17,21 +17,21 @@ private def random_entry(random : Random, depth : Int32) : Entry?
   Entry.directory(contents)
 end
 
-describe Pylon::Core::Changes do
+describe "expanding changes" do
   it "leaves a file change alone" do
     changes = [Change.new("a.rb", nil, Fixtures.f1)]
 
-    Changes.expand(changes).size.should eq(1)
+    Change.expand(changes).size.should eq(1)
   end
 
   it "leaves a deletion as a single change" do
-    Changes.expand([Change.new("app", Fixtures.d1, nil)]).size.should eq(1)
+    Change.expand([Change.new("app", Fixtures.d1, nil)]).size.should eq(1)
   end
 
   it "turns a subtree into one change per entry" do
     subtree = Entry.directory({"models" => Entry.directory({"user.rb" => Fixtures.f1})})
 
-    expanded = Changes.expand([Change.new("app", nil, subtree)])
+    expanded = Change.expand([Change.new("app", nil, subtree)])
 
     expanded.map(&.path).should eq(["app", "app/models", "app/models/user.rb"])
     expanded.first.new.not_nil!.contents.should be_empty
@@ -47,7 +47,7 @@ describe Pylon::Core::Changes do
       change = [Change.new("", base, target)]
 
       direct = Applier.apply(base, change)
-      widened = Applier.apply(base, Changes.expand(change))
+      widened = Applier.apply(base, Change.expand(change))
 
       Entry.equal?(direct, widened, true).should be_true, "seed=#{seed} iteration=#{iteration}"
     end

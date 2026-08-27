@@ -1,7 +1,7 @@
 require "./core/entry"
 require "./core/sync_mode"
 require "./core/change"
-require "./core/changes"
+require "./core/change"
 require "./core/differ"
 require "./core/conflict"
 require "./core/reconciliation"

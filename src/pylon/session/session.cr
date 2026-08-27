@@ -66,8 +66,8 @@ module Pylon::Session
         )
       end
 
-      local_changes = Core::Changes.expand(reconciliation.local_changes)
-      remote_changes = Core::Changes.expand(reconciliation.remote_changes)
+      local_changes = Core::Change.expand(reconciliation.local_changes)
+      remote_changes = Core::Change.expand(reconciliation.remote_changes)
 
       if @dry_run
         return Report.new(
@@ -83,7 +83,7 @@ module Pylon::Session
       remote_outcomes = ship(remote_changes, @local, @remote)
 
       written = Time.instant
-      commit(Core::Changes.expand(reconciliation.base_changes), local_outcomes, remote_outcomes)
+      commit(Core::Change.expand(reconciliation.base_changes), local_outcomes, remote_outcomes)
 
       if ENV["PYLON_TIMING"]?
         STDERR.puts("  client scans=%.1f reconcile=%.1f contents=%.1f write=%.1f commit=%.1f" % [
