@@ -4,7 +4,7 @@ require "../session/server"
 require "../session/local_endpoint"
 require "../session/persister"
 require "../session/store"
-require "../watch/subscriber"
+require "../watch/watcher"
 
 struct Pylon::CLI
   @[Kebab::Command(summary: "Serve a directory to a pylon client over stdin and stdout")]
@@ -28,7 +28,7 @@ struct Pylon::CLI
         endpoint.cache = restored.local_cache if restored
       end
 
-      subscriber = Watch::Subscriber.open(root, ignore, name: "pylon-server")
+      subscriber = Watch::Watcher.open(root, ignore, Channel(Nil).new(1), "pylon-server")
       endpoint.accelerate! if subscriber
 
       persister = state.try do |path|

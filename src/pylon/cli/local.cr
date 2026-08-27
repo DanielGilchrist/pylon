@@ -5,7 +5,7 @@ require "../session/persister"
 require "../session/runner"
 require "../session/session"
 require "../session/store"
-require "../watch/subscriber"
+require "../watch/watcher"
 require "./reporter"
 
 struct Pylon::CLI
@@ -54,7 +54,7 @@ struct Pylon::CLI
 
       signals = Channel(Nil).new(16)
       watchers = [{left, local}, {right, remote}].compact_map do |endpoint, root|
-        subscriber = Watch::Subscriber.open(root, ignore, signals)
+        subscriber = Watch::Watcher.open(root, ignore, signals)
         subscriber.nil? ? nil : {endpoint, subscriber}
       end
 

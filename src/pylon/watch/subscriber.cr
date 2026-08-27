@@ -1,4 +1,5 @@
 require "sync"
+require "./dirty"
 require "./client"
 
 module Pylon::Watch
@@ -22,18 +23,16 @@ module Pylon::Watch
       new(client, signals)
     end
 
-    record Changes, paths : Array(String), fresh : Bool
-
     def pending? : Bool
       @lock.synchronize { @fresh || !@paths.empty? }
     end
 
-    def drain : Changes
+    def drain : Dirty
       @lock.synchronize do
-        changes = Changes.new(@paths.to_a, @fresh)
+        dirty = Dirty.new(@paths.to_a, @fresh)
         @paths.clear
         @fresh = false
-        changes
+        dirty
       end
     end
 

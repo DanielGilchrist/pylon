@@ -8,10 +8,14 @@ module Pylon::Session
 
     TRACKABLE_OUTCOMES = 256
 
+    # the reader fiber must never block, or it stops draining the socket
+    # while the server is mid-push, which deadlocks both ends
+    RESPONSE_BUFFER = 8
+
     getter exchanges = 0
 
     def initialize(@input : IO, @output : IO, @signals : Channel(Nil)? = nil)
-      @responses = Channel(Wire::Message).new
+      @responses = Channel(Wire::Message).new(RESPONSE_BUFFER)
       @failure = nil.as(Exception?)
       @tree = nil.as(Core::Entry?)
       @known = false

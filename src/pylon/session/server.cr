@@ -1,5 +1,5 @@
 require "sync"
-require "../watch/subscriber"
+require "../watch/watcher"
 require "../core/differ"
 require "../wire/message"
 require "./local_endpoint"
@@ -11,7 +11,7 @@ module Pylon::Session
       @endpoint : LocalEndpoint,
       @input : IO,
       @output : IO,
-      @subscriber : Watch::Subscriber? = nil,
+      @subscriber : Watch::Any? = nil,
       @persister : Persister? = nil,
     )
       @lock = Sync::Mutex.new

@@ -8,7 +8,7 @@ require "../session/runner"
 require "../session/session"
 require "../session/ssh"
 require "../session/store"
-require "../watch/subscriber"
+require "../watch/watcher"
 require "./reporter"
 require "./target"
 
@@ -102,7 +102,7 @@ struct Pylon::CLI
         return
       end
 
-      subscriber = Watch::Subscriber.open(local, ignore, signals)
+      subscriber = Watch::Watcher.open(local, ignore, signals)
 
       if subscriber.nil?
         STDERR.puts("pylon: watching needs watchman on this machine")
