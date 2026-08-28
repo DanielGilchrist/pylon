@@ -1,5 +1,6 @@
 require "wait_group"
 require "../core"
+require "./progress"
 require "./report"
 require "../core/digests"
 require "../write/writer"
@@ -19,7 +20,7 @@ module Pylon::Session
       @base : Core::Entry? = nil,
       @dry_run : Bool = false,
       @push_first : Bool = false,
-      @on_progress : Proc(Int32, Int32, Nil)? = nil,
+      @on_progress : Proc(Progress, Nil)? = nil,
     )
     end
 
@@ -105,8 +106,8 @@ module Pylon::Session
 
       fetched = Time.instant
 
-      local_outcomes = ship(local_changes, @remote, @local)
-      remote_outcomes = ship(remote_changes, @local, @remote)
+      local_outcomes = ship(local_changes, @remote, @local, :to_local)
+      remote_outcomes = ship(remote_changes, @local, @remote, :to_remote)
 
       written = Time.instant
       commit(Core::Change.expand(reconciliation.base_changes), local_outcomes, remote_outcomes)
@@ -127,11 +128,13 @@ module Pylon::Session
       Report.new(reconciliation.conflicts, local_outcomes, remote_outcomes)
     end
 
-    private def ship(changes : Array(Core::Change), source, target) : Array(Write::Outcome)
+    private def ship(changes : Array(Core::Change), source, target, direction : Direction) : Array(Write::Outcome)
       outcomes = [] of Write::Outcome
       total = changes.size
       pending = changes
       inflight = 0
+
+      notify(direction, outcomes, total)
 
       until pending.empty?
         wanted = Core::Digests.required(pending)
@@ -146,16 +149,22 @@ module Pylon::Session
         if inflight == WRITE_WINDOW
           outcomes.concat(target.write_await)
           inflight -= 1
-          @on_progress.try(&.call(outcomes.size, total)) if total > PROGRESS_THRESHOLD
+          notify(direction, outcomes, total)
         end
       end
 
       inflight.times do
         outcomes.concat(target.write_await)
-        @on_progress.try(&.call(outcomes.size, total)) if total > PROGRESS_THRESHOLD
+        notify(direction, outcomes, total)
       end
 
       outcomes
+    end
+
+    private def notify(direction : Direction, outcomes : Array(Write::Outcome), total : Int32) : Nil
+      return if total <= PROGRESS_THRESHOLD
+
+      @on_progress.try(&.call(Progress.new(direction, outcomes.size, total)))
     end
 
     private def split(changes : Array(Core::Change), available : Set(Bytes)) : {Array(Core::Change), Array(Core::Change)}

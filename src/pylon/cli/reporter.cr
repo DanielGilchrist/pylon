@@ -8,9 +8,12 @@ struct Pylon::CLI
     SUMMARISE_OVER = 12
     PREVIEW_PATHS  = 40
 
+    @progress : Session::Progress? = nil
+
     def initialize(@io : IO, @verbose : Bool = false, @dry_run : Bool = false)
       @announced = Set(String).new
       @spinner = Spinner.new(@io)
+      @streamed = 0
     end
 
     def starting(local : String, remote : String) : Nil
@@ -24,8 +27,28 @@ struct Pylon::CLI
       end
     end
 
-    def progress(done : Int32, total : Int32) : Nil
-      @spinner.show("sending #{done}/#{total}")
+    def progress(update : Session::Progress) : Nil
+      @streamed = 0 if update.confirmed.zero?
+      @progress = update
+      refresh
+    end
+
+    def streamed : Nil
+      @streamed += 1
+      refresh
+    end
+
+    private def refresh : Nil
+      update = @progress
+      return if update.nil?
+
+      case update.direction
+      in .to_remote?
+        sent = Math.max(@streamed, update.confirmed)
+        @spinner.show("↑ sending #{sent}/#{update.total} · #{update.confirmed} confirmed")
+      in .to_local?
+        @spinner.show("↓ receiving #{update.confirmed}/#{update.total}")
+      end
     end
 
     def ready(elapsed : Time::Span, watching : Int32) : Nil

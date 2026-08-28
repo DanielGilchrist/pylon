@@ -11,6 +11,7 @@ module Pylon::Session
 
     getter root : String
     property cache : Scan::Cache
+    property on_stream : Proc(Nil)? = nil
 
     @baseline : Core::Entry?
     @recheck : Set(String)
@@ -71,7 +72,10 @@ module Pylon::Session
           scratch = Wire::Chunks.scratch
           codec = Compress::Zstd.new(@compression)
 
-          wanted.each { |want| @disk.stream(want.path, want.digest, io, buffer, codec, scratch) }
+          wanted.each do |want|
+            @disk.stream(want.path, want.digest, io, buffer, codec, scratch)
+            @on_stream.try(&.call)
+          end
         end,
         materialise: -> { materialise(wanted) },
       )

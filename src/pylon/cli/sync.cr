@@ -78,6 +78,7 @@ struct Pylon::CLI
 
         left = Session::LocalEndpoint.new(local, ignores, compression: compression)
         left.cache = restored.local_cache
+        left.on_stream = -> { reporter.streamed }
 
         signals = Channel(Nil).new(16)
         remote_endpoint = Session::RemoteEndpoint.new(transport.reader, transport.writer, signals)
@@ -87,7 +88,7 @@ struct Pylon::CLI
           base: restored.base,
           dry_run: dry_run?,
           push_first: restored.base.nil?,
-          on_progress: ->(done : Int32, total : Int32) { reporter.progress(done, total) },
+          on_progress: ->(update : Session::Progress) { reporter.progress(update) },
         )
 
         checkpoints = state.try do |path|
