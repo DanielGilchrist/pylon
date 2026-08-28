@@ -49,6 +49,10 @@ module Pylon::Session
       Wire::ContentSource::Materialised.new(reply.contents)
     end
 
+    def payload_size(changes : Array(Core::Change)) : UInt64?
+      nil
+    end
+
     def write_begin(changes : Array(Core::Change), source : Wire::ContentSource) : Nil
       transmit(Wire::WriteRequest.new(changes, source))
     end

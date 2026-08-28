@@ -133,8 +133,9 @@ module Pylon::Session
       total = changes.size
       pending = changes
       inflight = 0
+      total_bytes = source.payload_size(changes)
 
-      notify(direction, outcomes, total)
+      notify(direction, outcomes, total, total_bytes)
 
       until pending.empty?
         wanted = Core::Digests.required(pending)
@@ -149,22 +150,22 @@ module Pylon::Session
         if inflight == WRITE_WINDOW
           outcomes.concat(target.write_await)
           inflight -= 1
-          notify(direction, outcomes, total)
+          notify(direction, outcomes, total, total_bytes)
         end
       end
 
       inflight.times do
         outcomes.concat(target.write_await)
-        notify(direction, outcomes, total)
+        notify(direction, outcomes, total, total_bytes)
       end
 
       outcomes
     end
 
-    private def notify(direction : Direction, outcomes : Array(Write::Outcome), total : Int32) : Nil
+    private def notify(direction : Direction, outcomes : Array(Write::Outcome), total : Int32, total_bytes : UInt64?) : Nil
       return if total <= PROGRESS_THRESHOLD
 
-      @on_progress.try(&.call(Progress.new(direction, outcomes.size, total)))
+      @on_progress.try(&.call(Progress.new(direction, outcomes.size, total, total_bytes)))
     end
 
     private def split(changes : Array(Core::Change), available : Set(Bytes)) : {Array(Core::Change), Array(Core::Change)}

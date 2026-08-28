@@ -62,11 +62,17 @@ struct Pylon::CLI
     private def throughput : String
       return "" if @streamed_bytes.zero?
 
-      sent = @streamed_bytes / (1024.0 * 1024.0)
+      sent = mebibytes(@streamed_bytes)
+      total = @progress.try(&.total_bytes)
+      volume = total ? "#{sent}/#{mebibytes(total)}" : sent
       elapsed = (Time.instant - @started).total_seconds
-      rate = elapsed > 0.5 ? " at #{(sent / elapsed).round(1)} MiB/s" : ""
+      rate = elapsed > 0.5 ? " at #{(@streamed_bytes / (1024.0 * 1024.0) / elapsed).round(1)} MiB/s" : ""
 
-      " · #{sent.round(1)} MiB#{rate}"
+      " · #{volume} MiB#{rate}"
+    end
+
+    private def mebibytes(bytes : UInt64) : String
+      (bytes / (1024.0 * 1024.0)).round(1).to_s
     end
 
     def ready(elapsed : Time::Span, watching : Int32) : Nil

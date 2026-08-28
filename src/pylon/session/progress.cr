@@ -4,5 +4,5 @@ module Pylon::Session
     ToRemote
   end
 
-  record Progress, direction : Direction, confirmed : Int32, total : Int32
+  record Progress, direction : Direction, confirmed : Int32, total : Int32, total_bytes : UInt64?
 end

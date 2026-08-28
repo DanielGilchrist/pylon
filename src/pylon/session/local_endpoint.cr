@@ -110,6 +110,18 @@ module Pylon::Session
       wanted
     end
 
+    def payload_size(changes : Array(Core::Change)) : UInt64?
+      changes.sum(0_u64) do |change|
+        entry = change.new
+
+        if entry && entry.kind.file?
+          @cache[change.path]?.try(&.metadata.size) || 0_u64
+        else
+          0_u64
+        end
+      end
+    end
+
     private def index(cache : Scan::Cache) : Hash(Bytes, String)
       by_digest = Hash(Bytes, String).new(initial_capacity: cache.size)
       cache.each { |path, entry| by_digest[entry.digest] = path }
