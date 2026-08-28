@@ -45,7 +45,7 @@ struct Pylon::CLI
       case update.direction
       in .to_remote?
         sent = Math.max(@streamed, update.confirmed)
-        @spinner.show("↑ sending #{sent}/#{update.total} · #{update.confirmed} confirmed")
+        @spinner.show("↑ sending #{sent}/#{update.total} · #{update.confirmed} written on the remote")
       in .to_local?
         @spinner.show("↓ receiving #{update.confirmed}/#{update.total}")
       end
@@ -65,46 +65,66 @@ struct Pylon::CLI
       if (halt = report.halt)
         @io.puts "#{indent}#{"halted".colorize.red.bold} #{halt.explain}"
         @io.puts "#{indent}#{"nothing was changed on either side".colorize.dark_gray}"
+        @io.puts
         return
       end
 
       return preview(report) if @dry_run
 
-      announce(report.conflicts)
-
-      return if report.quiet?
-
-      show("↑", Colorize::ColorANSI::Green, report.remote_outcomes.select(&.applied?))
-      show("↓", Colorize::ColorANSI::Blue, report.local_outcomes.select(&.applied?))
-
+      outgoing = report.remote_outcomes.select(&.applied?)
+      incoming = report.local_outcomes.select(&.applied?)
       skipped = report.skipped
-      return if skipped.empty?
+      spoke = announce(report.conflicts)
 
-      @io.puts "#{indent}#{"·".colorize.dark_gray} #{skipped.size} skipped#{@verbose ? "" : ", run with -v for detail"}".colorize.dark_gray
+      return unless spoke || !outgoing.empty? || !incoming.empty? || !skipped.empty?
 
-      return unless @verbose
+      show("↑", Colorize::ColorANSI::Green, outgoing)
+      show("↓", Colorize::ColorANSI::Blue, incoming)
 
-      skipped.each do |outcome|
-        reason = outcome.skipped.try(&.explain)
-        @io.puts "#{indent}  #{outcome.path} #{"(#{reason})".colorize.dark_gray}"
+      unless skipped.empty?
+        @io.puts "#{indent}#{"·".colorize.dark_gray} #{skipped.size} skipped#{@verbose ? "" : ", run with -v for detail"}".colorize.dark_gray
+
+        if @verbose
+          skipped.each do |outcome|
+            reason = outcome.skipped.try(&.explain)
+            @io.puts "#{indent}  #{outcome.path} #{"(#{reason})".colorize.dark_gray}"
+          end
+        end
       end
+
+      @io.puts
     end
 
     # A conflict persists until someone acts on it, so say it once rather than
     # on every cycle, and say when it clears.
-    private def announce(conflicts : Array(Core::Conflict)) : Nil
+    private def announce(conflicts : Array(Core::Conflict)) : Bool
       current = conflicts.map(&.root).to_set
+      fresh = (current - @announced).to_a.sort!
+      cleared = (@announced - current).to_a.sort!
 
-      (current - @announced).to_a.sort!.each do |root|
-        @io.puts "#{indent}#{"!".colorize.yellow.bold} #{"conflict".colorize.yellow} #{root}"
-        @io.puts "#{indent}  #{"both sides changed it; delete the copy you do not want".colorize.dark_gray}"
+      if fresh.size > SUMMARISE_OVER && !@verbose
+        location = busiest(fresh)
+        @io.puts "#{indent}#{"!".colorize.yellow.bold} #{"#{fresh.size} conflicts".colorize.yellow} #{location.colorize.dark_gray}"
+      else
+        fresh.each do |root|
+          @io.puts "#{indent}#{"!".colorize.yellow.bold} #{"conflict".colorize.yellow} #{root}"
+        end
       end
 
-      (@announced - current).to_a.sort!.each do |root|
-        @io.puts "#{indent}#{"✓".colorize.green} #{"conflict resolved".colorize.dark_gray} #{root}"
+      unless fresh.empty?
+        @io.puts "#{indent}  #{"both sides changed since the last sync; decide with --prefer-local and --prefer-remote globs".colorize.dark_gray}"
+      end
+
+      if cleared.size > SUMMARISE_OVER && !@verbose
+        @io.puts "#{indent}#{"✓".colorize.green} #{"#{cleared.size} conflicts resolved".colorize.dark_gray}"
+      else
+        cleared.each do |root|
+          @io.puts "#{indent}#{"✓".colorize.green} #{"conflict resolved".colorize.dark_gray} #{root}"
+        end
       end
 
       @announced = current
+      !(fresh.empty? && cleared.empty?)
     end
 
     private def show(arrow : String, colour : Colorize::ColorANSI, outcomes : Array(Write::Outcome)) : Nil
@@ -141,15 +161,19 @@ struct Pylon::CLI
 
     # name the directories rather than 250 individual files
     private def summarise(outcomes : Array(Write::Outcome)) : String
+      busiest(outcomes.map(&.path))
+    end
+
+    private def busiest(paths : Array(String)) : String
       counts = Hash(String, Int32).new(0)
-      outcomes.each { |outcome| counts[File.dirname(outcome.path)] += 1 }
+      paths.each { |path| counts[File.dirname(path)] += 1 }
       counts.delete(".")
 
       return "" if counts.empty?
 
-      busiest = counts.to_a.sort_by! { |directory, count| {-count, directory} }
-      shown = busiest.first(3).map(&.first)
-      extra = busiest.size - shown.size
+      ranked = counts.to_a.sort_by! { |directory, count| {-count, directory} }
+      shown = ranked.first(3).map(&.first)
+      extra = ranked.size - shown.size
       suffix = extra > 0 ? " and #{extra} more" : ""
 
       "in #{shown.join(", ")}#{suffix}"

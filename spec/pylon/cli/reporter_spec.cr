@@ -77,7 +77,18 @@ describe Pylon::CLI::Reporter do
 
     output.should contain("conflict")
     output.should contain("db/structure.sql")
-    output.should contain("delete the copy you do not want")
+    output.should contain("--prefer-local")
+  end
+
+  it "groups a flood of conflicts by directory" do
+    conflicts = Array.new(30) { |index| Conflict.new("config/locales/translation.#{index}.yml", [] of Change, [] of Change) }
+
+    output = rendered(report_of(conflicts: conflicts))
+
+    output.should contain("30 conflicts")
+    output.should contain("config/locales")
+    output.should contain("--prefer")
+    output.should_not contain("translation.7.yml")
   end
 
   it "mentions a conflict once, not on every cycle, and says when it clears" do
