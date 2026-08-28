@@ -1,5 +1,6 @@
 require "colorize"
 require "../session/session"
+require "./spinner"
 
 struct Pylon::CLI
   class Reporter
@@ -8,22 +9,23 @@ struct Pylon::CLI
     PREVIEW_PATHS  = 40
 
     def initialize(@io : IO, @verbose : Bool = false, @dry_run : Bool = false)
-      @progress_shown = false
       @announced = Set(String).new
+      @spinner = Spinner.new(@io)
     end
 
     def starting(local : String, remote : String) : Nil
       @io.puts
       @io.puts "#{"pylon".colorize.bold} #{File.basename(local).colorize.cyan} #{"→".colorize.dark_gray} #{remote.colorize.cyan}"
-      @io.puts "#{indent}#{"connecting and scanning both sides".colorize.dark_gray}"
+
+      if @io.tty?
+        @spinner.show("connecting and scanning both sides")
+      else
+        @io.puts "#{indent}#{"connecting and scanning both sides".colorize.dark_gray}"
+      end
     end
 
     def progress(done : Int32, total : Int32) : Nil
-      return unless @io.tty?
-
-      @progress_shown = true
-      @io.print "\r#{indent}sending #{done}/#{total}".colorize.dark_gray
-      @io.flush
+      @spinner.show("sending #{done}/#{total}")
     end
 
     def ready(elapsed : Time::Span, watching : Int32) : Nil
@@ -170,10 +172,7 @@ struct Pylon::CLI
     end
 
     private def clear_progress : Nil
-      return unless @progress_shown
-
-      @progress_shown = false
-      @io.print "\r\033[K"
+      @spinner.clear
     end
 
     private def format(elapsed : Time::Span) : String
