@@ -1,7 +1,7 @@
 require "../../spec_helper"
 
 private FORBIDDEN = {
-  /\bFile\./,
+  /\bFile\.(?!match\?)/,
   /\bDir\./,
   /\bIO\b/,
   /\bSocket\b/,

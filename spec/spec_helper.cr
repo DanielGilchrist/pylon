@@ -6,7 +6,7 @@ include Pylon::Core
 
 record ReconcileCase,
   description : String,
-  modes : Array(SyncMode),
+  preferences : Array(Preferences),
   base : Entry?,
   local : Entry?,
   remote : Entry?,

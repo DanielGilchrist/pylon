@@ -1,6 +1,6 @@
 require "./core/entry"
 require "./core/paths"
-require "./core/sync_mode"
+require "./core/preferences"
 require "./core/change"
 require "./core/differ"
 require "./core/conflict"

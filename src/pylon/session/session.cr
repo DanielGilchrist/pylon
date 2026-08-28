@@ -16,7 +16,7 @@ module Pylon::Session
     def initialize(
       @local : A,
       @remote : B,
-      @mode : Core::SyncMode = :two_way_safe,
+      @preferences : Core::Preferences = Core::Preferences.none,
       @base : Core::Entry? = nil,
       @dry_run : Bool = false,
       @push_first : Bool = false,
@@ -72,7 +72,7 @@ module Pylon::Session
         @base,
         local_snapshot.root,
         remote_snapshot.root,
-        @mode,
+        @preferences,
       )
 
       reconciled = Time.instant

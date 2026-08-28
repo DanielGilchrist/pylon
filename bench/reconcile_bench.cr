@@ -38,20 +38,20 @@ puts "tree: #{DIRECTORIES} directories, #{entries} files"
 puts
 
 before = GC.stats.total_bytes
-Reconciler.reconcile(tree, tree, tree, SyncMode::TwoWaySafe)
+Reconciler.reconcile(tree, tree, tree)
 puts "steady-state allocation: #{(GC.stats.total_bytes - before) // 1024} KiB"
 
 before = GC.stats.total_bytes
-Reconciler.reconcile(tree, changed, tree, SyncMode::TwoWaySafe)
+Reconciler.reconcile(tree, changed, tree)
 puts "one-change allocation:   #{(GC.stats.total_bytes - before) // 1024} KiB"
 puts
 
 Benchmark.ips do |x|
   x.report("reconcile, no changes") do
-    Reconciler.reconcile(tree, tree, tree, SyncMode::TwoWaySafe)
+    Reconciler.reconcile(tree, tree, tree)
   end
 
   x.report("reconcile, one file changed") do
-    Reconciler.reconcile(tree, changed, tree, SyncMode::TwoWaySafe)
+    Reconciler.reconcile(tree, changed, tree)
   end
 end

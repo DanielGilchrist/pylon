@@ -32,7 +32,7 @@ describe "reconciler properties" do
     random = Random.new(seed)
 
     200.times do |iteration|
-      Fixtures::ALL_MODES.each do |mode|
+      Fixtures::ALL_PREFERENCES.each do |mode|
         base = random_base(random, 2)
         local = random_entry(random, 2)
         remote = random_entry(random, 2)
@@ -62,19 +62,21 @@ describe "reconciler properties" do
       local = random_entry(random, 2)
       remote = random_entry(random, 2)
 
-      reconciliation = Reconciler.reconcile(base, local, remote, SyncMode::TwoWayResolved)
-      next unless reconciliation.conflicts.empty?
+      {Fixtures::LOCAL_WINS, Fixtures::REMOTE_WINS}.each do |preferences|
+        reconciliation = Reconciler.reconcile(base, local, remote, preferences)
+        next unless reconciliation.conflicts.empty?
 
-      next_local = Applier.apply(local, reconciliation.local_changes)
-      next_remote = Applier.apply(remote, reconciliation.remote_changes)
+        next_local = Applier.apply(local, reconciliation.local_changes)
+        next_remote = Applier.apply(remote, reconciliation.remote_changes)
 
-      converged = Entry.equal?(
-        synchronizable_projection(next_local),
-        synchronizable_projection(next_remote),
-      )
+        converged = Entry.equal?(
+          synchronizable_projection(next_local),
+          synchronizable_projection(next_remote),
+        )
 
-      converged.should be_true,
-        "seed=#{seed} iteration=#{iteration}: replicas diverged\nalpha=#{next_local.inspect}\nbeta=#{next_remote.inspect}"
+        converged.should be_true,
+          "seed=#{seed} iteration=#{iteration} side=#{preferences.winner("")}: replicas diverged\nalpha=#{next_local.inspect}\nbeta=#{next_remote.inspect}"
+      end
     end
   end
 
@@ -83,7 +85,7 @@ describe "reconciler properties" do
     random = Random.new(seed)
 
     200.times do |iteration|
-      Fixtures::ALL_MODES.each do |mode|
+      Fixtures::ALL_PREFERENCES.each do |mode|
         base = random_base(random, 2)
         local = random_entry(random, 2)
         remote = random_entry(random, 2)

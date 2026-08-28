@@ -40,5 +40,5 @@ puts
 
 started = Time.instant
 base = Entry.synchronizable(cold.root)
-reconciliation = Reconciler.reconcile(base, cold.root, warm.root, SyncMode::TwoWaySafe)
+reconciliation = Reconciler.reconcile(base, cold.root, warm.root)
 puts "reconcile:    #{(Time.instant - started).total_milliseconds.round(2)} ms (#{reconciliation.empty? ? "no changes" : "changes"})"

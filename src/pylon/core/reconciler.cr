@@ -4,8 +4,8 @@ module Pylon::Core
   module Reconciler
     extend self
 
-    def reconcile(base : Entry?, local : Entry?, remote : Entry?, mode : SyncMode) : Reconciliation
-      state = State.new(mode)
+    def reconcile(base : Entry?, local : Entry?, remote : Entry?, preferences : Preferences = Preferences.none) : Reconciliation
+      state = State.new(preferences)
       state.walk("", base, local, remote)
       state.result
     end
@@ -16,7 +16,7 @@ module Pylon::Core
       getter remote_changes = [] of Change
       getter conflicts = [] of Conflict
 
-      def initialize(@mode : SyncMode)
+      def initialize(@preferences : Preferences)
       end
 
       def result : Reconciliation
@@ -79,11 +79,13 @@ module Pylon::Core
           return
         end
 
-        case @mode
-        in .two_way_safe?
+        case @preferences.winner(path)
+        in Nil
           record_conflict(path, base, local, remote)
-        in .two_way_resolved?
+        in .local?
           propagate_to_remote(path, base, local, remote)
+        in .remote?
+          propagate_to_local(path, base, local, remote)
         end
       end
 

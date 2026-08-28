@@ -6,9 +6,13 @@ module Fixtures
   D1 = "d1".to_slice
   D2 = "d2".to_slice
 
-  ALL_MODES      = [SyncMode::TwoWaySafe, SyncMode::TwoWayResolved]
-  SAFE_MODES     = [SyncMode::TwoWaySafe]
-  RESOLVED_MODES = [SyncMode::TwoWayResolved]
+  LOCAL_WINS  = Preferences.new([Preferences::Rule.new(:local, ".")])
+  REMOTE_WINS = Preferences.new([Preferences::Rule.new(:remote, ".")])
+
+  ALL_PREFERENCES  = [Preferences.none, LOCAL_WINS, REMOTE_WINS]
+  NO_PREFERENCES   = [Preferences.none]
+  PREFERRING_LOCAL  = [LOCAL_WINS]
+  PREFERRING_REMOTE = [REMOTE_WINS]
 
   def self.f1 : Entry
     Entry.file(D1)

@@ -27,6 +27,12 @@ struct Pylon::CLI
     @[Kebab::Option(description: "zstd level for content sent from this side")]
     getter compression : Int32 = Pylon::Compress::Zstd::DEFAULT_LEVEL
 
+    @[Kebab::Option(description: "Conflicts matching this glob keep the first directory's copy, repeatable, . is the fallback")]
+    getter prefer_local : Array(String) = [] of String
+
+    @[Kebab::Option(description: "Conflicts matching this glob keep the second directory's copy, repeatable, . is the fallback")]
+    getter prefer_remote : Array(String) = [] of String
+
     @[Kebab::Option(short: 'w', description: "Keep running and sync on every change")]
     getter? watch : Bool = false
 
@@ -37,6 +43,13 @@ struct Pylon::CLI
     getter? verbose : Bool = false
 
     def run : Nil
+      preferences = Core::Preferences.build(prefer_local, prefer_remote)
+
+      if preferences.is_a?(Core::Preferences::Invalid)
+        STDERR.puts("pylon: #{preferences.message}")
+        exit(1)
+      end
+
       ignores = Scan::Ignores.new(ignore)
       restored = state.try { |path| Session::Checkpoint.load(path) } || Session::Checkpoint.new
 
@@ -48,6 +61,7 @@ struct Pylon::CLI
       session = Session::Session.new(
         left,
         right,
+        preferences: preferences,
         base: restored.base,
         dry_run: dry_run?,
         push_first: restored.base.nil?,
