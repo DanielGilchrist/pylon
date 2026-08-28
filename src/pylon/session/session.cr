@@ -7,6 +7,7 @@ require "../write/writer"
 module Pylon::Session
   class Session(A, B)
     TRANSFER_BUDGET    = 32_u64 * 1024 * 1024
+    WRITE_WINDOW       =   2
     PROGRESS_THRESHOLD = 200
 
     getter base : Core::Entry?
@@ -130,6 +131,7 @@ module Pylon::Session
       outcomes = [] of Write::Outcome
       total = changes.size
       pending = changes
+      inflight = 0
 
       until pending.empty?
         wanted = Core::Digests.required(pending)
@@ -138,7 +140,18 @@ module Pylon::Session
 
         break if batch.empty?
 
-        outcomes.concat(target.write(batch, provided))
+        target.write_begin(batch, provided)
+        inflight += 1
+
+        if inflight == WRITE_WINDOW
+          outcomes.concat(target.write_await)
+          inflight -= 1
+          @on_progress.try(&.call(outcomes.size, total)) if total > PROGRESS_THRESHOLD
+        end
+      end
+
+      inflight.times do
+        outcomes.concat(target.write_await)
         @on_progress.try(&.call(outcomes.size, total)) if total > PROGRESS_THRESHOLD
       end
 

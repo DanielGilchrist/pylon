@@ -21,17 +21,32 @@ module Pylon::Session
       @sequence = 0_u32
     end
 
+    READ_AHEAD = 1
+
     def run : Nil
       announce
+      requests = receive_ahead
 
-      loop do
-        break unless serve(Wire.read_message(@input))
+      while (request = requests.receive?)
+        break unless serve(request)
       end
-    rescue Wire::Truncated | IO::Error
-      nil
     ensure
       @stopping = true
       @checkpoints.try(&.save)
+    end
+
+    private def receive_ahead : Channel(Wire::Message)
+      requests = Channel(Wire::Message).new(READ_AHEAD)
+
+      spawn do
+        begin
+          loop { requests.send(Wire.read_message(@input)) }
+        rescue Wire::Truncated | IO::Error | Channel::ClosedError
+          requests.close
+        end
+      end
+
+      requests
     end
 
     private def announce : Nil

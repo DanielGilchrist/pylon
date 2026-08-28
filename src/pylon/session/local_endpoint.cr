@@ -22,6 +22,7 @@ module Pylon::Session
       @recheck = Set(String).new
       @accelerated = false
       @disk = Disk.new(@root)
+      @written = Deque(Array(Write::Outcome)).new
     end
 
     def accelerate! : Nil
@@ -113,6 +114,14 @@ module Pylon::Session
 
     def write(changes : Array(Core::Change), source : Wire::ContentSource) : Array(Write::Outcome)
       Write::Writer.new(@disk, Staging.new(source.contents), @cache).write(changes)
+    end
+
+    def write_begin(changes : Array(Core::Change), source : Wire::ContentSource) : Nil
+      @written.push(write(changes, source))
+    end
+
+    def write_await : Array(Write::Outcome)
+      @written.shift? || [] of Write::Outcome
     end
   end
 end

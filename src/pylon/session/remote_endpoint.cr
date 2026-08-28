@@ -49,10 +49,12 @@ module Pylon::Session
       Wire::ContentSource::Materialised.new(reply.contents)
     end
 
-    def write(changes : Array(Core::Change), source : Wire::ContentSource) : Array(Write::Outcome)
-      return [] of Write::Outcome if changes.empty?
+    def write_begin(changes : Array(Core::Change), source : Wire::ContentSource) : Nil
+      transmit(Wire::WriteRequest.new(changes, source))
+    end
 
-      reply = exchange(Wire::WriteRequest.new(changes, source))
+    def write_await : Array(Write::Outcome)
+      reply = await
       raise ProtocolError.new("expected a write response") unless reply.is_a?(Wire::WriteResponse)
 
       @tree = Core::Applier.apply(@tree, Write::Outcome.changes(reply.outcomes))
@@ -101,15 +103,19 @@ module Pylon::Session
     end
 
     private def exchange(request : Wire::Message) : Wire::Message
+      transmit(request)
+      await
+    end
+
+    private def transmit(request : Wire::Message) : Nil
       @exchanges += 1
+      request.write(@output)
+    rescue error : IO::Error
+      @failure ||= error
+      raise Wire::Truncated.new("the remote stopped responding")
+    end
 
-      begin
-        request.write(@output)
-      rescue error : IO::Error
-        @failure ||= error
-        raise Wire::Truncated.new("the remote stopped responding")
-      end
-
+    private def await : Wire::Message
       reply = @responses.receive?
       raise(@failure || Wire::Truncated.new("the remote stopped responding")) if reply.nil?
       raise ProtocolError.new(reply.message) if reply.is_a?(Wire::Failure)
