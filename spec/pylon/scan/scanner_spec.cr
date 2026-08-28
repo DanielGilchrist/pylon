@@ -131,7 +131,7 @@ describe "accelerated scanning" do
     second = Scanner.new(quiet, first.cache, NOW, parallelism: 1, baseline: first.root).scan
 
     quiet.reads.should be_empty
-    Entry.equal?(second.root, first.root, true).should be_true
+    Entry.equal?(second.root, first.root).should be_true
     second.cache.size.should eq(first.cache.size)
   end
 

@@ -71,7 +71,6 @@ describe "reconciler properties" do
       converged = Entry.equal?(
         synchronizable_projection(next_local),
         synchronizable_projection(next_remote),
-        true,
       )
 
       converged.should be_true,

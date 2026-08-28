@@ -14,7 +14,7 @@ module Pylon::Session
     def initialize(
       @local : A,
       @remote : B,
-      @mode : Core::SyncMode = Core::SyncMode::TwoWaySafe,
+      @mode : Core::SyncMode = :two_way_safe,
       @base : Core::Entry? = nil,
       @dry_run : Bool = false,
       @push_first : Bool = false,
@@ -24,8 +24,8 @@ module Pylon::Session
 
     def cycle(now_ns : Int64) : Report
       started = Time.instant
-      local_snapshot = uninitialized Scan::Snapshot
-      remote_snapshot = uninitialized Scan::Snapshot
+      local_scanned = nil.as(Scan::Snapshot?)
+      remote_scanned = nil.as(Scan::Snapshot?)
 
       failure = nil.as(Exception?)
 
@@ -34,7 +34,7 @@ module Pylon::Session
       WaitGroup.wait do |waiting|
         waiting.spawn do
           begin
-            local_snapshot = @local.scan(now_ns)
+            local_scanned = @local.scan(now_ns)
           rescue error
             failure ||= error
           end
@@ -42,7 +42,7 @@ module Pylon::Session
 
         waiting.spawn do
           begin
-            remote_snapshot = @remote.scan(now_ns)
+            remote_scanned = @remote.scan(now_ns)
           rescue error
             failure ||= error
           end
@@ -52,6 +52,10 @@ module Pylon::Session
       if (scan_failure = failure)
         raise scan_failure
       end
+
+      local_snapshot = local_scanned
+      remote_snapshot = remote_scanned
+      raise "a scan fiber returned without a snapshot or a failure" if local_snapshot.nil? || remote_snapshot.nil?
 
       scanned = Time.instant
 
@@ -93,8 +97,8 @@ module Pylon::Session
       if @dry_run
         return Report.new(
           reconciliation.conflicts,
-          local_changes.map { |change| Write::Outcome.new(change.path, change.new, "dry run") },
-          remote_changes.map { |change| Write::Outcome.new(change.path, change.new, "dry run") },
+          local_changes.map { |change| Write::Outcome.new(change.path, change.new, :dry_run) },
+          remote_changes.map { |change| Write::Outcome.new(change.path, change.new, :dry_run) },
         )
       end
 

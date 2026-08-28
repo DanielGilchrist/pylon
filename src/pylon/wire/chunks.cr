@@ -13,7 +13,7 @@ module Pylon::Wire
 
     def write_chunk(io : IO, source : Bytes, codec, scratch : Bytes) : Nil
       packed = codec.compress(source, scratch)
-      raise Truncated.new("compression failed") unless packed.is_a?(Bytes)
+      raise Truncated.new("compression failed: #{packed.message}") if packed.is_a?(Compress::Error)
 
       io.write_bytes(packed.size.to_u32 + 1, FORMAT)
       io.write_bytes(source.size.to_u32, FORMAT)
@@ -58,7 +58,7 @@ module Pylon::Wire
         io.read_fully(packed)
 
         unpacked = codec.decompress(packed, Bytes.new(raw_size))
-        raise Truncated.new("decompression failed") unless unpacked.is_a?(Bytes)
+        raise Truncated.new("decompression failed: #{unpacked.message}") if unpacked.is_a?(Compress::Error)
 
         collected.write(unpacked)
       end

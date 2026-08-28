@@ -56,7 +56,7 @@ describe Pylon::Core::Differ do
 
       rebuilt = Applier.apply(base, Differ.diff(base, target))
 
-      Entry.equal?(rebuilt, target, true).should be_true, "seed=#{seed} iteration=#{iteration}"
+      Entry.equal?(rebuilt, target).should be_true, "seed=#{seed} iteration=#{iteration}"
     end
   end
 

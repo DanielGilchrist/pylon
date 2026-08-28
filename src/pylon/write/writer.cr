@@ -1,4 +1,5 @@
 require "../core/change"
+require "../core/paths"
 require "../core/entry"
 require "../scan/cache_entry"
 require "./guard"
@@ -21,11 +22,11 @@ module Pylon::Write
       )
 
       case verdict
-      in Verdict::ModificationDetected
-        return Outcome.new(change.path, change.old, "modification detected")
-      in Verdict::UnknownState
-        return Outcome.new(change.path, change.old, "unknown state")
-      in Verdict::Proceed
+      in .modification_detected?
+        return Outcome.new(change.path, change.old, :modification_detected)
+      in .unknown_state?
+        return Outcome.new(change.path, change.old, :unknown_state)
+      in .proceed?
       end
 
       if (swapped = swap_permissions(change))
@@ -36,7 +37,7 @@ module Pylon::Write
 
       created = create(change.path, change.new)
 
-      return Outcome.new(change.path, created, "staged content missing") if incomplete?(change.new, created)
+      return Outcome.new(change.path, created, :staged_content_missing) if incomplete?(change.new, created)
 
       Outcome.new(change.path, created)
     end
@@ -67,19 +68,19 @@ module Pylon::Write
       return nil if entry.nil?
 
       case entry.kind
-      in Core::Entry::Kind::Directory
+      in .directory?
         return nil unless @filesystem.create_directory(path)
 
         contents = {} of String => Core::Entry
 
         entry.contents.each do |name, child|
-          if (created = create(join(path, name), child))
+          if (created = create(Core::Paths.join(path, name), child))
             contents[name] = created
           end
         end
 
         Core::Entry.directory(contents)
-      in Core::Entry::Kind::File
+      in .file?
         digest = entry.digest
         return nil if digest.nil?
 
@@ -89,23 +90,19 @@ module Pylon::Write
         return nil unless @filesystem.write_file(path, content, entry.executable?)
 
         entry
-      in Core::Entry::Kind::SymbolicLink
+      in .symbolic_link?
         target = entry.target
         return nil if target.nil?
         return nil unless @filesystem.create_symlink(path, target)
 
         entry
-      in Core::Entry::Kind::Untracked, Core::Entry::Kind::Problematic
+      in .untracked?, .problematic?
         nil
       end
     end
 
     private def incomplete?(intended : Core::Entry?, created : Core::Entry?) : Bool
-      !Core::Entry.equal?(intended, created, true)
-    end
-
-    private def join(path : String, name : String) : String
-      path.empty? ? name : "#{path}/#{name}"
+      !Core::Entry.equal?(intended, created)
     end
   end
 end

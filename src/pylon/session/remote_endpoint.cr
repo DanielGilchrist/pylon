@@ -1,7 +1,6 @@
 require "../core/applier"
 require "../wire/message"
 
-
 module Pylon::Session
   class RemoteEndpoint
     class ProtocolError < Exception
@@ -42,12 +41,12 @@ module Pylon::Session
     end
 
     def content_source(digests : Array(Bytes), budget : UInt64) : Wire::ContentSource
-      return Wire::ContentSource.materialised(Wire::Contents.new) if digests.empty?
+      return Wire::ContentSource::Materialised.new(Wire::Contents.new) if digests.empty?
 
       reply = exchange(Wire::ContentsRequest.new(digests, budget))
       raise ProtocolError.new("expected a contents response") unless reply.is_a?(Wire::ContentsResponse)
 
-      Wire::ContentSource.materialised(reply.contents)
+      Wire::ContentSource::Materialised.new(reply.contents)
     end
 
     def write(changes : Array(Core::Change), source : Wire::ContentSource) : Array(Write::Outcome)

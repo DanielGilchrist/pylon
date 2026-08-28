@@ -29,7 +29,7 @@ module Pylon::Watch::Watchman
 
     def drain : Dirty
       @lock.synchronize do
-        dirty = Dirty.new(@paths.to_a, @fresh)
+        dirty = @fresh ? Everything.new : Touched.new(@paths.to_a)
         @paths.clear
         @fresh = false
         dirty

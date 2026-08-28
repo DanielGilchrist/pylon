@@ -2,7 +2,7 @@ require "colorize"
 require "../session/session"
 
 struct Pylon::CLI
-  struct Reporter
+  class Reporter
     NAMED_PATHS    =  6
     SUMMARISE_OVER = 12
     PREVIEW_PATHS  = 40
@@ -49,17 +49,20 @@ struct Pylon::CLI
 
       return if report.quiet?
 
-      show("↑", :green, report.remote_outcomes.select(&.applied?))
-      show("↓", :blue, report.local_outcomes.select(&.applied?))
+      show("↑", Colorize::ColorANSI::Green, report.remote_outcomes.select(&.applied?))
+      show("↓", Colorize::ColorANSI::Blue, report.local_outcomes.select(&.applied?))
 
       skipped = report.skipped
       return if skipped.empty?
 
-      @io.puts "#{indent}#{"·".colorize.dark_gray} #{skipped.size} skipped#{@verbose ? "" : ", run with PYLON_VERBOSE=1 for detail"}".colorize.dark_gray
+      @io.puts "#{indent}#{"·".colorize.dark_gray} #{skipped.size} skipped#{@verbose ? "" : ", run with -v for detail"}".colorize.dark_gray
 
       return unless @verbose
 
-      skipped.each { |outcome| @io.puts "#{indent}  #{outcome.path} #{"(#{outcome.problem})".colorize.dark_gray}" }
+      skipped.each do |outcome|
+        reason = outcome.skipped.try(&.explain)
+        @io.puts "#{indent}  #{outcome.path} #{"(#{reason})".colorize.dark_gray}"
+      end
     end
 
     # A conflict persists until someone acts on it, so say it once rather than
@@ -79,7 +82,7 @@ struct Pylon::CLI
       @announced = current
     end
 
-    private def show(arrow : String, colour : Symbol, outcomes : Array(Write::Outcome)) : Nil
+    private def show(arrow : String, colour : Colorize::ColorANSI, outcomes : Array(Write::Outcome)) : Nil
       return if outcomes.empty?
 
       written = outcomes.select { |outcome| outcome.entry.try(&.kind.file?) }
@@ -138,15 +141,15 @@ struct Pylon::CLI
 
       @io.puts "#{indent}#{"dry run".colorize.yellow.bold} #{"nothing will be changed".colorize.dark_gray}"
 
-      listing("↑", :green, outgoing)
-      listing("↓", :blue, incoming)
+      listing("↑", Colorize::ColorANSI::Green, outgoing)
+      listing("↓", Colorize::ColorANSI::Blue, incoming)
 
       report.conflicts.each do |conflict|
         @io.puts "#{indent}#{"!".colorize.yellow} conflict #{conflict.root}"
       end
     end
 
-    private def listing(arrow : String, colour : Symbol, outcomes : Array(Write::Outcome)) : Nil
+    private def listing(arrow : String, colour : Colorize::ColorANSI, outcomes : Array(Write::Outcome)) : Nil
       return if outcomes.empty?
 
       outcomes.first(PREVIEW_PATHS).each do |outcome|

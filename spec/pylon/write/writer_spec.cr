@@ -59,7 +59,7 @@ describe Pylon::Write::Writer do
       .write([Change.new("notes.txt", Entry.file(original), Entry.file(incoming))]).first
 
     outcome.applied?.should be_false
-    outcome.problem.should eq("modification detected")
+    outcome.skipped.should eq(Skipped::ModificationDetected)
     target.operations.should be_empty
     String.new(target.nodes["notes.txt"].content).should eq("edited by hand")
   end
@@ -73,7 +73,7 @@ describe Pylon::Write::Writer do
     outcome = Writer.new(target, staging, Pylon::Scan::Cache.new)
       .write([Change.new("notes.txt", Entry.file(digest), Entry.file(incoming))]).first
 
-    outcome.problem.should eq("unknown state")
+    outcome.skipped.should eq(Skipped::UnknownState)
     target.operations.should be_empty
   end
 
@@ -144,7 +144,7 @@ describe Pylon::Write::Writer do
       .write([Change.new("ghost.txt", nil, Entry.file(missing))]).first
 
     outcome.applied?.should be_false
-    outcome.problem.should eq("staged content missing")
+    outcome.skipped.should eq(Skipped::StagedContentMissing)
     outcome.entry.should be_nil
     target.nodes.has_key?("ghost.txt").should be_false
   end

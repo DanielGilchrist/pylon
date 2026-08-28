@@ -12,9 +12,9 @@ module Pylon::Core
 
       def explain : String
         case self
-        in EndpointEmptiedRoot then "one side lost everything it had; refusing to mirror that"
-        in RootDeletion        then "a change would delete the sync root"
-        in RootTypeChange      then "a change would replace the sync root with something else"
+        in .endpoint_emptied_root? then "one side lost everything it had; refusing to mirror that"
+        in .root_deletion?         then "a change would delete the sync root"
+        in .root_type_change?      then "a change would replace the sync root with something else"
         end
       end
     end

@@ -1,3 +1,7 @@
 module Pylon::Watch
-  record Dirty, paths : Array(String), fresh : Bool
+  record Everything
+
+  record Touched, paths : Array(String)
+
+  alias Dirty = Everything | Touched
 end

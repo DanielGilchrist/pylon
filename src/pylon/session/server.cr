@@ -6,7 +6,6 @@ require "../wire/message"
 require "./local_endpoint"
 require "./checkpoint/schedule"
 
-
 module Pylon::Session
   class Server
     def initialize(
@@ -71,8 +70,7 @@ module Pylon::Session
       subscriber = @subscriber
       return if subscriber.nil?
 
-      changes = subscriber.drain
-      changes.fresh ? @endpoint.invalidate : @endpoint.mark_dirty(changes.paths)
+      @endpoint.mark_dirty(subscriber.drain)
     end
 
     private def serve(request : Wire::Message) : Bool
@@ -90,7 +88,7 @@ module Pylon::Session
         end
       in Wire::WriteRequest
         @lock.synchronize do
-          outcomes = @endpoint.write(request.changes, Wire::ContentSource.materialised(request.contents))
+          outcomes = @endpoint.write(request.changes, Wire::ContentSource::Materialised.new(request.contents))
           @sent = Core::Applier.apply(@sent, Write::Outcome.changes(outcomes)) unless @sent.nil?
           Wire::WriteResponse.new(outcomes).write(@output)
           @checkpoints.try(&.save_if_due)

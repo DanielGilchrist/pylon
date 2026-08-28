@@ -36,7 +36,7 @@ describe Pylon::Session::Checkpoint do
       loaded = Checkpoint.load(path).should_not be_nil
       next if loaded.nil?
 
-      Entry.equal?(loaded.base, base, true).should be_true
+      Entry.equal?(loaded.base, base).should be_true
 
       entry = loaded.local_cache["app/user.rb"]
       entry.metadata.inode.should eq(9_u64)

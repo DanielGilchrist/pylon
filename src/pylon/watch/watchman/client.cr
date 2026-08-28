@@ -3,7 +3,7 @@ require "socket"
 require "./pdu"
 
 module Pylon::Watch::Watchman
-  FIELDS = %w[name exists new size mode mtime_ns type]
+  FIELDS = {"name", "exists", "new", "size", "mode", "mtime_ns"}
 
   class Client(T)
     def self.connect(socket_path : String) : Client(UNIXSocket) | PDU::Failure
@@ -113,23 +113,7 @@ module Pylon::Watch::Watchman
               json.array { FIELDS.each { |field| json.string(field) } }
             end
 
-            next if ignores.empty?
-
-            json.field("expression") do
-              json.array do
-                json.string("not")
-                json.array do
-                  json.string("anyof")
-
-                  ignores.each do |pattern|
-                    json.array do
-                      json.string("dirname")
-                      json.string(pattern)
-                    end
-                  end
-                end
-              end
-            end
+            write_expression(json, ignores)
           end
         end
       end

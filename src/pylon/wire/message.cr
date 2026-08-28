@@ -28,18 +28,21 @@ module Pylon::Wire
     byte = io.read_byte
     raise Truncated.new("stream ended before a message tag") if byte.nil?
 
-    case Tag.from_value(byte)
-    in Tag::Failure            then Failure.new(Binary.read_string(io) || "")
-    in Tag::ScanRequest        then ScanRequest.new(io.read_bytes(Int64, FORMAT))
-    in Tag::ScanResponse       then ScanResponse.new(Chunks.read_entry(io))
-    in Tag::ContentsRequest    then read_contents_request(io)
-    in Tag::ContentsResponse   then ContentsResponse.new(read_contents(io))
-    in Tag::WriteRequest  then WriteRequest.new(Binary.read_changes(io), read_contents(io))
-    in Tag::WriteResponse then WriteResponse.new(Binary.read_outcomes(io))
-    in Tag::PollRequest        then PollRequest.new
-    in Tag::PollResponse       then PollResponse.new(Binary.read_bool(io))
-    in Tag::TreeUpdate         then TreeUpdate.new(io.read_bytes(UInt32, FORMAT), Chunks.read_entry(io))
-    in Tag::TreeDelta          then TreeDelta.new(io.read_bytes(UInt32, FORMAT), Binary.read_changes(io))
+    tag = Tag.from_value?(byte)
+    raise Truncated.new("unknown message tag") if tag.nil?
+
+    case tag
+    in .failure?           then Failure.new(Binary.read_required_string(io))
+    in .scan_request?      then ScanRequest.new(io.read_bytes(Int64, FORMAT))
+    in .scan_response?     then ScanResponse.new(Chunks.read_entry(io))
+    in .contents_request?  then read_contents_request(io)
+    in .contents_response? then ContentsResponse.new(read_contents(io))
+    in .write_request?     then WriteRequest.new(Binary.read_changes(io), read_contents(io))
+    in .write_response?    then WriteResponse.new(Binary.read_outcomes(io))
+    in .poll_request?      then PollRequest.new
+    in .poll_response?     then PollResponse.new(Binary.read_bool(io))
+    in .tree_update?       then TreeUpdate.new(io.read_bytes(UInt32, FORMAT), Chunks.read_entry(io))
+    in .tree_delta?        then TreeDelta.new(io.read_bytes(UInt32, FORMAT), Binary.read_changes(io))
     end
   end
 
@@ -50,7 +53,7 @@ module Pylon::Wire
 
   def self.read_digests(io : IO) : Array(Bytes)
     count = io.read_bytes(UInt32, FORMAT)
-    Array(Bytes).new(count) { Binary.read_bytes(io) || Bytes.empty }
+    Array(Bytes).new(count) { Binary.read_required_bytes(io) }
   end
 
   def self.read_contents(io : IO) : Contents
@@ -60,7 +63,7 @@ module Pylon::Wire
     scratch = Chunks.scratch
 
     count.times do
-      digest = Binary.read_bytes(io) || Bytes.empty
+      digest = Binary.read_required_bytes(io)
       contents[digest] = Chunks.read_all(io, codec, scratch)
     end
 

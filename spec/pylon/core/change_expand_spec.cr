@@ -49,7 +49,7 @@ describe "expanding changes" do
       direct = Applier.apply(base, change)
       widened = Applier.apply(base, Change.expand(change))
 
-      Entry.equal?(direct, widened, true).should be_true, "seed=#{seed} iteration=#{iteration}"
+      Entry.equal?(direct, widened).should be_true, "seed=#{seed} iteration=#{iteration}"
     end
   end
 end

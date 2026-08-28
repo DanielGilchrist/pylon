@@ -7,18 +7,27 @@ module Pylon::Core
       Untracked
       Problematic
 
+      def self.from_mode(mode : UInt32) : Kind
+        case mode & LibC::S_IFMT
+        when LibC::S_IFREG then Kind::File
+        when LibC::S_IFDIR then Kind::Directory
+        when LibC::S_IFLNK then Kind::SymbolicLink
+        else                    Kind::Untracked
+        end
+      end
+
       def synchronizable? : Bool
         directory? || file? || symbolic_link?
       end
     end
 
-    EMPTY_CONTENTS = {} of String => Entry
+    private EMPTY_CONTENTS = {} of String => Entry
 
-    def self.equal?(left : Entry?, right : Entry?, deep : Bool) : Bool
+    def self.equal?(left : Entry?, right : Entry?) : Bool
       return true if left.nil? && right.nil?
       return false if left.nil? || right.nil?
 
-      left.equal?(right, deep)
+      left.equal?(right)
     end
 
     def self.synchronizable(entry : Entry?) : Entry?
@@ -34,7 +43,7 @@ module Pylon::Core
       contents.each do |name, child|
         kept = synchronizable(child)
 
-        if kept.nil? || !kept.equal?(child, true)
+        if kept.nil? || !kept.equal?(child)
           retained ||= carry_forward(contents, name)
         end
 
@@ -58,7 +67,7 @@ module Pylon::Core
       carried
     end
 
-    def self.directory(contents : Hash(String, Entry) = EMPTY_CONTENTS) : Entry
+    def self.directory(contents : Hash(String, Entry)? = nil) : Entry
       new(kind: Kind::Directory, contents: contents)
     end
 
@@ -82,7 +91,6 @@ module Pylon::Core
     getter digest : Bytes?
     getter target : String?
     getter problem : String?
-    getter contents : Hash(String, Entry)
 
     def initialize(
       @kind : Kind,
@@ -90,12 +98,16 @@ module Pylon::Core
       @executable : Bool = false,
       @target : String? = nil,
       @problem : String? = nil,
-      @contents : Hash(String, Entry) = EMPTY_CONTENTS,
+      @contents : Hash(String, Entry)? = nil,
     )
     end
 
     def executable? : Bool
       @executable
+    end
+
+    def contents : Hash(String, Entry)
+      @contents || EMPTY_CONTENTS
     end
 
     def synchronizable? : Bool
@@ -125,18 +137,17 @@ module Pylon::Core
       )
     end
 
-    def equal?(other : Entry, deep : Bool) : Bool
+    def equal?(other : Entry) : Bool
       return false unless kind == other.kind
       return false unless digest == other.digest
       return false unless executable? == other.executable?
       return false unless target == other.target
       return false unless problem == other.problem
-      return true unless deep
       return false unless contents.size == other.contents.size
 
       contents.all? do |name, child|
         if (other_child = other.contents[name]?)
-          child.equal?(other_child, true)
+          child.equal?(other_child)
         else
           false
         end

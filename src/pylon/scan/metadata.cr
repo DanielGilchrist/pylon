@@ -41,12 +41,7 @@ module Pylon::Scan
     end
 
     def kind : Core::Entry::Kind
-      case mode & LibC::S_IFMT
-      when LibC::S_IFREG then Core::Entry::Kind::File
-      when LibC::S_IFDIR then Core::Entry::Kind::Directory
-      when LibC::S_IFLNK then Core::Entry::Kind::SymbolicLink
-      else                    Core::Entry::Kind::Untracked
-      end
+      Core::Entry::Kind.from_mode(mode)
     end
 
     def executable? : Bool

@@ -35,7 +35,7 @@ warm = Scanner.new(filesystem, cold.cache, now + 60_000_000_000_i64, IGNORES).sc
 warm_elapsed = Time.instant - started
 
 puts "warm scan:    #{warm_elapsed.total_milliseconds.round(1)} ms"
-puts "identical:    #{Entry.equal?(cold.root, warm.root, true)}"
+puts "identical:    #{Entry.equal?(cold.root, warm.root)}"
 puts
 
 started = Time.instant

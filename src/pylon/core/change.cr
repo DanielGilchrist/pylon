@@ -1,4 +1,5 @@
 require "./entry"
+require "./paths"
 
 module Pylon::Core
   struct Change
@@ -17,12 +18,8 @@ module Pylon::Core
       into << Change.new(path, old, Entry.directory)
 
       new.contents.each do |name, child|
-        widen(join(path, name), nil, child, into)
+        widen(Paths.join(path, name), nil, child, into)
       end
-    end
-
-    private def self.join(path : String, name : String) : String
-      path.empty? ? name : "#{path}/#{name}"
     end
 
     getter path : String
@@ -34,8 +31,8 @@ module Pylon::Core
 
     def ==(other : Change) : Bool
       path == other.path &&
-        Entry.equal?(old, other.old, true) &&
-        Entry.equal?(new, other.new, true)
+        Entry.equal?(old, other.old) &&
+        Entry.equal?(new, other.new)
     end
   end
 end

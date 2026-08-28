@@ -1,5 +1,6 @@
 require "./change"
 require "./entry"
+require "./paths"
 
 module Pylon::Core
   module Differ
@@ -12,7 +13,7 @@ module Pylon::Core
     end
 
     private def walk(path : String, base : Entry?, target : Entry?, into : Array(Change)) : Nil
-      return if Entry.equal?(base, target, true)
+      return if Entry.equal?(base, target)
 
       unless base && target && base.kind.directory? && target.kind.directory?
         into << Change.new(path, base, target)
@@ -20,18 +21,14 @@ module Pylon::Core
       end
 
       base.contents.each do |name, child|
-        walk(join(path, name), child, target.contents[name]?, into)
+        walk(Paths.join(path, name), child, target.contents[name]?, into)
       end
 
       target.contents.each do |name, child|
         next if base.contents.has_key?(name)
 
-        walk(join(path, name), nil, child, into)
+        walk(Paths.join(path, name), nil, child, into)
       end
-    end
-
-    private def join(path : String, name : String) : String
-      path.empty? ? name : "#{path}/#{name}"
     end
   end
 end

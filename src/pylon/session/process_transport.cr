@@ -26,11 +26,5 @@ module Pylon::Session
     rescue IO::Error
       @process.wait
     end
-
-    def terminate : Nil
-      @process.terminate unless @process.terminated?
-    rescue RuntimeError
-      nil
-    end
   end
 end

@@ -30,11 +30,11 @@ end
 
 describe Pylon::Wire::Binary do
   it "round trips every kind of entry" do
-    Entry.equal?(round_trip_entry(nil), nil, true).should be_true
+    Entry.equal?(round_trip_entry(nil), nil).should be_true
 
     {Fixtures.f1, Fixtures.f1x, Fixtures.symlink_relative, Fixtures.untracked,
      Fixtures.problematic, Fixtures.d0, Fixtures.d1}.each do |entry|
-      Entry.equal?(round_trip_entry(entry), entry, true).should be_true
+      Entry.equal?(round_trip_entry(entry), entry).should be_true
     end
   end
 
@@ -55,7 +55,7 @@ describe Pylon::Wire::Binary do
     500.times do |iteration|
       entry = random_entry(random, 3)
 
-      Entry.equal?(round_trip_entry(entry), entry, true).should be_true,
+      Entry.equal?(round_trip_entry(entry), entry).should be_true,
         "seed=#{seed} iteration=#{iteration}"
     end
   end
@@ -76,10 +76,10 @@ describe Pylon::Wire::Binary do
     decoded.zip(changes) { |actual, expected| (actual == expected).should be_true }
   end
 
-  it "round trips outcomes including the problem field" do
+  it "round trips outcomes including the skip reason" do
     outcomes = [
       Pylon::Write::Outcome.new("ok.rb", Fixtures.f1),
-      Pylon::Write::Outcome.new("bad.rb", nil, "modification detected"),
+      Pylon::Write::Outcome.new("bad.rb", nil, Pylon::Write::Skipped::ModificationDetected),
     ]
 
     io = IO::Memory.new
@@ -88,7 +88,7 @@ describe Pylon::Wire::Binary do
 
     decoded = Binary.read_outcomes(io)
     decoded[0].applied?.should be_true
-    decoded[1].problem.should eq("modification detected")
+    decoded[1].skipped.should eq(Pylon::Write::Skipped::ModificationDetected)
     decoded[1].entry.should be_nil
   end
 

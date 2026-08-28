@@ -45,6 +45,14 @@ module Pylon::Wire
       read_bytes(io).try { |bytes| String.new(bytes) }
     end
 
+    def read_required_string(io : IO) : String
+      read_string(io) || raise Truncated.new("missing string in message")
+    end
+
+    def read_required_bytes(io : IO) : Bytes
+      read_bytes(io) || raise Truncated.new("missing bytes in message")
+    end
+
     def write_entry(io : IO, entry : Core::Entry?) : Nil
       if entry.nil?
         io.write_byte(0_u8)
@@ -69,19 +77,29 @@ module Pylon::Wire
       tag = read_byte(io)
       return nil if tag == 0
 
-      kind = Core::Entry::Kind.from_value(tag.to_i32 - 1)
+      kind = Core::Entry::Kind.from_value?(tag.to_i32 - 1)
+      raise Truncated.new("unknown entry kind in message") if kind.nil?
+
       digest = read_bytes(io)
       executable = read_bool(io)
       target = read_string(io)
       problem = read_string(io)
 
       count = read_u32(io)
-      contents = count.zero? ? Core::Entry::EMPTY_CONTENTS : Hash(String, Core::Entry).new(initial_capacity: count)
+      contents = nil.as(Hash(String, Core::Entry)?)
 
-      count.times do
-        name = read_string(io)
-        child = read_entry(io)
-        contents[name] = child if name && child
+      if count > 0
+        built = Hash(String, Core::Entry).new(initial_capacity: count)
+
+        count.times do
+          name = read_required_string(io)
+          child = read_entry(io)
+          raise Truncated.new("missing child entry in message") if child.nil?
+
+          built[name] = child
+        end
+
+        contents = built
       end
 
       Core::Entry.new(
@@ -109,7 +127,7 @@ module Pylon::Wire
       changes = Array(Core::Change).new(count)
 
       count.times do
-        path = read_string(io) || ""
+        path = read_required_string(io)
         changes << Core::Change.new(path, read_entry(io), read_entry(io))
       end
 
@@ -122,7 +140,7 @@ module Pylon::Wire
       outcomes.each do |outcome|
         write_string(io, outcome.path)
         write_entry(io, outcome.entry)
-        write_string(io, outcome.problem)
+        write_skipped(io, outcome.skipped)
       end
     end
 
@@ -131,10 +149,21 @@ module Pylon::Wire
       outcomes = Array(Write::Outcome).new(count)
 
       count.times do
-        outcomes << Write::Outcome.new(read_string(io) || "", read_entry(io), read_string(io))
+        outcomes << Write::Outcome.new(read_required_string(io), read_entry(io), read_skipped(io))
       end
 
       outcomes
+    end
+
+    def write_skipped(io : IO, skipped : Write::Skipped?) : Nil
+      io.write_byte(skipped.nil? ? 0_u8 : skipped.value.to_u8 + 1)
+    end
+
+    def read_skipped(io : IO) : Write::Skipped?
+      byte = read_byte(io)
+      return nil if byte == 0
+
+      Write::Skipped.from_value?(byte.to_i32 - 1) || raise Truncated.new("unknown skip reason in message")
     end
 
     def write_cache(io : IO, cache : Scan::Cache) : Nil
@@ -157,7 +186,7 @@ module Pylon::Wire
       cache = Scan::Cache.new(initial_capacity: count)
 
       count.times do
-        path = read_string(io) || ""
+        path = read_required_string(io)
 
         metadata = Scan::Metadata.new(
           mode: io.read_bytes(UInt32, FORMAT),
@@ -166,7 +195,7 @@ module Pylon::Wire
           inode: io.read_bytes(UInt64, FORMAT),
         )
 
-        cache[path] = Scan::CacheEntry.new(metadata, read_bytes(io) || Bytes.empty)
+        cache[path] = Scan::CacheEntry.new(metadata, read_required_bytes(io))
       end
 
       cache

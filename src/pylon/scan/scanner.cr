@@ -1,5 +1,6 @@
 require "wait_group"
 require "../core/entry"
+require "../core/paths"
 require "./cache_entry"
 require "./ignores"
 require "./snapshot"
@@ -83,7 +84,7 @@ module Pylon::Scan
       end
 
       if @ignores.ignore?(path)
-        survey.nodes[path] = Surveyed.new(kind: Core::Entry::Kind::Untracked)
+        survey.nodes[path] = Surveyed.new(kind: :untracked)
         return
       end
 
@@ -91,33 +92,33 @@ module Pylon::Scan
       return if observed.nil?
 
       case observed.kind
-      in Core::Entry::Kind::Directory
-        survey.nodes[path] = Surveyed.new(kind: Core::Entry::Kind::Directory)
+      in .directory?
+        survey.nodes[path] = Surveyed.new(kind: :directory)
         names = [] of String
         baseline_contents = baseline.try { |entry| entry.directory? ? entry.contents : nil }
 
         @filesystem.each_child(path) do |name|
-          child = join(path, name)
+          child = Core::Paths.join(path, name)
           look(survey, child, baseline_contents.try(&.[name]?))
           names << name if survey.nodes.has_key?(child) || survey.carried.has_key?(child)
         end
 
         survey.children[path] = names
-      in Core::Entry::Kind::File
-        survey.nodes[path] = Surveyed.new(kind: Core::Entry::Kind::File, metadata: observed)
+      in .file?
+        survey.nodes[path] = Surveyed.new(kind: :file, metadata: observed)
 
         if (digest = @cache[path]?.try(&.reuse(observed, @now_ns, @granularity_ns)))
           survey.reused[path] = digest
         else
           survey.pending << path
         end
-      in Core::Entry::Kind::SymbolicLink
+      in .symbolic_link?
         survey.nodes[path] = Surveyed.new(
-          kind: Core::Entry::Kind::SymbolicLink,
+          kind: :symbolic_link,
           target: @filesystem.link_target(path),
         )
-      in Core::Entry::Kind::Untracked, Core::Entry::Kind::Problematic
-        survey.nodes[path] = Surveyed.new(kind: Core::Entry::Kind::Untracked)
+      in .untracked?, .problematic?
+        survey.nodes[path] = Surveyed.new(kind: :untracked)
       end
     end
 
@@ -130,7 +131,7 @@ module Pylon::Scan
         return
       end
 
-      entry.contents.each { |name, child| carry_cache(join(path, name), child) }
+      entry.contents.each { |name, child| carry_cache(Core::Paths.join(path, name), child) }
     end
 
     private def hash_pending(survey : Survey, digests : Hash(String, Bytes)) : Nil
@@ -202,17 +203,17 @@ module Pylon::Scan
       return nil if node.nil?
 
       case node.kind
-      in Core::Entry::Kind::Directory
+      in .directory?
         contents = {} of String => Core::Entry
 
         survey.children[path]?.try &.each do |name|
-          if (child = build(survey, digests, join(path, name)))
+          if (child = build(survey, digests, Core::Paths.join(path, name)))
             contents[name] = child
           end
         end
 
         Core::Entry.directory(contents)
-      in Core::Entry::Kind::File
+      in .file?
         observed = node.metadata
         digest = digests[path]?
 
@@ -221,21 +222,17 @@ module Pylon::Scan
         @next_cache[path] = CacheEntry.new(observed, digest)
 
         Core::Entry.file(digest, executable: observed.executable?)
-      in Core::Entry::Kind::SymbolicLink
+      in .symbolic_link?
         target = node.target
 
         return Core::Entry.problematic("unreadable link") if target.nil?
 
         Core::Entry.symlink(target)
-      in Core::Entry::Kind::Untracked
+      in .untracked?
         Core::Entry.untracked
-      in Core::Entry::Kind::Problematic
+      in .problematic?
         Core::Entry.problematic("unreadable")
       end
-    end
-
-    private def join(path : String, name : String) : String
-      path.empty? ? name : "#{path}/#{name}"
     end
   end
 end

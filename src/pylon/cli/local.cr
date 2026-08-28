@@ -4,7 +4,6 @@ require "../session/local_endpoint"
 require "../session/checkpoint/schedule"
 require "../session/runner"
 require "../session/session"
-require "../session/checkpoint/schedule"
 require "../watch/watcher"
 require "./reporter"
 
@@ -88,17 +87,7 @@ struct Pylon::CLI
     end
 
     private def drain(watchers) : Nil
-      watchers.each do |endpoint, subscriber|
-        changes = subscriber.drain
-
-        if changes.fresh
-          endpoint.invalidate
-        else
-          endpoint.mark_dirty(changes.paths)
-        end
-      end
+      watchers.each { |endpoint, subscriber| endpoint.mark_dirty(subscriber.drain) }
     end
   end
-
-  @[Kebab::Command(summary: "Sync a local directory with one on a remote host")]
 end

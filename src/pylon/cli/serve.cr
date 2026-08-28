@@ -42,6 +42,4 @@ struct Pylon::CLI
       subscriber.try(&.close)
     end
   end
-
-  @[Kebab::Command(summary: "Sync two directories on this machine")]
 end

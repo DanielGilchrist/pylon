@@ -25,8 +25,8 @@ private def removed(path : String) : Pylon::Write::Outcome
   Pylon::Write::Outcome.new(path, nil)
 end
 
-private def skipped(path : String, problem : String) : Pylon::Write::Outcome
-  Pylon::Write::Outcome.new(path, nil, problem)
+private def skipped(path : String, reason : Pylon::Write::Skipped = Pylon::Write::Skipped::ModificationDetected) : Pylon::Write::Outcome
+  Pylon::Write::Outcome.new(path, nil, reason)
 end
 
 describe Pylon::CLI::Reporter do
@@ -106,11 +106,11 @@ describe Pylon::CLI::Reporter do
   end
 
   it "points at the flag that explains a skip" do
-    report = report_of(remote: [skipped("notes.txt", "modification detected")])
+    report = report_of(remote: [skipped("notes.txt")])
 
     quiet = rendered(report)
     quiet.should contain("1 skipped")
-    quiet.should contain("PYLON_VERBOSE")
+    quiet.should contain("-v")
     quiet.should_not contain("modification detected")
 
     rendered(report, verbose: true).should contain("modification detected")

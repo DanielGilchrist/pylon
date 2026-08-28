@@ -7,7 +7,6 @@ require "../session/remote_endpoint"
 require "../session/runner"
 require "../session/session"
 require "../session/ssh"
-require "../session/checkpoint/schedule"
 require "../watch/watcher"
 require "./reporter"
 require "./target"
@@ -126,7 +125,7 @@ struct Pylon::CLI
       runner = Session::Runner.new(
         session,
         signals,
-        before: -> { drain(local_endpoint, subscriber) },
+        before: -> { local_endpoint.mark_dirty(subscriber.drain) },
       )
 
       Signal::INT.trap { runner.stop }
@@ -150,16 +149,6 @@ struct Pylon::CLI
         nil
       })
       subscriber.close
-    end
-
-    private def drain(endpoint, subscriber) : Nil
-      changes = subscriber.drain
-      changes.fresh ? endpoint.invalidate : endpoint.mark_dirty(changes.paths)
-    end
-
-    private def drain(endpoint, subscriber) : Nil
-      changes = subscriber.drain
-      changes.fresh ? endpoint.invalidate : endpoint.mark_dirty(changes.paths)
     end
 
     private def abort_with(message : String) : NoReturn

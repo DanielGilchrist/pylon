@@ -11,13 +11,13 @@ module Pylon::Write
       return Verdict::ModificationDetected if observed.nil?
 
       case expected.kind
-      in Core::Entry::Kind::Directory
+      in .directory?
         observed.kind.directory? ? Verdict::Proceed : Verdict::ModificationDetected
-      in Core::Entry::Kind::SymbolicLink
+      in .symbolic_link?
         observed.kind.symbolic_link? ? Verdict::Proceed : Verdict::ModificationDetected
-      in Core::Entry::Kind::File
+      in .file?
         file(expected, cached, observed)
-      in Core::Entry::Kind::Untracked, Core::Entry::Kind::Problematic
+      in .untracked?, .problematic?
         Verdict::UnknownState
       end
     end

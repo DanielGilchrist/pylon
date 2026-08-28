@@ -10,7 +10,7 @@ module Pylon::Wire
     getter source : ContentSource
 
     def self.new(changes : Array(Core::Change), contents : Contents)
-      new(changes, ContentSource.materialised(contents))
+      new(changes, ContentSource::Materialised.new(contents))
     end
 
     def initialize(@changes : Array(Core::Change), @source : ContentSource)

@@ -1,6 +1,7 @@
 {% skip_file unless flag?(:linux) %}
 
 require "sync"
+require "../core/paths"
 require "../scan/ignores"
 require "./dirty"
 require "./lib_inotify"
@@ -48,7 +49,7 @@ module Pylon::Watch
 
     def drain : Dirty
       @lock.synchronize do
-        dirty = Dirty.new(@dirty.to_a, @fresh)
+        dirty = @fresh ? Everything.new : Touched.new(@dirty.to_a)
         @dirty.clear
         @fresh = false
         dirty
@@ -66,7 +67,7 @@ module Pylon::Watch
       add_watch(relative)
 
       Dir.each_child(absolute(relative)) do |name|
-        child = join(relative, name)
+        child = Core::Paths.join(relative, name)
         next unless Dir.exists?(absolute(child))
 
         watch_tree(child)
@@ -99,6 +100,8 @@ module Pylon::Watch
 
       while offset + sizeof(LibInotify::Event) <= bytes.size
         event = bytes[offset, sizeof(LibInotify::Event)].to_unsafe.as(LibInotify::Event*).value
+        break if offset + sizeof(LibInotify::Event) + event.len > bytes.size
+
         name_bytes = bytes[offset + sizeof(LibInotify::Event), event.len]
         offset += sizeof(LibInotify::Event) + event.len
 
@@ -125,7 +128,7 @@ module Pylon::Watch
       directory = @paths[event.wd]?
       return if directory.nil?
 
-      path = name.empty? ? directory : join(directory, name)
+      path = name.empty? ? directory : Core::Paths.join(directory, name)
       return if @ignores.ignore?(path)
 
       @lock.synchronize { @dirty << path }
@@ -139,7 +142,7 @@ module Pylon::Watch
 
     private def mark_contents(relative : String) : Nil
       Dir.each_child(absolute(relative)) do |name|
-        child = join(relative, name)
+        child = Core::Paths.join(relative, name)
         next if @ignores.ignore?(child)
 
         @lock.synchronize { @dirty << child }
@@ -158,10 +161,6 @@ module Pylon::Watch
 
     private def absolute(relative : String) : String
       relative.empty? ? @root : File.join(@root, relative)
-    end
-
-    private def join(path : String, name : String) : String
-      path.empty? ? name : "#{path}/#{name}"
     end
   end
 end

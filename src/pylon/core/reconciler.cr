@@ -1,3 +1,5 @@
+require "./paths"
+
 module Pylon::Core
   module Reconciler
     extend self
@@ -29,7 +31,7 @@ module Pylon::Core
           return
         end
 
-        if Entry.equal?(local, remote, true)
+        if Entry.equal?(local, remote)
           adopt(path, base, Entry.synchronizable(local))
           return
         end
@@ -52,8 +54,8 @@ module Pylon::Core
       end
 
       private def merge(path : String, base : Entry?, local : Entry?, remote : Entry?) : Nil
-        local_changed = !Entry.equal?(base, local, true)
-        remote_changed = !Entry.equal?(base, remote, true)
+        local_changed = !Entry.equal?(base, local)
+        remote_changed = !Entry.equal?(base, remote)
 
         return if !local_changed && !remote_changed
 
@@ -78,9 +80,9 @@ module Pylon::Core
         end
 
         case @mode
-        in SyncMode::TwoWaySafe
+        in .two_way_safe?
           record_conflict(path, base, local, remote)
-        in SyncMode::TwoWayResolved
+        in .two_way_resolved?
           propagate_to_remote(path, base, local, remote)
         end
       end
@@ -92,7 +94,7 @@ module Pylon::Core
           adopt(path, base, Entry.directory)
         end
 
-        base_contents = base_directory.try(&.contents) || Entry::EMPTY_CONTENTS
+        base_contents = (base_directory || Entry.directory).contents
         local_contents = local.contents
         remote_contents = remote.contents
 
@@ -102,26 +104,26 @@ module Pylon::Core
 
           next if settled?(base_child, local_child, remote_child)
 
-          walk(join(path, name), base_child, local_child, remote_child)
+          walk(Paths.join(path, name), base_child, local_child, remote_child)
         end
 
         remote_contents.each do |name, remote_child|
           next if local_contents.has_key?(name)
 
-          walk(join(path, name), base_contents[name]?, nil, remote_child)
+          walk(Paths.join(path, name), base_contents[name]?, nil, remote_child)
         end
 
         base_contents.each do |name, base_child|
           next if local_contents.has_key?(name) || remote_contents.has_key?(name)
 
-          walk(join(path, name), base_child, nil, nil)
+          walk(Paths.join(path, name), base_child, nil, nil)
         end
       end
 
       private def settled?(base : Entry?, local : Entry, remote : Entry?) : Bool
         return false if remote.nil?
 
-        Entry.equal?(base, local, true) && local.equal?(remote, true)
+        Entry.equal?(base, local) && local.equal?(remote)
       end
 
       private def propagate_to_remote(path : String, base : Entry?, local : Entry?, remote : Entry?) : Nil
@@ -143,7 +145,7 @@ module Pylon::Core
       end
 
       private def adopt(path : String, base : Entry?, entry : Entry?) : Nil
-        return if Entry.equal?(base, entry, true)
+        return if Entry.equal?(base, entry)
 
         base_changes << Change.new(path, base, entry)
       end
@@ -164,10 +166,6 @@ module Pylon::Core
 
       private def blocked?(entry : Entry?) : Bool
         !entry.nil? && !entry.synchronizable?
-      end
-
-      private def join(path : String, name : String) : String
-        path.empty? ? name : "#{path}/#{name}"
       end
     end
   end
