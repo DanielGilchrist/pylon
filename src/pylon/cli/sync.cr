@@ -90,7 +90,7 @@ struct Pylon::CLI
 
         left = Session::LocalEndpoint.new(local, ignores, compression: compression)
         left.cache = restored.local_cache
-        left.on_stream = -> { reporter.streamed }
+        left.on_stream = ->(bytes : UInt64) { reporter.streamed(bytes) }
 
         signals = Channel(Nil).new(16)
         remote_endpoint = Session::RemoteEndpoint.new(transport.reader, transport.writer, signals)

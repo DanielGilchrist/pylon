@@ -7,11 +7,11 @@ require "./staging"
 
 module Pylon::Session
   class LocalEndpoint
-    private record Wanted, digest : Bytes, path : String
+    private record Wanted, digest : Bytes, path : String, size : UInt64
 
     getter root : String
     property cache : Scan::Cache
-    property on_stream : Proc(Nil)? = nil
+    property on_stream : Proc(UInt64, Nil)? = nil
 
     @baseline : Core::Entry?
     @recheck : Set(String)
@@ -74,7 +74,7 @@ module Pylon::Session
 
           wanted.each do |want|
             @disk.stream(want.path, want.digest, io, buffer, codec, scratch)
-            @on_stream.try(&.call)
+            @on_stream.try(&.call(want.size))
           end
         end,
         materialise: -> { materialise(wanted) },
@@ -103,7 +103,7 @@ module Pylon::Session
         weight = @cache[path]?.try(&.metadata.size) || 0_u64
         break if !wanted.empty? && spent + weight > budget
 
-        wanted << Wanted.new(digest, path)
+        wanted << Wanted.new(digest, path, weight)
         spent += weight
       end
 

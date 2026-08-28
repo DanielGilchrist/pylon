@@ -14,6 +14,8 @@ struct Pylon::CLI
       @announced = Set(String).new
       @spinner = Spinner.new(@io)
       @streamed = 0
+      @streamed_bytes = 0_u64
+      @started = Time.instant
     end
 
     def starting(local : String, remote : String) : Nil
@@ -28,13 +30,19 @@ struct Pylon::CLI
     end
 
     def progress(update : Session::Progress) : Nil
-      @streamed = 0 if update.confirmed.zero?
+      if update.confirmed.zero?
+        @streamed = 0
+        @streamed_bytes = 0_u64
+        @started = Time.instant
+      end
+
       @progress = update
       refresh
     end
 
-    def streamed : Nil
+    def streamed(bytes : UInt64) : Nil
       @streamed += 1
+      @streamed_bytes += bytes
       refresh
     end
 
@@ -45,10 +53,20 @@ struct Pylon::CLI
       case update.direction
       in .to_remote?
         sent = Math.max(@streamed, update.confirmed)
-        @spinner.show("↑ sending #{sent}/#{update.total} · #{update.confirmed} written on the remote")
+        @spinner.show("↑ sending #{sent}/#{update.total}#{throughput} · #{update.confirmed} written on the remote")
       in .to_local?
         @spinner.show("↓ receiving #{update.confirmed}/#{update.total}")
       end
+    end
+
+    private def throughput : String
+      return "" if @streamed_bytes.zero?
+
+      sent = @streamed_bytes / (1024.0 * 1024.0)
+      elapsed = (Time.instant - @started).total_seconds
+      rate = elapsed > 0.5 ? " at #{(sent / elapsed).round(1)} MiB/s" : ""
+
+      " · #{sent.round(1)} MiB#{rate}"
     end
 
     def ready(elapsed : Time::Span, watching : Int32) : Nil
