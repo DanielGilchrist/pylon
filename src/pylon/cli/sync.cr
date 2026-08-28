@@ -86,11 +86,13 @@ struct Pylon::CLI
 
       begin
         reporter = Reporter.new(STDOUT, verbose?, dry_run?)
-        reporter.starting(local, remote) unless dry_run?
 
         left = Session::LocalEndpoint.new(local, ignores, compression: compression)
         left.cache = restored.local_cache
         left.on_stream = ->(bytes : UInt64) { reporter.streamed(bytes) }
+
+        reporter.observe(left.tally)
+        reporter.starting(local, remote) unless dry_run?
 
         signals = Channel(Nil).new(16)
         remote_endpoint = Session::RemoteEndpoint.new(transport.reader, transport.writer, signals)

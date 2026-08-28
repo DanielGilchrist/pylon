@@ -11,15 +11,19 @@ struct Pylon::CLI
     @stop : Channel(Nil)? = nil
 
     def initialize(@io : IO, @indent : String = "  ")
-      @text = ""
+      @supply = -> { "" }
       @done = Channel(Nil).new
       @restores_cursor = false
     end
 
     def show(text : String) : Nil
+      show { text }
+    end
+
+    def show(&supplier : -> String) : Nil
       return unless @io.tty?
 
-      @text = text
+      @supply = supplier
       return if @stop
 
       stop = Channel(Nil).new
@@ -47,7 +51,7 @@ struct Pylon::CLI
           when stop.receive?
             break
           when timeout(INTERVAL)
-            @io.print "\r\033[K#{@indent}#{FRAMES[frame % FRAMES.size].colorize.cyan} #{@text.colorize.dark_gray}"
+            @io.print "\r\033[K#{@indent}#{FRAMES[frame % FRAMES.size].colorize.cyan} #{@supply.call.colorize.dark_gray}"
             @io.flush
             frame += 1
           end

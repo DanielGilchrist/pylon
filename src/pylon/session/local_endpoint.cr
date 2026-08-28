@@ -12,6 +12,7 @@ module Pylon::Session
     getter root : String
     property cache : Scan::Cache
     property on_stream : Proc(UInt64, Nil)? = nil
+    getter tally = Scan::Tally.new
 
     @baseline : Core::Entry?
     @recheck : Set(String)
@@ -49,11 +50,16 @@ module Pylon::Session
     end
 
     def scan(now_ns : Int64) : Scan::Snapshot
+      @tally.reset
+
       snapshot = Scan::Scanner.new(
         @disk, @cache, now_ns, @ignores,
         baseline: @baseline,
         recheck: @recheck,
+        tally: @tally,
       ).scan
+
+      @tally.finish
 
       @cache = snapshot.cache
       @by_digest = index(snapshot.cache)

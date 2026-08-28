@@ -9,6 +9,7 @@ struct Pylon::CLI
     PREVIEW_PATHS  = 40
 
     @progress : Session::Progress? = nil
+    @scan : Scan::Tally? = nil
 
     def initialize(@io : IO, @verbose : Bool = false, @dry_run : Bool = false)
       @announced = Set(String).new
@@ -18,14 +19,31 @@ struct Pylon::CLI
       @started = Time.instant
     end
 
+    def observe(scan : Scan::Tally) : Nil
+      @scan = scan
+    end
+
     def starting(local : String, remote : String) : Nil
       @io.puts
       @io.puts "#{"pylon".colorize.bold} #{File.basename(local).colorize.cyan} #{"→".colorize.dark_gray} #{remote.colorize.cyan}"
 
       if @io.tty?
-        @spinner.show("connecting and scanning both sides")
+        @spinner.show { scan_status }
       else
         @io.puts "#{indent}#{"connecting and scanning both sides".colorize.dark_gray}"
+      end
+    end
+
+    private def scan_status : String
+      scan = @scan
+      return "connecting and scanning both sides" if scan.nil?
+
+      if scan.finished?
+        "waiting for the remote scan · #{scan.files} files here"
+      elsif scan.hashed_bytes.zero?
+        "scanning · #{scan.files} files"
+      else
+        "scanning · #{scan.files} files · #{mebibytes(scan.hashed_bytes.to_u64)} MiB hashed"
       end
     end
 

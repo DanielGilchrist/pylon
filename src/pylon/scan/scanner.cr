@@ -2,6 +2,7 @@ require "wait_group"
 require "../core/entry"
 require "../core/paths"
 require "./cache_entry"
+require "./tally"
 require "./ignores"
 require "./snapshot"
 
@@ -36,6 +37,7 @@ module Pylon::Scan
       @parallelism : Int32 = DEFAULT_PARALLELISM,
       @baseline : Core::Entry? = nil,
       @recheck : Set(String) = Set(String).new,
+      @tally : Tally = Tally.new,
     )
       @next_cache = Cache.new
       @dirty = expand(@recheck)
@@ -106,6 +108,7 @@ module Pylon::Scan
         survey.children[path] = names
       in .file?
         survey.nodes[path] = Surveyed.new(kind: :file, metadata: observed)
+        @tally.saw_file
 
         if (digest = @cache[path]?.try(&.reuse(observed, @now_ns, @granularity_ns)))
           survey.reused[path] = digest
@@ -146,6 +149,7 @@ module Pylon::Scan
         pending.each do |path|
           if (digest = @filesystem.digest(path, buffer))
             digests[path] = digest
+            @tally.hashed(weight(survey, path))
           end
         end
 
@@ -157,7 +161,7 @@ module Pylon::Scan
       waiting = WaitGroup.new(workers)
 
       workers.times do |worker|
-        hash_slice(context, waiting, pending, partials[worker], worker, workers)
+        hash_slice(context, waiting, survey, pending, partials[worker], worker, workers)
       end
 
       waiting.wait
@@ -167,12 +171,14 @@ module Pylon::Scan
     private def hash_slice(
       context : Fiber::ExecutionContext::Parallel,
       waiting : WaitGroup,
+      survey : Survey,
       pending : Array(String),
       into : Hash(String, Bytes),
       offset : Int32,
       stride : Int32,
     ) : Nil
       filesystem = @filesystem
+      tally = @tally
 
       context.spawn do
         begin
@@ -184,6 +190,7 @@ module Pylon::Scan
 
             if (digest = filesystem.digest(path, buffer))
               into[path] = digest
+              tally.hashed(weight(survey, path))
             end
 
             index += stride
@@ -192,6 +199,10 @@ module Pylon::Scan
           waiting.done
         end
       end
+    end
+
+    private def weight(survey : Survey, path : String) : Int64
+      survey.nodes[path]?.try(&.metadata).try(&.size.to_i64) || 0_i64
     end
 
     private def build(survey : Survey, digests : Hash(String, Bytes), path : String) : Core::Entry?
