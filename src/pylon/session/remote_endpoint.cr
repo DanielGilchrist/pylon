@@ -12,10 +12,11 @@ module Pylon::Session
 
     getter exchanges = 0
 
+    @failure : Exception? = nil
+    @tree : Core::Entry? = nil
+
     def initialize(@input : IO, @output : IO, @signals : Channel(Nil)? = nil)
       @responses = Channel(Wire::Message).new(RESPONSE_BUFFER)
-      @failure = nil.as(Exception?)
-      @tree = nil.as(Core::Entry?)
       @known = false
       @sequence = 0_u32
 

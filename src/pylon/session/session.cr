@@ -26,10 +26,9 @@ module Pylon::Session
 
     def cycle(now_ns : Int64) : Report
       started = Time.instant
-      local_scanned = nil.as(Scan::Snapshot?)
-      remote_scanned = nil.as(Scan::Snapshot?)
-
-      failure = nil.as(Exception?)
+      local_scanned : Scan::Snapshot? = nil
+      remote_scanned : Scan::Snapshot? = nil
+      failure : Exception? = nil
 
       # A fiber that raises inside WaitGroup takes the process down with it,
       # so each side hands its error back instead.

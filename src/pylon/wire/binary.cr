@@ -86,7 +86,7 @@ module Pylon::Wire
       problem = read_string(io)
 
       count = read_u32(io)
-      contents = nil.as(Hash(String, Core::Entry)?)
+      contents : Hash(String, Core::Entry)? = nil
 
       if count > 0
         built = Hash(String, Core::Entry).new(initial_capacity: count)

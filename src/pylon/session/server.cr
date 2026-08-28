@@ -8,6 +8,8 @@ require "./checkpoint/schedule"
 
 module Pylon::Session
   class Server
+    @sent : Core::Entry? = nil
+
     def initialize(
       @endpoint : LocalEndpoint,
       @input : IO,
@@ -17,7 +19,6 @@ module Pylon::Session
     )
       @lock = Sync::Mutex.new
       @stopping = false
-      @sent = nil.as(Core::Entry?)
       @sequence = 0_u32
     end
 
