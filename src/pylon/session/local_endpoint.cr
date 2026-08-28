@@ -15,7 +15,7 @@ module Pylon::Session
     @baseline : Core::Entry?
     @recheck : Set(String)
 
-    def initialize(@root : String, @ignores : Scan::Ignores = Scan::Ignores::NONE)
+    def initialize(@root : String, @ignores : Scan::Ignores = Scan::Ignores::NONE, @compression : Int32 = Compress::Zstd::DEFAULT_LEVEL)
       @cache = Scan::Cache.new
       @by_digest = {} of Bytes => String
       @baseline = nil
@@ -69,7 +69,7 @@ module Pylon::Session
         emit: ->(io : IO) do
           buffer = Bytes.new(Wire::Chunks::CHUNK_BYTES)
           scratch = Wire::Chunks.scratch
-          codec = Compress::Zstd.new
+          codec = Compress::Zstd.new(@compression)
 
           wanted.each { |want| @disk.stream(want.path, want.digest, io, buffer, codec, scratch) }
         end,

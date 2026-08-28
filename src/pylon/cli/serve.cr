@@ -19,8 +19,11 @@ struct Pylon::CLI
     @[Kebab::Option(description: "Where to keep sync state")]
     getter state : String?
 
+    @[Kebab::Option(description: "zstd level for content sent from this side")]
+    getter compression : Int32 = Pylon::Compress::Zstd::DEFAULT_LEVEL
+
     def run : Nil
-      endpoint = Session::LocalEndpoint.new(root, Scan::Ignores.new(ignore))
+      endpoint = Session::LocalEndpoint.new(root, Scan::Ignores.new(ignore), compression: compression)
 
       state.try do |path|
         restored = Session::Checkpoint.load(path)

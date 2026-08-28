@@ -24,6 +24,9 @@ struct Pylon::CLI
     @[Kebab::Option(description: "Where to keep sync state")]
     getter state : String?
 
+    @[Kebab::Option(description: "zstd level for content sent from this side")]
+    getter compression : Int32 = Pylon::Compress::Zstd::DEFAULT_LEVEL
+
     @[Kebab::Option(short: 'w', description: "Keep running and sync on every change")]
     getter? watch : Bool = false
 
@@ -37,8 +40,8 @@ struct Pylon::CLI
       ignores = Scan::Ignores.new(ignore)
       restored = state.try { |path| Session::Checkpoint.load(path) } || Session::Checkpoint.new
 
-      left = Session::LocalEndpoint.new(local, ignores)
-      right = Session::LocalEndpoint.new(remote, ignores)
+      left = Session::LocalEndpoint.new(local, ignores, compression: compression)
+      right = Session::LocalEndpoint.new(remote, ignores, compression: compression)
       left.cache = restored.local_cache
       right.cache = restored.remote_cache
 

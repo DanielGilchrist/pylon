@@ -39,6 +39,9 @@ struct Pylon::CLI
     @[Kebab::Option(description: "Where to keep sync state")]
     getter state : String?
 
+    @[Kebab::Option(description: "zstd level for content sent from this side")]
+    getter compression : Int32 = Pylon::Compress::Zstd::DEFAULT_LEVEL
+
     @[Kebab::Option(short: 'w', description: "Keep running and sync on every change")]
     getter? watch : Bool = false
 
@@ -73,7 +76,7 @@ struct Pylon::CLI
         reporter = Reporter.new(STDOUT, verbose?, dry_run?)
         reporter.starting(local, remote) unless dry_run?
 
-        left = Session::LocalEndpoint.new(local, ignores)
+        left = Session::LocalEndpoint.new(local, ignores, compression: compression)
         left.cache = restored.local_cache
 
         signals = Channel(Nil).new(16)
@@ -158,6 +161,7 @@ struct Pylon::CLI
 
     private def server_command(remote_path : String) : String
       parts = [remote_command, Process.quote(remote_path)]
+      parts << "--compression" << compression.to_s
       ignore.each { |pattern| parts << "--ignore" << Process.quote(pattern) }
       parts.join(' ')
     end

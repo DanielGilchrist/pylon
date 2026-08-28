@@ -99,7 +99,7 @@ module Pylon::Session
         end
       in Wire::ContentsRequest
         @lock.synchronize do
-          Wire::ContentsResponse.new(@endpoint.content_source(request.digests, request.budget).contents).write(@output)
+          Wire::ContentsResponse.new(@endpoint.content_source(request.digests, request.budget)).write(@output)
         end
       in Wire::WriteRequest
         @lock.synchronize do
