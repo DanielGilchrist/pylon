@@ -135,7 +135,7 @@ struct Pylon::CLI
       subscriber = Watch::Watcher.open(local, ignore, signals)
 
       if subscriber.nil?
-        STDERR.puts("pylon: watching needs watchman on this machine")
+        STDERR.puts("pylon: watching is unavailable for this directory")
         exit(1)
       end
 

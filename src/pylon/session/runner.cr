@@ -1,4 +1,3 @@
-require "../watch/watchman/client"
 require "./session"
 
 module Pylon::Session

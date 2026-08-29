@@ -1,23 +1,23 @@
 require "./inotify"
-require "./watchman/subscriber"
+require "./fsevents"
 
 module Pylon::Watch
   {% if flag?(:linux) %}
     alias Any = Inotify
+  {% elsif flag?(:darwin) %}
+    alias Any = FSEvents
   {% else %}
-    alias Any = Watchman::Subscriber
+    {% raise "pylon only supports watching on linux (inotify) and macos (fsevents)" %}
   {% end %}
 
   module Watcher
     extend self
 
-    # Linux watches inotify directly, so the remote needs nothing installed.
-    # macOS goes through watchman, which owns FSEvents for us.
-    def open(root : String, ignores : Array(String), signals : Channel(Nil), name : String = "pylon") : Any?
+    def open(root : String, ignores : Array(String), signals : Channel(Nil)) : Any?
       {% if flag?(:linux) %}
         Inotify.open(root, ignores, signals)
-      {% else %}
-        Watchman::Subscriber.open(root, ignores, signals, name)
+      {% elsif flag?(:darwin) %}
+        FSEvents.open(root, ignores, signals)
       {% end %}
     end
   end

@@ -30,7 +30,7 @@ struct Pylon::CLI
         endpoint.cache = restored.local_cache if restored
       end
 
-      subscriber = Watch::Watcher.open(root, ignore, Channel(Nil).new(1), "pylon-server")
+      subscriber = Watch::Watcher.open(root, ignore, Channel(Nil).new(1))
       endpoint.accelerate! if subscriber
 
       checkpoints = state.try do |path|

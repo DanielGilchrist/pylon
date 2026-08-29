@@ -43,10 +43,6 @@ module Pylon::Watch
       @context = Fiber::ExecutionContext::Isolated.new("inotify") { listen }
     end
 
-    def pending? : Bool
-      @lock.synchronize { @fresh || !@dirty.empty? }
-    end
-
     def drain : Dirty
       @lock.synchronize do
         dirty = @fresh ? Everything.new : Touched.new(@dirty.to_a)

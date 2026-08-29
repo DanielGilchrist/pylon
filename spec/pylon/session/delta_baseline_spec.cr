@@ -22,7 +22,7 @@ private def in_watched_pair(& : String, String, Session(LocalEndpoint, RemoteEnd
   Dir.mkdir_p(remote)
 
   signals = ::Channel(Nil).new(16)
-  watcher = Pylon::Watch::Watcher.open(remote, [] of String, signals, "pylon-delta-spec")
+  watcher = Pylon::Watch::Watcher.open(remote, [] of String, signals)
 
   if watcher.nil?
     FileUtils.rm_rf(base)
