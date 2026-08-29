@@ -1,6 +1,5 @@
 @[Link(pkg_config: "libzstd", lib: "zstd")]
 lib LibZstd
-  fun version_number = ZSTD_versionNumber : UInt32
   fun compress_bound = ZSTD_compressBound(src_size : LibC::SizeT) : LibC::SizeT
   fun is_error = ZSTD_isError(code : LibC::SizeT) : UInt32
   fun error_name = ZSTD_getErrorName(code : LibC::SizeT) : UInt8*

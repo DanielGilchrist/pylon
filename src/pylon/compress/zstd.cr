@@ -5,12 +5,7 @@ module Pylon::Compress
   struct Zstd
     include Codec
 
-    MINIMUM_VERSION = 10_400_u32
-    DEFAULT_LEVEL   =          1
-
-    def self.available? : Bool
-      LibZstd.version_number >= MINIMUM_VERSION
-    end
+    DEFAULT_LEVEL = 1
 
     def initialize(@level : Int32 = DEFAULT_LEVEL)
     end

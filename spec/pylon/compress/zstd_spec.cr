@@ -23,10 +23,6 @@ private def round_trip(codec, source : Bytes) : Bytes
 end
 
 describe Pylon::Compress::Zstd do
-  it "is present and recent enough to use" do
-    Zstd.available?.should be_true
-  end
-
   it "round trips text" do
     source = (RUBY * 40).to_slice
 
