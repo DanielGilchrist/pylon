@@ -116,15 +116,16 @@ describe Pylon::CLI::Reporter do
     output.should contain("removed")
   end
 
-  it "points at the flag that explains a skip" do
+  it "keeps skips out of normal output and explains them in verbose mode" do
     report = report_of(remote: [skipped("notes.txt")])
 
     quiet = rendered(report)
-    quiet.should contain("1 skipped")
-    quiet.should contain("-v")
-    quiet.should_not contain("modification detected")
+    quiet.should_not contain("skipped")
+    quiet.should_not contain("notes.txt")
 
-    rendered(report, verbose: true).should contain("modification detected")
+    verbose = rendered(report, verbose: true)
+    verbose.should contain("1 skipped")
+    verbose.should contain("modification detected")
   end
 
   it "leads with the halt and says nothing changed" do

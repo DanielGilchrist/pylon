@@ -115,7 +115,7 @@ struct Pylon::CLI
 
       outgoing = report.remote_outcomes.select(&.applied?)
       incoming = report.local_outcomes.select(&.applied?)
-      skipped = report.skipped
+      skipped = @verbose ? report.skipped : [] of Write::Outcome
       spoke = announce(report.conflicts)
 
       return unless spoke || !outgoing.empty? || !incoming.empty? || !skipped.empty?
@@ -124,13 +124,11 @@ struct Pylon::CLI
       show("↓", Colorize::ColorANSI::Blue, incoming)
 
       unless skipped.empty?
-        @io.puts "#{indent}#{"·".colorize.dark_gray} #{skipped.size} skipped#{@verbose ? "" : ", run with -v for detail"}".colorize.dark_gray
+        @io.puts "#{indent}#{"·".colorize.dark_gray} #{skipped.size} skipped".colorize.dark_gray
 
-        if @verbose
-          skipped.each do |outcome|
-            reason = outcome.skipped.try(&.explain)
-            @io.puts "#{indent}  #{outcome.path} #{"(#{reason})".colorize.dark_gray}"
-          end
+        skipped.each do |outcome|
+          reason = outcome.skipped.try(&.explain)
+          @io.puts "#{indent}  #{outcome.path} #{"(#{reason})".colorize.dark_gray}"
         end
       end
 
