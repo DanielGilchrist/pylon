@@ -26,10 +26,12 @@ module Pylon::Scan
       private def self.modified_at(stat : LibC::Stat) : LibC::Timespec
         stat.st_mtimespec
       end
-    {% else %}
+    {% elsif flag?(:linux) %}
       private def self.modified_at(stat : LibC::Stat) : LibC::Timespec
         stat.st_mtim
       end
+    {% else %}
+      {% raise "pylon only knows the stat layout on linux and macos" %}
     {% end %}
 
     getter mode : UInt32
