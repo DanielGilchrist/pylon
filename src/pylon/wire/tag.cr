@@ -7,8 +7,6 @@ module Pylon::Wire
     ContentsResponse
     WriteRequest
     WriteResponse
-    PollRequest
-    PollResponse
     TreeUpdate
     TreeDelta
   end

@@ -109,11 +109,7 @@ module Pylon::Session
           Wire::WriteResponse.new(outcomes).write(@output)
           @checkpoints.try(&.save_if_due)
         end
-      in Wire::PollRequest
-        @lock.synchronize do
-          Wire::PollResponse.new(@subscriber.try(&.pending?) != false).write(@output)
-        end
-      in Wire::Failure, Wire::ScanResponse, Wire::PollResponse, Wire::TreeUpdate, Wire::TreeDelta,
+      in Wire::Failure, Wire::ScanResponse, Wire::TreeUpdate, Wire::TreeDelta,
          Wire::ContentsResponse, Wire::WriteResponse
         @lock.synchronize do
           Wire::Failure.new("unexpected message from the client").write(@output)

@@ -64,29 +64,6 @@ describe Pylon::Session::Runner do
     end
   end
 
-  it "cycles when the remote reports a change" do
-    in_pair do |_, remote, session|
-      remote_changed = true
-      runner = Runner.new(
-        session,
-        Channel(Nil).new(1),
-        debounce: 1.millisecond,
-        poll: 10.milliseconds,
-        remote_poll: -> { value = remote_changed; remote_changed = false; value },
-      )
-      reports = [] of Report
-
-      spawn { runner.run { |report| reports << report } }
-
-      Fiber.yield
-      File.write(File.join(remote, "from_remote.rb"), "z")
-      sleep 80.milliseconds
-      runner.stop
-
-      reports.size.should be >= 2
-    end
-  end
-
   it "does not cycle while nothing is happening" do
     in_pair do |_, _, session|
       runner = Runner.new(session, Channel(Nil).new(1), debounce: 1.millisecond, poll: 10.milliseconds)

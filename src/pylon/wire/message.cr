@@ -1,8 +1,6 @@
 require "./contents_request"
 require "./contents_response"
 require "./failure"
-require "./poll_request"
-require "./poll_response"
 require "./scan_request"
 require "./scan_response"
 require "./write_request"
@@ -13,8 +11,6 @@ require "./tree_update"
 
 module Pylon::Wire
   alias Message = Failure |
-                  PollRequest |
-                  PollResponse |
                   ScanRequest |
                   ScanResponse |
                   ContentsRequest |
@@ -39,8 +35,6 @@ module Pylon::Wire
     in .contents_response? then ContentsResponse.new(read_contents(io))
     in .write_request?     then WriteRequest.new(Binary.read_changes(io), read_contents(io))
     in .write_response?    then WriteResponse.new(Binary.read_outcomes(io))
-    in .poll_request?      then PollRequest.new
-    in .poll_response?     then PollResponse.new(Binary.read_bool(io))
     in .tree_update?       then TreeUpdate.new(io.read_bytes(UInt32, FORMAT), Chunks.read_entry(io))
     in .tree_delta?        then TreeDelta.new(io.read_bytes(UInt32, FORMAT), Binary.read_changes(io))
     end

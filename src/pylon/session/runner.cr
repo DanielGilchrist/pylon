@@ -10,7 +10,6 @@ module Pylon::Session
       @signals : Channel(Nil),
       @debounce : Time::Span = DEFAULT_DEBOUNCE,
       @poll : Time::Span = DEFAULT_POLL,
-      @remote_poll : Proc(Bool)? = nil,
       @before : Proc(Nil)? = nil,
     )
       @stopping = false
@@ -48,7 +47,7 @@ module Pylon::Session
       when @signals.receive?
         true
       when timeout(@poll)
-        remote_changed?
+        false
       end
     end
 
@@ -63,13 +62,6 @@ module Pylon::Session
           break
         end
       end
-    end
-
-    private def remote_changed? : Bool
-      poll = @remote_poll
-      return false if poll.nil?
-
-      poll.call
     end
 
     private def cycle : Report
