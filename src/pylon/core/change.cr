@@ -28,11 +28,5 @@ module Pylon::Core
 
     def initialize(@path : String, @old : Entry?, @new : Entry?)
     end
-
-    def ==(other : Change) : Bool
-      path == other.path &&
-        Entry.equal?(old, other.old) &&
-        Entry.equal?(new, other.new)
-    end
   end
 end
