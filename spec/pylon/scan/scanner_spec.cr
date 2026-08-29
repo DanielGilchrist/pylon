@@ -104,8 +104,12 @@ describe Pylon::Scan::Scanner do
   it "produces a tree the reconciler treats as settled against itself" do
     snapshot = scan(sample)
 
-    Reconciler.reconcile(snapshot.root, snapshot.root, snapshot.root)
-      .empty?.should be_true
+    reconciliation = Reconciler.reconcile(snapshot.root, snapshot.root, snapshot.root)
+
+    reconciliation.base_changes.should be_empty
+    reconciliation.local_changes.should be_empty
+    reconciliation.remote_changes.should be_empty
+    reconciliation.conflicts.should be_empty
   end
 end
 

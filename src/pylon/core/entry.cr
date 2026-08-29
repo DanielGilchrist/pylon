@@ -153,11 +153,5 @@ module Pylon::Core
         end
       end
     end
-
-    def contains_unsynchronizable? : Bool
-      return true unless synchronizable?
-
-      contents.each_value.any?(&.contains_unsynchronizable?)
-    end
   end
 end

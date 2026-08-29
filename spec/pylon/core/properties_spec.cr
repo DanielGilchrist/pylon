@@ -22,6 +22,12 @@ private def random_base(random : Random, depth : Int32) : Entry?
   Entry.synchronizable(random_entry(random, depth))
 end
 
+private def contains_unsynchronizable?(entry : Entry) : Bool
+  return true unless entry.synchronizable?
+
+  entry.contents.each_value.any? { |child| contains_unsynchronizable?(child) }
+end
+
 private def synchronizable_projection(entry : Entry?) : Entry?
   Entry.synchronizable(entry)
 end
@@ -95,7 +101,7 @@ describe "reconciler properties" do
 
         next if updated.nil?
 
-        updated.contains_unsynchronizable?.should be_false,
+        contains_unsynchronizable?(updated).should be_false,
           "seed=#{seed} iteration=#{iteration} mode=#{mode}: base holds unsynchronizable content"
       end
     end
