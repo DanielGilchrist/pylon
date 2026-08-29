@@ -46,16 +46,18 @@ module Pylon
 
     def stream(relative_path : String, digest : Bytes, io : IO, buffer : Bytes, codec, scratch : Bytes) : Nil
       Wire::Binary.write_bytes(io, digest)
+      streamed = Digest::SHA256.new
 
       File.open(absolute(relative_path)) do |file|
         while (read = file.read(buffer)) > 0
+          streamed.update(buffer[0, read])
           Wire::Chunks.write_chunk(io, buffer[0, read], codec, scratch)
         end
       end
 
-      Wire::Chunks.write_end(io)
+      Wire::Chunks.write_end(io, valid: streamed.final == digest)
     rescue File::Error
-      Wire::Chunks.write_end(io)
+      Wire::Chunks.write_end(io, valid: false)
     end
 
     def link_target(relative_path : String) : String?

@@ -20,8 +20,9 @@ module Pylon::Wire
       io.write(packed)
     end
 
-    def write_end(io : IO) : Nil
+    def write_end(io : IO, valid : Bool = true) : Nil
       io.write_bytes(0_u32, FORMAT)
+      Binary.write_bool(io, valid)
     end
 
     def write_all(io : IO, content : Bytes, codec, scratch : Bytes) : Nil
@@ -43,10 +44,13 @@ module Pylon::Wire
     end
 
     def read_entry(io : IO) : Core::Entry?
-      Binary.read_entry(IO::Memory.new(read_all(io, Compress::Zstd.new, scratch)))
+      packed = read_all(io, Compress::Zstd.new, scratch)
+      raise Truncated.new("the tree payload arrived invalidated") if packed.nil?
+
+      Binary.read_entry(IO::Memory.new(packed))
     end
 
-    def read_all(io : IO, codec, scratch : Bytes) : Bytes
+    def read_all(io : IO, codec, scratch : Bytes) : Bytes?
       collected = IO::Memory.new
 
       loop do
@@ -62,6 +66,8 @@ module Pylon::Wire
 
         collected.write(unpacked)
       end
+
+      return nil unless Binary.read_bool(io)
 
       collected.to_slice
     end

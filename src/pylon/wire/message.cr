@@ -58,7 +58,8 @@ module Pylon::Wire
 
     count.times do
       digest = Binary.read_required_bytes(io)
-      contents[digest] = Chunks.read_all(io, codec, scratch)
+      content = Chunks.read_all(io, codec, scratch)
+      contents[digest] = content if content
     end
 
     contents

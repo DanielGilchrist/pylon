@@ -1,3 +1,4 @@
+require "digest/sha256"
 require "../scan/scanner"
 require "../watch/dirty"
 require "../disk"
@@ -92,7 +93,9 @@ module Pylon::Session
 
       wanted.each do |want|
         content = @disk.read(want.path)
-        contents[want.digest] = content if content
+        next if content.nil?
+
+        contents[want.digest] = content if Digest::SHA256.digest(content).to_slice == want.digest
       end
 
       contents
