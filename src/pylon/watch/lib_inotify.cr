@@ -28,5 +28,4 @@ lib LibInotify
 
   fun inotify_init1(flags : Int32) : Int32
   fun inotify_add_watch(fd : Int32, pathname : UInt8*, mask : UInt32) : Int32
-  fun inotify_rm_watch(fd : Int32, wd : Int32) : Int32
 end
