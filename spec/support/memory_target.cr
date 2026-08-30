@@ -1,5 +1,6 @@
 require "digest/sha256"
 require "../../src/pylon/scan/metadata"
+require "../../src/pylon/write/problem"
 
 class MemoryTarget
   record Node,
@@ -39,16 +40,16 @@ class MemoryTarget
     )
   end
 
-  def create_directory(path : String) : Bool
-    return false unless writable?
+  def create_directory(path : String) : Pylon::Write::Problem?
+    return read_only unless writable?
 
     operations << "mkdir #{path}"
     @nodes[path] = Node.new(kind: Pylon::Core::Entry::Kind::Directory, inode: take_inode)
-    true
+    nil
   end
 
-  def write_file(path : String, content : Bytes, executable : Bool) : Bool
-    return false unless writable?
+  def write_file(path : String, content : Bytes, executable : Bool) : Pylon::Write::Problem?
+    return read_only unless writable?
 
     operations << "write #{path}"
     @nodes[path] = Node.new(
@@ -58,31 +59,34 @@ class MemoryTarget
       inode: take_inode,
       mtime_ns: 5_000_i64,
     )
-    true
+    nil
   end
 
-  def create_symlink(path : String, target : String) : Bool
-    return false unless writable?
+  def create_symlink(path : String, target : String) : Pylon::Write::Problem?
+    return read_only unless writable?
 
     operations << "symlink #{path}"
     @nodes[path] = Node.new(kind: Pylon::Core::Entry::Kind::SymbolicLink, target: target, inode: take_inode)
-    true
+    nil
   end
 
-  def set_executable(path : String, executable : Bool) : Bool
+  def set_executable(path : String, executable : Bool) : Pylon::Write::Problem?
     node = @nodes[path]?
-    return false if node.nil? || !writable?
+    return Pylon::Write::Problem.new("no such file") if node.nil?
+    return read_only unless writable?
 
     operations << "chmod #{path}"
     @nodes[path] = node.copy_with(executable: executable)
-    true
+    nil
   end
 
-  def remove(path : String) : Bool
+  def remove(path : String) : Pylon::Write::Problem?
+    return read_only unless writable?
+
     operations << "remove #{path}"
     prefix = "#{path}/"
     @nodes.reject! { |key, _| key == path || key.starts_with?(prefix) }
-    true
+    nil
   end
 
   def seed_file(path : String, content : String, executable = false, inode = 1_u64, mtime_ns = 1_000_i64) : Bytes
@@ -99,6 +103,10 @@ class MemoryTarget
 
   def seed_directory(path : String) : Nil
     @nodes[path] = Node.new(kind: Pylon::Core::Entry::Kind::Directory, inode: take_inode)
+  end
+
+  private def read_only : Pylon::Write::Problem
+    Pylon::Write::Problem.new("the target is read-only")
   end
 
   private def take_inode : UInt64

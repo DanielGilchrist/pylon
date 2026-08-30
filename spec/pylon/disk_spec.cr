@@ -18,7 +18,7 @@ end
 describe Pylon::Disk do
   it "writes a file and sets the executable bit" do
     in_sandbox do |root, target|
-      target.write_file("script.sh", "#!/bin/sh\n".to_slice, true).should be_true
+      target.write_file("script.sh", "#!/bin/sh\n".to_slice, true).should be_nil
 
       File.read(File.join(root, "script.sh")).should eq("#!/bin/sh\n")
       File.info(File.join(root, "script.sh")).permissions.value.should eq(0o755)
@@ -31,7 +31,7 @@ describe Pylon::Disk do
       File.write(path, "before")
       original_inode = Pylon::Scan::Metadata.of(path).not_nil!.inode
 
-      target.write_file("notes.txt", "after".to_slice, false).should be_true
+      target.write_file("notes.txt", "after".to_slice, false).should be_nil
 
       File.read(path).should eq("after")
       Pylon::Scan::Metadata.of(path).not_nil!.inode.should_not eq(original_inode)
@@ -50,7 +50,7 @@ describe Pylon::Disk do
 
   it "creates a symlink and reads its target back" do
     in_sandbox do |root, target|
-      target.create_symlink("link", "elsewhere.txt").should be_true
+      target.create_symlink("link", "elsewhere.txt").should be_nil
 
       File.readlink(File.join(root, "link")).should eq("elsewhere.txt")
       Pylon::Scan::Metadata.of(File.join(root, "link")).not_nil!.kind.should eq(Entry::Kind::SymbolicLink)
@@ -59,8 +59,8 @@ describe Pylon::Disk do
 
   it "replaces an existing symlink" do
     in_sandbox do |root, target|
-      target.create_symlink("link", "first").should be_true
-      target.create_symlink("link", "second").should be_true
+      target.create_symlink("link", "first").should be_nil
+      target.create_symlink("link", "second").should be_nil
 
       File.readlink(File.join(root, "link")).should eq("second")
     end
@@ -72,10 +72,10 @@ describe Pylon::Disk do
       File.write(path, "x")
       File.chmod(path, 0o640)
 
-      target.set_executable("f", true).should be_true
+      target.set_executable("f", true).should be_nil
       File.info(path).permissions.value.should eq(0o750)
 
-      target.set_executable("f", false).should be_true
+      target.set_executable("f", false).should be_nil
       File.info(path).permissions.value.should eq(0o640)
     end
   end
@@ -85,14 +85,14 @@ describe Pylon::Disk do
       Dir.mkdir_p(File.join(root, "app", "models"))
       File.write(File.join(root, "app", "models", "user.rb"), "x")
 
-      target.remove("app").should be_true
+      target.remove("app").should be_nil
       Dir.exists?(File.join(root, "app")).should be_false
     end
   end
 
   it "treats removing a missing path as done" do
     in_sandbox do |_, target|
-      target.remove("never-existed").should be_true
+      target.remove("never-existed").should be_nil
     end
   end
 
@@ -101,7 +101,7 @@ describe Pylon::Disk do
       File.write(File.join(root, "real.txt"), "keep me")
       target.create_symlink("link", "real.txt")
 
-      target.remove("link").should be_true
+      target.remove("link").should be_nil
       File.exists?(File.join(root, "real.txt")).should be_true
       File.exists?(File.join(root, "link")).should be_false
     end

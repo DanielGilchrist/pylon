@@ -3,6 +3,7 @@ require "file_utils"
 require "./wire/chunks"
 require "./wire/binary"
 require "./scan/metadata"
+require "./write/problem"
 
 module Pylon
   struct Disk
@@ -66,33 +67,33 @@ module Pylon
       nil
     end
 
-    def create_directory(relative_path : String) : Bool
+    def create_directory(relative_path : String) : Write::Problem?
       path = absolute(relative_path)
-      return true if Dir.exists?(path)
+      return nil if Dir.exists?(path)
 
       Dir.mkdir_p(path)
-      true
-    rescue File::Error
-      false
+      nil
+    rescue error : File::Error
+      problem(error)
     end
 
-    def write_file(relative_path : String, content : Bytes, executable : Bool) : Bool
+    def write_file(relative_path : String, content : Bytes, executable : Bool) : Write::Problem?
       staged(absolute(relative_path)) do |temporary|
         File.write(temporary, content)
         File.chmod(temporary, executable ? 0o755 : 0o644)
       end
     end
 
-    def create_symlink(relative_path : String, target : String) : Bool
+    def create_symlink(relative_path : String, target : String) : Write::Problem?
       staged(absolute(relative_path)) do |temporary|
         File.symlink(target, temporary)
       end
     end
 
-    def set_executable(relative_path : String, executable : Bool) : Bool
+    def set_executable(relative_path : String, executable : Bool) : Write::Problem?
       path = absolute(relative_path)
       mode = Scan::Metadata.of(path).try(&.mode)
-      return false if mode.nil?
+      return Write::Problem.new("the permissions could not be read") if mode.nil?
 
       permissions = (mode & 0o7777_u32)
       permissions =
@@ -103,33 +104,37 @@ module Pylon
         end
 
       File.chmod(path, permissions.to_i32)
-      true
-    rescue File::Error
-      false
+      nil
+    rescue error : File::Error
+      problem(error)
     end
 
-    def remove(relative_path : String) : Bool
+    def remove(relative_path : String) : Write::Problem?
       path = absolute(relative_path)
       info = File.info?(path, follow_symlinks: false)
-      return true if info.nil?
+      return nil if info.nil?
 
       info.directory? ? FileUtils.rm_rf(path) : File.delete(path)
-      true
-    rescue File::Error
-      false
+      nil
+    rescue error : File::Error
+      problem(error)
     end
 
-    private def staged(path : String, & : String ->) : Bool
+    private def staged(path : String, & : String ->) : Write::Problem?
       temporary = File.join(File.dirname(path), "#{TEMPORARY_PREFIX}#{Random::Secure.hex(8)}")
 
       begin
         yield temporary
         File.rename(temporary, path)
-        true
-      rescue File::Error
+        nil
+      rescue error : File::Error
         File.delete?(temporary)
-        false
+        problem(error)
       end
+    end
+
+    private def problem(error : File::Error) : Write::Problem
+      Write::Problem.new(error.message || error.class.name)
     end
 
     private def absolute(relative_path : String) : String

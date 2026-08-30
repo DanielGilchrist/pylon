@@ -5,6 +5,7 @@ require "../core/entry"
 require "../scan/snapshot"
 require "./guard"
 require "./outcome"
+require "./problem"
 
 module Pylon::Write
   struct Writer(F, S)
@@ -150,9 +151,17 @@ module Pylon::Write
         return swapped
       end
 
-      @filesystem.remove(change.path) if clear_first?(change.old, change.new)
+      if clear_first?(change.old, change.new)
+        if (blocked = @filesystem.remove(change.path))
+          return Outcome.new(change.path, change.old, :write_failed, blocked.reason)
+        end
+      end
 
       created = create(change.path, change.new)
+
+      if created.is_a?(Problem)
+        return Outcome.new(change.path, change.old, :write_failed, created.reason)
+      end
 
       return Outcome.new(change.path, created, :staged_content_missing) if incomplete?(change.new, created)
 
@@ -176,24 +185,27 @@ module Pylon::Write
       return nil unless old.digest == new.digest
       return nil if old.executable? == new.executable?
 
-      return nil unless @filesystem.set_executable(change.path, new.executable?)
+      return nil if @filesystem.set_executable(change.path, new.executable?)
 
       Outcome.new(change.path, new)
     end
 
-    private def create(path : String, entry : Core::Entry?) : Core::Entry?
+    private def create(path : String, entry : Core::Entry?) : Core::Entry | Problem | Nil
       return nil if entry.nil?
 
       case entry.kind
       in .directory?
-        return nil unless @filesystem.create_directory(path)
+        if (blocked = @filesystem.create_directory(path))
+          return blocked
+        end
 
         contents = {} of String => Core::Entry
 
         entry.contents.each do |name, child|
-          if (created = create(Core::Paths.join(path, name), child))
-            contents[name] = created
-          end
+          created = create(Core::Paths.join(path, name), child)
+          return created if created.is_a?(Problem)
+
+          contents[name] = created if created
         end
 
         Core::Entry.directory(contents)
@@ -204,15 +216,12 @@ module Pylon::Write
         content = @staging.content(digest)
         return nil if content.nil?
 
-        return nil unless @filesystem.write_file(path, content, entry.executable?)
-
-        entry
+        @filesystem.write_file(path, content, entry.executable?) || entry
       in .symbolic_link?
         target = entry.target
         return nil if target.nil?
-        return nil unless @filesystem.create_symlink(path, target)
 
-        entry
+        @filesystem.create_symlink(path, target) || entry
       in .untracked?, .problematic?
         nil
       end

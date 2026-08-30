@@ -7,6 +7,7 @@ module Pylon::Write
     UnknownState
     StagedContentMissing
     DryRun
+    WriteFailed
 
     def explain : String
       case self
@@ -14,6 +15,7 @@ module Pylon::Write
       in .unknown_state?          then "unknown state"
       in .staged_content_missing? then "staged content missing"
       in .dry_run?                then "dry run"
+      in .write_failed?           then "the write failed"
       end
     end
   end
@@ -21,7 +23,8 @@ module Pylon::Write
   record Outcome,
     path : String,
     entry : Core::Entry?,
-    skipped : Skipped? = nil do
+    skipped : Skipped? = nil,
+    problem : String? = nil do
     # Both ends apply these to their own copy of the remote tree so the next
     # delta has a shared baseline.
     def self.changes(outcomes : Array(Outcome)) : Array(Core::Change)

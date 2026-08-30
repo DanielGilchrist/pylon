@@ -149,6 +149,38 @@ describe Pylon::Write::Writer do
     target.nodes.has_key?("ghost.txt").should be_false
   end
 
+  it "says why a write failed instead of hiding the reason" do
+    target = MemoryTarget.new
+    target.writable = false
+    staging = MemoryStaging.new
+    digest = staging.add("hello")
+
+    outcome = Writer.new(target, staging, Pylon::Scan::Cache.new)
+      .write([Change.new("greeting.txt", nil, Entry.file(digest))]).first
+
+    outcome.applied?.should be_false
+    outcome.skipped.should eq(Skipped::WriteFailed)
+    outcome.problem.should eq("the target is read-only")
+    outcome.entry.should be_nil
+  end
+
+  it "says why a deletion failed and keeps the base honest" do
+    target = MemoryTarget.new
+    staging = MemoryStaging.new
+    digest = target.seed_file("stuck", "body")
+    cache = cache_for(target, ["stuck"])
+    target.writable = false
+
+    outcome = Writer.new(target, staging, cache)
+      .write([Change.new("stuck", Entry.file(digest), nil)]).first
+
+    outcome.applied?.should be_false
+    outcome.skipped.should eq(Skipped::WriteFailed)
+    outcome.problem.should eq("the target is read-only")
+    outcome.entry.should_not be_nil
+    target.nodes.has_key?("stuck").should be_true
+  end
+
   it "reports the partially built subtree when a write fails midway" do
     target = MemoryTarget.new
     staging = MemoryStaging.new

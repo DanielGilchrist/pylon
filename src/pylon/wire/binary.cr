@@ -141,6 +141,7 @@ module Pylon::Wire
         write_string(io, outcome.path)
         write_entry(io, outcome.entry)
         write_skipped(io, outcome.skipped)
+        write_string(io, outcome.problem)
       end
     end
 
@@ -149,7 +150,7 @@ module Pylon::Wire
       outcomes = Array(Write::Outcome).new(count)
 
       count.times do
-        outcomes << Write::Outcome.new(read_required_string(io), read_entry(io), read_skipped(io))
+        outcomes << Write::Outcome.new(read_required_string(io), read_entry(io), read_skipped(io), read_string(io))
       end
 
       outcomes

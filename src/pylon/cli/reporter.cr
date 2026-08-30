@@ -139,7 +139,7 @@ struct Pylon::CLI
         @io.puts "#{indent}#{"·".colorize.dark_gray} #{skipped.size} skipped".colorize.dark_gray
 
         skipped.each do |outcome|
-          reason = outcome.skipped.try(&.explain)
+          reason = outcome.problem || outcome.skipped.try(&.explain)
           @io.puts "#{indent}  #{outcome.path} #{"(#{reason})".colorize.dark_gray}"
         end
       end
