@@ -11,12 +11,20 @@ module Pylon::Session
     record Damaged, reason : String
 
     def self.load(path : String) : Checkpoint | Absent | Damaged
-      File.open(path, "rb") do |io|
+      File.open(path, "rb") { |io| read(io) }
+    rescue File::NotFoundError
+      Absent.new
+    rescue error : File::Error
+      Damaged.new(error.message || error.class.name)
+    end
+
+    private def self.read(io : IO) : Checkpoint | Damaged
+      loaded = Wire::Truncated.contain do
         magic = Bytes.new(MAGIC.bytesize)
         io.read_fully(magic)
-        return Damaged.new("not a pylon state file") unless String.new(magic) == MAGIC
-        return Damaged.new("written by a different pylon version") unless io.read_bytes(UInt32, Wire::FORMAT) == VERSION
-        return Damaged.new("unknown digest algorithm") unless Wire::Binary.read_string(io) == DIGEST
+        next Damaged.new("not a pylon state file") unless String.new(magic) == MAGIC
+        next Damaged.new("written by a different pylon version") unless io.read_bytes(UInt32, Wire::FORMAT) == VERSION
+        next Damaged.new("unknown digest algorithm") unless Wire::Binary.read_string(io) == DIGEST
 
         new(
           base: Wire::Binary.read_entry(io),
@@ -24,10 +32,8 @@ module Pylon::Session
           remote_cache: Wire::Binary.read_cache(io),
         )
       end
-    rescue File::NotFoundError
-      Absent.new
-    rescue error : File::Error | IO::EOFError | Wire::Truncated
-      Damaged.new(error.message || error.class.name)
+
+      loaded.is_a?(Wire::Invalid) ? Damaged.new(loaded.reason) : loaded
     end
 
     getter base : Core::Entry?

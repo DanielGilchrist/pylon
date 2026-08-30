@@ -46,20 +46,17 @@ module Pylon::Wire
                   TreeDelta
 
   record Closed
-  record Invalid, reason : String
 
   def self.read_message(io : IO) : Message | Closed | Invalid
     byte = first_byte(io)
     return Closed.new if byte.nil?
 
-    tag = Tag.from_value?(byte)
-    return Invalid.new("unknown message tag #{byte}, both sides must run the same pylon version") if tag.nil?
+    Truncated.contain do
+      tag = Tag.from_value?(byte)
+      next Invalid.new("unknown message tag #{byte}, both sides must run the same pylon version") if tag.nil?
 
-    decode(tag, io)
-  rescue truncated : Truncated
-    Invalid.new(truncated.message || "the stream was cut mid-message")
-  rescue error : IO::Error
-    Invalid.new(error.message || "the stream failed mid-message")
+      decode(tag, io)
+    end
   end
 
   private def self.first_byte(io : IO) : UInt8?
