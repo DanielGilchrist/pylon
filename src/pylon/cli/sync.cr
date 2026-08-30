@@ -115,18 +115,12 @@ struct Pylon::CLI
     end
 
     private def drive(session, reporter, checkpoints, remote_endpoint, local_endpoint, target, signals) : Nil
-      run = ->(body : Proc(Nil)) do
-        begin
-          body.call
-        rescue Wire::Truncated
-          fail_with(reporter, "the remote server stopped. Check that #{remote_command.inspect} exists on #{target.host}")
-        rescue error : Session::RemoteEndpoint::ProtocolError
-          fail_with(reporter, "the remote server misbehaved: #{error.message}")
-        end
-      end
-
       unless watch?
-        run.call(-> { reporter.report(session.cycle(Time.utc.to_unix_ns.to_i64)); checkpoints.try(&.save); nil })
+        result = session.cycle(Time.utc.to_unix_ns.to_i64)
+        report_fault(reporter, result, target) if result.is_a?(Session::Fault)
+
+        reporter.report(result)
+        checkpoints.try(&.save)
         return
       end
 
@@ -149,22 +143,30 @@ struct Pylon::CLI
       started = Time.instant
       first = true
 
-      run.call(-> {
-        runner.run do |report|
-          reporter.report(report)
+      fault = runner.run do |report|
+        reporter.report(report)
 
-          if first
-            first = false
-            reporter.ready(Time.instant - started, local_endpoint.cache.size)
-          end
-
-          checkpoints.try(&.save_if_due)
+        if first
+          first = false
+          reporter.ready(Time.instant - started, local_endpoint.cache.size)
         end
 
-        checkpoints.try(&.save)
-        nil
-      })
+        checkpoints.try(&.save_if_due)
+      end
+
+      report_fault(reporter, fault, target) if fault
+
+      checkpoints.try(&.save)
       subscriber.close
+    end
+
+    private def report_fault(reporter : Reporter, fault : Session::Fault, target : Target) : NoReturn
+      case fault
+      in Session::Stopped
+        fail_with(reporter, "#{fault.explain}. Check that #{remote_command.inspect} exists on #{target.host}")
+      in Session::Incompatible, Session::Misbehaved
+        fail_with(reporter, fault.explain)
+      end
     end
 
     private def abort_with(message : String) : NoReturn

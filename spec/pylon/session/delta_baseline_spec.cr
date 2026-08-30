@@ -54,11 +54,11 @@ describe "the tree delta baseline" do
       400.times { |index| File.write(File.join(local, "app", "models", "f#{index}.rb"), "class F#{index}; end") }
       File.write(File.join(local, "db", "structure.sql"), "-- schema")
 
-      session.cycle(tick)
+      cycle!(session, tick)
       sleep 300.milliseconds # let the server's watcher fire and push a delta
 
       3.times do
-        report = session.cycle(tick)
+        report = cycle!(session, tick)
         report.halted?.should be_false, "a cycle halted, which means a side looked emptied"
         sleep 150.milliseconds
       end

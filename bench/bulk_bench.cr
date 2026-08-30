@@ -67,6 +67,7 @@ session = Session::Session.new(left, right, push_first: true)
 
 started = Time.instant
 report = session.cycle(Time.utc.to_unix_ns.to_i64)
+abort("the session faulted: #{report.explain}") if report.is_a?(Session::Fault)
 elapsed = Time.instant - started
 
 applied = report.remote_outcomes.count(&.applied?)
@@ -78,6 +79,7 @@ puts "roundtrip: #{right.exchanges} exchanges"
 
 verify_started = Time.instant
 second = session.cycle(Time.utc.to_unix_ns.to_i64)
+abort("the session faulted: #{second.explain}") if second.is_a?(Session::Fault)
 puts "verify:    converged=#{second.quiet?} (no-op cycle #{(Time.instant - verify_started).total_seconds.round(2)}s)"
 
 synced = Dir.glob(File.join(remote_root, "**", "*")).count { |path| File.file?(path) }

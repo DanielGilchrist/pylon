@@ -1,44 +1,45 @@
 require "../core/applier"
 require "../wire/message"
+require "./fault"
 
 module Pylon::Session
   class RemoteEndpoint
-    class ProtocolError < Exception
-    end
-
     # the reader fiber must never block, or it stops draining the socket
     # while the server is mid-push, which deadlocks both ends
     RESPONSE_BUFFER = 8
 
     getter exchanges = 0
 
-    @failure : Exception? = nil
+    @fault : Fault? = nil
     @tree : Core::Entry? = nil
 
     def initialize(@input : IO, @output : IO, @signals : Channel(Nil)? = nil)
       @responses = Channel(Wire::Message).new(RESPONSE_BUFFER)
+      @greeting = Channel(Nil).new
       @known = false
       @sequence = 0_u32
 
       spawn { listen }
     end
 
-    def scan(now_ns : Int64) : Scan::Snapshot
+    def scan(now_ns : Int64) : Scan::Snapshot | Fault
       return Scan::Snapshot.new(@tree, Scan::Cache.new) if @known
 
       reply = exchange(Wire::ScanRequest.new(now_ns))
-      raise ProtocolError.new("expected a scan response") unless reply.is_a?(Wire::ScanResponse)
+      return reply if reply.is_a?(Fault)
+      return unexpected("a scan response", reply) unless reply.is_a?(Wire::ScanResponse)
 
       @tree = reply.root
 
       Scan::Snapshot.new(reply.root, Scan::Cache.new)
     end
 
-    def content_source(digests : Array(Bytes), budget : UInt64) : Wire::ContentSource
+    def content_source(digests : Array(Bytes), budget : UInt64) : Wire::ContentSource | Fault
       return Wire::ContentSource::Materialised.new(Wire::Contents.new) if digests.empty?
 
       reply = exchange(Wire::ContentsRequest.new(digests, budget))
-      raise ProtocolError.new("expected a contents response") unless reply.is_a?(Wire::ContentsResponse)
+      return reply if reply.is_a?(Fault)
+      return unexpected("a contents response", reply) unless reply.is_a?(Wire::ContentsResponse)
 
       Wire::ContentSource::Materialised.new(reply.contents)
     end
@@ -51,17 +52,49 @@ module Pylon::Session
       transmit(Wire::WriteRequest.new(changes, source))
     end
 
-    def write_await : Array(Write::Outcome)
+    def write_await : Array(Write::Outcome) | Fault
       reply = await
-      raise ProtocolError.new("expected a write response") unless reply.is_a?(Wire::WriteResponse)
+      return reply if reply.is_a?(Fault)
+      return unexpected("a write response", reply) unless reply.is_a?(Wire::WriteResponse)
 
       @tree = Core::Applier.apply(@tree, Write::Outcome.changes(reply.outcomes))
       reply.outcomes
     end
 
+    private def unexpected(wanted : String, reply : Wire::Message) : Misbehaved
+      Misbehaved.new("expected #{wanted}, got #{reply.class.name}")
+    end
+
     private def listen : Nil
+      case greeting = Wire.read_greeting(@input)
+      in Wire::Compatible
+        @greeting.close
+      in Wire::Incompatible
+        stop_with(Incompatible.new(
+          "the remote pylon uses wire protocol version #{greeting.version} but this one uses #{Wire::PROTOCOL}. Update the remote binary",
+        ))
+        return
+      in Wire::Foreign
+        stop_with(Incompatible.new(
+          "the remote did not identify itself as a pylon server. It may be an outdated pylon binary or the wrong command",
+        ))
+        return
+      end
+
       loop do
         message = Wire.read_message(@input)
+
+        if message.is_a?(Wire::Closed)
+          @fault ||= Stopped.new
+          @responses.close
+          return
+        end
+
+        if message.is_a?(Wire::Invalid)
+          @fault ||= Stopped.new(message.reason)
+          @responses.close
+          return
+        end
 
         if message.is_a?(Wire::TreeUpdate)
           @tree = message.root
@@ -85,9 +118,12 @@ module Pylon::Session
 
         @responses.send(message)
       end
-    rescue error : Wire::Truncated | IO::Error
-      @failure = error
+    end
+
+    private def stop_with(fault : Fault) : Nil
+      @fault = fault
       @responses.close
+      @greeting.close
     end
 
     private def signal : Nil
@@ -100,23 +136,33 @@ module Pylon::Session
       end
     end
 
-    private def exchange(request : Wire::Message) : Wire::Message
-      transmit(request)
+    private def exchange(request : Wire::Message) : Wire::Message | Fault
+      if (fault = transmit(request))
+        return fault
+      end
+
       await
     end
 
-    private def transmit(request : Wire::Message) : Nil
+    private def transmit(request : Wire::Message) : Fault?
+      @greeting.receive?
+
+      if (fault = @fault)
+        return fault
+      end
+
       @exchanges += 1
       request.write(@output)
+      nil
     rescue error : IO::Error
-      @failure ||= error
-      raise Wire::Truncated.new("the remote stopped responding")
+      @fault ||= Stopped.new(error.message)
+      @fault
     end
 
-    private def await : Wire::Message
+    private def await : Wire::Message | Fault
       reply = @responses.receive?
-      raise(@failure || Wire::Truncated.new("the remote stopped responding")) if reply.nil?
-      raise ProtocolError.new(reply.message) if reply.is_a?(Wire::Failure)
+      return (@fault || Stopped.new) if reply.nil?
+      return Misbehaved.new(reply.message) if reply.is_a?(Wire::Failure)
 
       reply
     end

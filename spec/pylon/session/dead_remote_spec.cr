@@ -19,9 +19,7 @@ describe "a remote that is not there" do
     session = Session.new(LocalEndpoint.new(root), RemoteEndpoint.new(client, client))
 
     begin
-      expect_raises(Pylon::Wire::Truncated) do
-        session.cycle(Time.utc.to_unix_ns.to_i64)
-      end
+      session.cycle(Time.utc.to_unix_ns.to_i64).should be_a(Incompatible)
     ensure
       FileUtils.rm_rf(root)
     end

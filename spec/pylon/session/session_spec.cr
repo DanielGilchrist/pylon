@@ -44,7 +44,7 @@ describe Pylon::Session::Session do
     in_pair do |local, remote, session|
       File.write(File.join(local, "hello.rb"), "puts 1")
 
-      session.cycle(tick)
+      cycle!(session, tick)
 
       File.read(File.join(remote, "hello.rb")).should eq("puts 1")
     end
@@ -54,7 +54,7 @@ describe Pylon::Session::Session do
     in_pair do |local, remote, session|
       File.write(File.join(remote, "there.rb"), "puts 2")
 
-      session.cycle(tick)
+      cycle!(session, tick)
 
       File.read(File.join(local, "there.rb")).should eq("puts 2")
     end
@@ -65,8 +65,8 @@ describe Pylon::Session::Session do
       Dir.mkdir_p(File.join(local, "app", "models"))
       File.write(File.join(local, "app", "models", "user.rb"), "class User; end")
 
-      session.cycle(tick)
-      second = session.cycle(tick)
+      cycle!(session, tick)
+      second = cycle!(session, tick)
 
       second.quiet?.should be_true
     end
@@ -78,7 +78,7 @@ describe Pylon::Session::Session do
       File.write(File.join(local, "a", "one.rb"), "one")
       File.write(File.join(remote, "two.rb"), "two")
 
-      session.cycle(tick)
+      cycle!(session, tick)
 
       tree(local).should eq(tree(remote))
       tree(local).keys.sort!.should eq(["a/one.rb", "two.rb"])
@@ -89,11 +89,11 @@ describe Pylon::Session::Session do
     in_pair do |local, remote, session|
       path = File.join(local, "temp.rb")
       File.write(path, "x")
-      session.cycle(tick)
+      cycle!(session, tick)
       File.exists?(File.join(remote, "temp.rb")).should be_true
 
       File.delete(path)
-      session.cycle(tick)
+      cycle!(session, tick)
 
       File.exists?(File.join(remote, "temp.rb")).should be_false
     end
@@ -102,10 +102,10 @@ describe Pylon::Session::Session do
   it "propagates a modification back the other way" do
     in_pair do |local, remote, session|
       File.write(File.join(local, "notes.md"), "first")
-      session.cycle(tick)
+      cycle!(session, tick)
 
       File.write(File.join(remote, "notes.md"), "second")
-      session.cycle(tick)
+      cycle!(session, tick)
 
       File.read(File.join(local, "notes.md")).should eq("second")
     end
@@ -117,7 +117,7 @@ describe Pylon::Session::Session do
       File.write(path, "#!/bin/sh\n")
       File.chmod(path, 0o755)
 
-      session.cycle(tick)
+      cycle!(session, tick)
 
       File.info(File.join(remote, "run.sh")).permissions.value.should eq(0o755)
     end
@@ -126,11 +126,11 @@ describe Pylon::Session::Session do
   it "reports a conflict and touches neither side when both changed" do
     in_pair do |local, remote, session|
       File.write(File.join(local, "shared.rb"), "original")
-      session.cycle(tick)
+      cycle!(session, tick)
 
       File.write(File.join(local, "shared.rb"), "from local")
       File.write(File.join(remote, "shared.rb"), "from remote")
-      report = session.cycle(tick)
+      report = cycle!(session, tick)
 
       report.conflicts.map(&.root).should eq(["shared.rb"])
       File.read(File.join(local, "shared.rb")).should eq("from local")
@@ -141,11 +141,11 @@ describe Pylon::Session::Session do
   it "keeps a deleted file when the other side modified it" do
     in_pair do |local, remote, session|
       File.write(File.join(local, "kept.rb"), "original")
-      session.cycle(tick)
+      cycle!(session, tick)
 
       File.delete(File.join(local, "kept.rb"))
       File.write(File.join(remote, "kept.rb"), "edited")
-      session.cycle(tick)
+      cycle!(session, tick)
 
       File.read(File.join(local, "kept.rb")).should eq("edited")
     end
@@ -158,10 +158,10 @@ describe "safety halts" do
       File.write(File.join(local, "one.rb"), "1")
       File.write(File.join(local, "two.rb"), "2")
       File.write(File.join(local, "three.rb"), "3")
-      session.cycle(tick)
+      cycle!(session, tick)
 
       Dir.children(local).each { |name| File.delete(File.join(local, name)) }
-      report = session.cycle(tick)
+      report = cycle!(session, tick)
 
       report.halted?.should be_true
       report.halt.should eq(Safety::Reason::EndpointEmptiedRoot)
@@ -172,12 +172,12 @@ describe "safety halts" do
   it "keeps refusing until a human intervenes" do
     in_pair do |local, remote, session|
       3.times { |index| File.write(File.join(local, "f#{index}.rb"), "x") }
-      session.cycle(tick)
+      cycle!(session, tick)
 
       Dir.children(local).each { |name| File.delete(File.join(local, name)) }
 
-      session.cycle(tick).halted?.should be_true
-      session.cycle(tick).halted?.should be_true
+      cycle!(session, tick).halted?.should be_true
+      cycle!(session, tick).halted?.should be_true
       Dir.children(remote).size.should eq(3)
     end
   end
@@ -185,12 +185,12 @@ describe "safety halts" do
   it "propagates the deletion once the other side agrees" do
     in_pair do |local, remote, session|
       3.times { |index| File.write(File.join(local, "f#{index}.rb"), "x") }
-      session.cycle(tick)
+      cycle!(session, tick)
 
       Dir.children(local).each { |name| File.delete(File.join(local, name)) }
       Dir.children(remote).each { |name| File.delete(File.join(remote, name)) }
 
-      report = session.cycle(tick)
+      report = cycle!(session, tick)
 
       report.halted?.should be_false
       Dir.children(remote).should be_empty
@@ -205,7 +205,7 @@ describe "the first cycle when there is no saved state" do
       File.write(File.join(remote, "stale.rb"), "left over on the box")
 
       session = Session.new(LocalEndpoint.new(local), LocalEndpoint.new(remote), push_first: true)
-      session.cycle(tick)
+      cycle!(session, tick)
 
       File.exists?(File.join(remote, "mine.rb")).should be_true
       File.exists?(File.join(remote, "stale.rb")).should be_false
@@ -219,7 +219,7 @@ describe "the first cycle when there is no saved state" do
       File.write(File.join(remote, "shared.rb"), "from the box")
 
       session = Session.new(LocalEndpoint.new(local), LocalEndpoint.new(remote), push_first: true)
-      report = session.cycle(tick)
+      report = cycle!(session, tick)
 
       report.conflicts.should be_empty
       File.read(File.join(remote, "shared.rb")).should eq("from the local side")
@@ -231,10 +231,10 @@ describe "the first cycle when there is no saved state" do
       File.write(File.join(local, "mine.rb"), "local")
 
       session = Session.new(LocalEndpoint.new(local), LocalEndpoint.new(remote), push_first: true)
-      session.cycle(tick)
+      cycle!(session, tick)
 
       File.write(File.join(remote, "generated.rbi"), "made on the box")
-      session.cycle(tick)
+      cycle!(session, tick)
 
       File.read(File.join(local, "generated.rbi")).should eq("made on the box")
     end
@@ -244,7 +244,7 @@ describe "the first cycle when there is no saved state" do
     in_pair do |local, remote, session|
       File.write(File.join(remote, "from_box.rb"), "box")
 
-      session.cycle(tick)
+      cycle!(session, tick)
 
       File.exists?(File.join(local, "from_box.rb")).should be_true
     end

@@ -4,6 +4,13 @@ require "./support/entries"
 
 include Pylon::Core
 
+def cycle!(session, now_ns : Int64) : Pylon::Session::Report
+  result = session.cycle(now_ns)
+  return result if result.is_a?(Pylon::Session::Report)
+
+  raise "the session faulted: #{result.explain}"
+end
+
 record ReconcileCase,
   description : String,
   preferences : Array(Preferences),

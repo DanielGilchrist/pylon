@@ -26,6 +26,8 @@ module Pylon::Session
     READ_AHEAD = 1
 
     def run : Nil
+      return unless greet
+
       announce
       requests = receive_ahead
 
@@ -39,13 +41,27 @@ module Pylon::Session
       @checkpoints.try(&.save)
     end
 
+    private def greet : Bool
+      Wire.write_greeting(@output)
+      true
+    rescue IO::Error
+      false
+    end
+
     private def receive_ahead : Channel(Wire::Message)
       requests = Channel(Wire::Message).new(READ_AHEAD)
 
       spawn do
         begin
-          loop { requests.send(Wire.read_message(@input)) }
-        rescue Wire::Truncated | IO::Error | Channel::ClosedError
+          loop do
+            message = Wire.read_message(@input)
+            break if message.is_a?(Wire::Closed)
+            break if message.is_a?(Wire::Invalid)
+
+            requests.send(message)
+          end
+        rescue Channel::ClosedError
+        ensure
           requests.close
         end
       end

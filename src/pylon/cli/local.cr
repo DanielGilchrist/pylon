@@ -51,6 +51,7 @@ struct Pylon::CLI
       end
 
       ignores = Scan::Ignores.new(ignore)
+      reporter = Reporter.new(STDOUT, verbose?, dry_run?)
       restored = state.try { |path| Session::Checkpoint.load(path) } || Session::Checkpoint.new
 
       left = Session::LocalEndpoint.new(local, ignores, compression: compression)
@@ -66,13 +67,19 @@ struct Pylon::CLI
         dry_run: dry_run?,
         push_first: restored.base.nil?,
       )
-      reporter = Reporter.new(STDOUT, verbose?, dry_run?)
       checkpoints = state.try do |path|
         Session::Checkpoint::Schedule.new(path, -> { Session::Checkpoint.new(session.base, left.cache, right.cache) })
       end
 
       unless watch?
-        reporter.report(session.cycle(Time.utc.to_unix_ns.to_i64))
+        result = session.cycle(Time.utc.to_unix_ns.to_i64)
+
+        if result.is_a?(Session::Fault)
+          reporter.failed(result.explain)
+          exit(1)
+        end
+
+        reporter.report(result)
         checkpoints.try(&.save)
         return
       end
@@ -94,9 +101,14 @@ struct Pylon::CLI
       runner = Session::Runner.new(session, signals, before: -> { drain(watchers) })
       Signal::INT.trap { runner.stop }
 
-      runner.run do |report|
+      fault = runner.run do |report|
         reporter.report(report)
         checkpoints.try(&.save_if_due)
+      end
+
+      if fault
+        reporter.failed(fault.explain)
+        exit(1)
       end
 
       checkpoints.try(&.save)

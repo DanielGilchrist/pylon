@@ -19,8 +19,11 @@ module Pylon::Session
       @stopping = true
     end
 
-    def run(&block : Report ->) : Nil
-      block.call(cycle)
+    def run(&block : Report ->) : Fault?
+      report = cycle
+      return report if report.is_a?(Fault)
+
+      block.call(report)
 
       until @stopping
         next unless wait_for_work
@@ -31,6 +34,8 @@ module Pylon::Session
         report = cycle
         done = Time.instant
 
+        return report if report.is_a?(Fault)
+
         if ENV["PYLON_TIMING"]?
           STDERR.puts("settle=%.1fms cycle=%.1fms" % [
             (settled - woke).total_milliseconds,
@@ -40,6 +45,8 @@ module Pylon::Session
 
         block.call(report)
       end
+
+      nil
     end
 
     private def wait_for_work : Bool
@@ -64,7 +71,7 @@ module Pylon::Session
       end
     end
 
-    private def cycle : Report
+    private def cycle : Report | Fault
       @before.try(&.call)
       @session.cycle(Time.utc.to_unix_ns.to_i64)
     end

@@ -1,5 +1,6 @@
 require "wait_group"
 require "../core"
+require "./fault"
 require "./progress"
 require "./report"
 require "../core/digests"
@@ -24,10 +25,10 @@ module Pylon::Session
     )
     end
 
-    def cycle(now_ns : Int64) : Report
+    def cycle(now_ns : Int64) : Report | Fault
       started = Time.instant
-      local_scanned : Scan::Snapshot? = nil
-      remote_scanned : Scan::Snapshot? = nil
+      local_scanned : Scan::Snapshot | Fault | Nil = nil
+      remote_scanned : Scan::Snapshot | Fault | Nil = nil
       failure : Exception? = nil
 
       # A fiber that raises inside WaitGroup takes the process down with it,
@@ -57,6 +58,9 @@ module Pylon::Session
       local_snapshot = local_scanned
       remote_snapshot = remote_scanned
       raise "a scan fiber returned without a snapshot or a failure" if local_snapshot.nil? || remote_snapshot.nil?
+
+      return local_snapshot if local_snapshot.is_a?(Fault)
+      return remote_snapshot if remote_snapshot.is_a?(Fault)
 
       scanned = Time.instant
 
@@ -106,7 +110,10 @@ module Pylon::Session
       fetched = Time.instant
 
       local_outcomes = ship(local_changes, @remote, @local, :to_local)
+      return local_outcomes if local_outcomes.is_a?(Fault)
+
       remote_outcomes = ship(remote_changes, @local, @remote, :to_remote)
+      return remote_outcomes if remote_outcomes.is_a?(Fault)
 
       written = Time.instant
       commit(Core::Change.expand(reconciliation.base_changes), local_outcomes, remote_outcomes)
@@ -127,7 +134,7 @@ module Pylon::Session
       Report.new(reconciliation.conflicts, local_outcomes, remote_outcomes)
     end
 
-    private def ship(changes : Array(Core::Change), source, target, direction : Direction) : Array(Write::Outcome)
+    private def ship(changes : Array(Core::Change), source, target, direction : Direction) : Array(Write::Outcome) | Fault
       outcomes = [] of Write::Outcome
       total = changes.size
       pending = changes
@@ -139,6 +146,8 @@ module Pylon::Session
       until pending.empty?
         wanted = Core::Digests.required(pending)
         provided = source.content_source(wanted, TRANSFER_BUDGET)
+        return provided if provided.is_a?(Fault)
+
         batch, pending = split(pending, provided.digests)
 
         break if batch.empty?
@@ -147,14 +156,20 @@ module Pylon::Session
         inflight += 1
 
         if inflight == WRITE_WINDOW
-          outcomes.concat(target.write_await)
+          written = target.write_await
+          return written if written.is_a?(Fault)
+
+          outcomes.concat(written)
           inflight -= 1
           notify(direction, outcomes, total, total_bytes)
         end
       end
 
       inflight.times do
-        outcomes.concat(target.write_await)
+        written = target.write_await
+        return written if written.is_a?(Fault)
+
+        outcomes.concat(written)
         notify(direction, outcomes, total, total_bytes)
       end
 

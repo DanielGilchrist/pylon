@@ -10,6 +10,31 @@ require "./tree_delta"
 require "./tree_update"
 
 module Pylon::Wire
+  PROTOCOL = 1_u32
+  IDENTITY = "PYLON"
+
+  record Compatible
+  record Incompatible, version : UInt32
+  record Foreign
+
+  alias Greeting = Compatible | Incompatible | Foreign
+
+  def self.write_greeting(io : IO) : Nil
+    io.write(IDENTITY.to_slice)
+    io.write_bytes(PROTOCOL, FORMAT)
+  end
+
+  def self.read_greeting(io : IO) : Greeting
+    identity = Bytes.new(IDENTITY.bytesize)
+    io.read_fully(identity)
+    return Foreign.new unless identity == IDENTITY.to_slice
+
+    version = io.read_bytes(UInt32, FORMAT)
+    version == PROTOCOL ? Compatible.new : Incompatible.new(version)
+  rescue IO::Error
+    Foreign.new
+  end
+
   alias Message = Failure |
                   ScanRequest |
                   ScanResponse |
@@ -20,13 +45,30 @@ module Pylon::Wire
                   TreeUpdate |
                   TreeDelta
 
-  def self.read_message(io : IO) : Message
-    byte = io.read_byte
-    raise Truncated.new("stream ended before a message tag") if byte.nil?
+  record Closed
+  record Invalid, reason : String
+
+  def self.read_message(io : IO) : Message | Closed | Invalid
+    byte = first_byte(io)
+    return Closed.new if byte.nil?
 
     tag = Tag.from_value?(byte)
-    raise Truncated.new("unknown message tag") if tag.nil?
+    return Invalid.new("unknown message tag #{byte}, both sides must run the same pylon version") if tag.nil?
 
+    decode(tag, io)
+  rescue truncated : Truncated
+    Invalid.new(truncated.message || "the stream was cut mid-message")
+  rescue error : IO::Error
+    Invalid.new(error.message || "the stream failed mid-message")
+  end
+
+  private def self.first_byte(io : IO) : UInt8?
+    io.read_byte
+  rescue IO::Error
+    nil
+  end
+
+  private def self.decode(tag : Tag, io : IO) : Message
     case tag
     in .failure?           then Failure.new(Binary.read_required_string(io))
     in .scan_request?      then ScanRequest.new(io.read_bytes(Int64, FORMAT))
