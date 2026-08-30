@@ -32,6 +32,14 @@ struct Pylon::CLI
       animate(stop)
     end
 
+    def active? : Bool
+      !@stop.nil?
+    end
+
+    def resume : Nil
+      show(&@supply)
+    end
+
     def clear : Nil
       stop = @stop
       return if stop.nil?

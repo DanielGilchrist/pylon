@@ -85,7 +85,7 @@ struct Pylon::CLI
 
       if watchers.size < 2
         watchers.each { |_, subscriber| subscriber.close }
-        STDERR.puts("pylon: watching is unavailable for this directory")
+        reporter.failed("watching is unavailable for this directory")
         exit(1)
       end
 

@@ -147,4 +147,26 @@ describe Pylon::CLI::Reporter do
   it "says there is nothing to do on an empty dry run" do
     rendered(report_of, dry_run: true).should contain("nothing to do")
   end
+
+  it "sends a failure to the error stream on its own line" do
+    Colorize.enabled = false
+    output = IO::Memory.new
+    errors = IO::Memory.new
+
+    Pylon::CLI::Reporter.new(output, errors: errors).failed("the remote server stopped")
+
+    errors.to_s.should eq("pylon: the remote server stopped\n")
+    output.to_s.should be_empty
+  end
+
+  it "passes a remote line through to the error stream" do
+    Colorize.enabled = false
+    output = IO::Memory.new
+    errors = IO::Memory.new
+
+    Pylon::CLI::Reporter.new(output, errors: errors).relay("sh: pylon: not found")
+
+    errors.to_s.should contain("remote sh: pylon: not found")
+    output.to_s.should be_empty
+  end
 end

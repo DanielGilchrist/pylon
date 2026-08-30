@@ -7,7 +7,7 @@ include Pylon::Session
 describe Pylon::Session::SSH do
   it "builds a minimal command" do
     SSH.command(host: "user@host", remote_command: "pylon server /srv/app")
-      .should eq(["-q", "user@host", "pylon server /srv/app"])
+      .should eq(["user@host", "pylon server /srv/app"])
   end
 
   it "puts options before the host, where every ssh accepts them" do
@@ -19,7 +19,6 @@ describe Pylon::Session::SSH do
     )
 
     arguments.should eq([
-      "-q",
       "-F", "/home/me/.ssh/example_ssh_config",
       "-p", "2222",
       "user@host",
@@ -31,7 +30,7 @@ describe Pylon::Session::SSH do
 
   it "omits flags that were not asked for" do
     SSH.command(host: "h", remote_command: "c", port: "22")
-      .should eq(["-q", "-p", "22", "h", "c"])
+      .should eq(["-p", "22", "h", "c"])
   end
 end
 
@@ -50,5 +49,16 @@ describe Pylon::Session::ProcessTransport do
     transport = ProcessTransport.open("sh", ["-c", "exit 3"])
 
     transport.close.exit_code.should eq(3)
+  end
+
+  it "relays the child's error output line by line" do
+    lines = Channel(String).new(4)
+    transport = ProcessTransport.open("sh", ["-c", "echo one >&2; echo two >&2"]) do |line|
+      lines.send(line)
+    end
+
+    lines.receive.should eq("one")
+    lines.receive.should eq("two")
+    transport.close.success?.should be_true
   end
 end

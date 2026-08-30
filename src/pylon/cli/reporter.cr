@@ -11,7 +11,7 @@ struct Pylon::CLI
     @progress : Session::Progress? = nil
     @scan : Scan::Tally? = nil
 
-    def initialize(@io : IO, @verbose : Bool = false, @dry_run : Bool = false)
+    def initialize(@io : IO, @verbose : Bool = false, @dry_run : Bool = false, @errors : IO = STDERR)
       @announced = Set(String).new
       @spinner = Spinner.new(@io)
       @streamed = 0
@@ -91,6 +91,18 @@ struct Pylon::CLI
 
     private def mebibytes(bytes : UInt64) : String
       (bytes / (1024.0 * 1024.0)).round(1).to_s
+    end
+
+    def failed(message : String) : Nil
+      clear_progress
+      @errors.puts("pylon: #{message}")
+    end
+
+    def relay(line : String) : Nil
+      interrupted = @spinner.active?
+      clear_progress
+      @errors.puts("#{indent}#{"remote".colorize.dark_gray} #{line}")
+      @spinner.resume if interrupted
     end
 
     def ready(elapsed : Time::Span, watching : Int32) : Nil

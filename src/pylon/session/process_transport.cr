@@ -4,15 +4,30 @@ module Pylon::Session
     getter writer : IO
 
     def self.open(command : String, arguments : Array(String)) : ProcessTransport
-      process = Process.new(
+      new(start(command, arguments, Process::Redirect::Inherit))
+    end
+
+    def self.open(command : String, arguments : Array(String), &relay : String ->) : ProcessTransport
+      process = start(command, arguments, Process::Redirect::Pipe)
+      errors = process.error
+
+      spawn do
+        while (line = errors.gets)
+          relay.call(line)
+        end
+      end
+
+      new(process)
+    end
+
+    private def self.start(command : String, arguments : Array(String), error : Process::Redirect) : Process
+      Process.new(
         command,
         arguments,
         input: Process::Redirect::Pipe,
         output: Process::Redirect::Pipe,
-        error: Process::Redirect::Inherit,
+        error: error,
       )
-
-      new(process)
     end
 
     def initialize(@process : Process)

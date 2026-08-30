@@ -61,8 +61,7 @@ struct Pylon::CLI
       target = Target.parse(remote)
 
       if target.is_a?(Target::Invalid)
-        STDERR.puts(target.message)
-        exit(1)
+        abort_with(target.message)
       end
 
       preferences = Core::Preferences.build(prefer_local, prefer_remote)
@@ -72,6 +71,7 @@ struct Pylon::CLI
       end
 
       ignores = Scan::Ignores.new(ignore)
+      reporter = Reporter.new(STDOUT, verbose?, dry_run?)
       restored = state.try { |path| Session::Checkpoint.load(path) } || Session::Checkpoint.new
 
       transport = Session::ProcessTransport.open(
@@ -82,11 +82,9 @@ struct Pylon::CLI
           config: config,
           port: port,
         ),
-      )
+      ) { |line| reporter.relay(line) }
 
       begin
-        reporter = Reporter.new(STDOUT, verbose?, dry_run?)
-
         left = Session::LocalEndpoint.new(local, ignores, compression: compression)
         left.cache = restored.local_cache
         left.on_stream = ->(bytes : UInt64) { reporter.streamed(bytes) }
@@ -121,9 +119,9 @@ struct Pylon::CLI
         begin
           body.call
         rescue Wire::Truncated
-          abort_with("the remote server stopped; check that #{remote_command.inspect} exists on #{target.host}")
+          fail_with(reporter, "the remote server stopped. Check that #{remote_command.inspect} exists on #{target.host}")
         rescue error : Session::RemoteEndpoint::ProtocolError
-          abort_with("the remote server misbehaved: #{error.message}")
+          fail_with(reporter, "the remote server misbehaved: #{error.message}")
         end
       end
 
@@ -135,8 +133,7 @@ struct Pylon::CLI
       subscriber = Watch::Watcher.open(local, ignore, signals)
 
       if subscriber.nil?
-        STDERR.puts("pylon: watching is unavailable for this directory")
-        exit(1)
+        fail_with(reporter, "watching is unavailable for this directory")
       end
 
       local_endpoint.accelerate!
@@ -172,6 +169,11 @@ struct Pylon::CLI
 
     private def abort_with(message : String) : NoReturn
       STDERR.puts("pylon: #{message}")
+      exit(1)
+    end
+
+    private def fail_with(reporter : Reporter, message : String) : NoReturn
+      reporter.failed(message)
       exit(1)
     end
 
