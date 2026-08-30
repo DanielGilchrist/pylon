@@ -35,10 +35,10 @@ warm = Scanner.new(filesystem, cold.cache, now + 60_000_000_000_i64, IGNORES).sc
 warm_elapsed = Time.instant - started
 
 puts "warm scan:    #{warm_elapsed.total_milliseconds.round(1)} ms"
-puts "identical:    #{Entry.equal?(cold.root, warm.root)}"
+puts "identical:    #{cold.root == warm.root}"
 puts
 
 started = Time.instant
-base = Entry.synchronizable(cold.root)
+base = cold.root.try(&.synchronizable)
 reconciliation = Reconciler.reconcile(base, cold.root, warm.root)
 puts "reconcile:    #{(Time.instant - started).total_milliseconds.round(2)} ms (#{reconciliation.empty? ? "no changes" : "changes"})"

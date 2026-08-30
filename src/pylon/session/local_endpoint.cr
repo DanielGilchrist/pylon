@@ -123,7 +123,7 @@ module Pylon::Session
       changes.sum(0_u64) do |change|
         entry = change.new
 
-        if entry && entry.kind.file?
+        if entry.is_a?(Core::File)
           @cache[change.path]?.try(&.metadata.size) || 0_u64
         else
           0_u64

@@ -3,7 +3,7 @@ require "../../src/pylon/scan/metadata"
 
 struct MemoryFilesystem
   record Node,
-    kind : Pylon::Core::Entry::Kind,
+    kind : Pylon::Scan::Metadata::Kind,
     content : String = "",
     target : String = "",
     executable : Bool = false,
@@ -17,7 +17,7 @@ struct MemoryFilesystem
   end
 
   def self.build(files : Hash(String, String)) : MemoryFilesystem
-    nodes = {"" => Node.new(kind: Pylon::Core::Entry::Kind::Directory)}
+    nodes = {"" => Node.new(kind: Pylon::Scan::Metadata::Kind::Directory)}
     inode = 1_u64
 
     files.each do |path, content|
@@ -27,11 +27,11 @@ struct MemoryFilesystem
         next if index == parts.size - 1
 
         directory = parts[0, index + 1].join('/')
-        nodes[directory] ||= Node.new(kind: Pylon::Core::Entry::Kind::Directory)
+        nodes[directory] ||= Node.new(kind: Pylon::Scan::Metadata::Kind::Directory)
       end
 
       nodes[path] = Node.new(
-        kind: Pylon::Core::Entry::Kind::File,
+        kind: Pylon::Scan::Metadata::Kind::File,
         content: content,
         inode: inode,
         mtime_ns: 1_000_i64,
@@ -54,11 +54,10 @@ struct MemoryFilesystem
 
     mode =
       case node.kind
-      in Pylon::Core::Entry::Kind::Directory    then LibC::S_IFDIR | 0o755
-      in Pylon::Core::Entry::Kind::File         then LibC::S_IFREG | (node.executable ? 0o755 : 0o644)
-      in Pylon::Core::Entry::Kind::SymbolicLink then LibC::S_IFLNK | 0o777
-      in Pylon::Core::Entry::Kind::Untracked    then LibC::S_IFIFO | 0o644
-      in Pylon::Core::Entry::Kind::Problematic  then LibC::S_IFREG | 0o644
+      in Pylon::Scan::Metadata::Kind::Directory    then LibC::S_IFDIR | 0o755
+      in Pylon::Scan::Metadata::Kind::File         then LibC::S_IFREG | (node.executable ? 0o755 : 0o644)
+      in Pylon::Scan::Metadata::Kind::SymbolicLink then LibC::S_IFLNK | 0o777
+      in Pylon::Scan::Metadata::Kind::Untracked    then LibC::S_IFIFO | 0o644
       end
 
     Pylon::Scan::Metadata.new(

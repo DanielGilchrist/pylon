@@ -10,7 +10,7 @@ require "./tree_delta"
 require "./tree_update"
 
 module Pylon::Wire
-  PROTOCOL = 1_u32
+  PROTOCOL = 2_u32
   IDENTITY = "PYLON"
 
   record Compatible

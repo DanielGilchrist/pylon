@@ -31,8 +31,8 @@ module Pylon::Core
           return
         end
 
-        if Entry.equal?(local, remote)
-          adopt(path, base, Entry.synchronizable(local))
+        if local == remote
+          adopt(path, base, local.try(&.synchronizable))
           return
         end
 
@@ -41,11 +41,10 @@ module Pylon::Core
           return
         end
 
-        local_synchronizable = Entry.synchronizable(local)
-        remote_synchronizable = Entry.synchronizable(remote)
+        local_synchronizable = local.try(&.synchronizable)
+        remote_synchronizable = remote.try(&.synchronizable)
 
-        if local_synchronizable && remote_synchronizable &&
-           local_synchronizable.directory? && remote_synchronizable.directory?
+        if local_synchronizable.is_a?(Directory) && remote_synchronizable.is_a?(Directory)
           descend(path, base, local_synchronizable, remote_synchronizable)
           return
         end
@@ -54,8 +53,8 @@ module Pylon::Core
       end
 
       private def merge(path : String, base : Entry?, local : Entry?, remote : Entry?) : Nil
-        local_changed = !Entry.equal?(base, local)
-        remote_changed = !Entry.equal?(base, remote)
+        local_changed = base != local
+        remote_changed = base != remote
 
         return if !local_changed && !remote_changed
 
@@ -89,14 +88,14 @@ module Pylon::Core
         end
       end
 
-      private def descend(path : String, base : Entry?, local : Entry, remote : Entry) : Nil
-        base_directory = base.try { |entry| entry.directory? ? entry : nil }
+      private def descend(path : String, base : Entry?, local : Directory, remote : Directory) : Nil
+        base_directory = base.is_a?(Directory) ? base : nil
 
         if base_directory.nil?
-          adopt(path, base, Entry.directory)
+          adopt(path, base, Directory.new)
         end
 
-        base_contents = (base_directory || Entry.directory).contents
+        base_contents = (base_directory || Directory.new).contents
         local_contents = local.contents
         remote_contents = remote.contents
 
@@ -125,7 +124,7 @@ module Pylon::Core
       private def settled?(base : Entry?, local : Entry, remote : Entry?) : Bool
         return false if remote.nil?
 
-        Entry.equal?(base, local) && local.equal?(remote)
+        base == local && local == remote
       end
 
       private def propagate_to_remote(path : String, base : Entry?, local : Entry?, remote : Entry?) : Nil
@@ -147,7 +146,7 @@ module Pylon::Core
       end
 
       private def adopt(path : String, base : Entry?, entry : Entry?) : Nil
-        return if Entry.equal?(base, entry)
+        return if base == entry
 
         base_changes << Change.new(path, base, entry)
       end
@@ -159,11 +158,11 @@ module Pylon::Core
       end
 
       private def unreadable?(entry : Entry?) : Bool
-        !entry.nil? && entry.problematic?
+        entry.is_a?(Problematic)
       end
 
       private def ignored?(entry : Entry?) : Bool
-        entry.nil? || entry.untracked?
+        entry.nil? || entry.is_a?(Untracked)
       end
 
       private def blocked?(entry : Entry?) : Bool

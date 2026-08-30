@@ -15,50 +15,89 @@ module Fixtures
   PREFERRING_REMOTE = [REMOTE_WINS]
 
   def self.f1 : Entry
-    Entry.file(D1)
+    Pylon::Core::File.new(D1)
   end
 
   def self.f2 : Entry
-    Entry.file(D2)
+    Pylon::Core::File.new(D2)
   end
 
   def self.f1x : Entry
-    Entry.file(D1, executable: true)
+    Pylon::Core::File.new(D1, executable: true)
   end
 
   def self.symlink_relative : Entry
-    Entry.symlink("other")
+    Pylon::Core::SymbolicLink.new("other")
   end
 
   def self.symlink_absolute : Entry
-    Entry.symlink("/other")
+    Pylon::Core::SymbolicLink.new("/other")
   end
 
   def self.untracked : Entry
-    Entry.untracked
+    Pylon::Core::Untracked.new
   end
 
   def self.problematic : Entry
-    Entry.problematic("permission denied")
+    Pylon::Core::Problematic.new("permission denied")
   end
 
   def self.d0 : Entry
-    Entry.directory
+    Pylon::Core::Directory.new
   end
 
   def self.d1 : Entry
-    Entry.directory({"file" => f1})
+    Pylon::Core::Directory.new({"file" => f1})
   end
 
   def self.d2 : Entry
-    Entry.directory({"file" => f2})
+    Pylon::Core::Directory.new({"file" => f2})
   end
 
   def self.du : Entry
-    Entry.directory({"file" => untracked})
+    Pylon::Core::Directory.new({"file" => untracked})
   end
 
   def self.dir(contents : Hash(String, Entry)) : Entry
-    Entry.directory(contents)
+    Pylon::Core::Directory.new(contents)
+  end
+end
+
+module Fixtures
+  def self.directory!(entry : Pylon::Core::Entry?) : Pylon::Core::Directory
+    raise "expected a directory, got #{entry.inspect}" unless entry.is_a?(Pylon::Core::Directory)
+
+    entry
+  end
+
+  def self.file!(entry : Pylon::Core::Entry?) : Pylon::Core::File
+    raise "expected a file, got #{entry.inspect}" unless entry.is_a?(Pylon::Core::File)
+
+    entry
+  end
+
+  def self.link!(entry : Pylon::Core::Entry?) : Pylon::Core::SymbolicLink
+    raise "expected a symlink, got #{entry.inspect}" unless entry.is_a?(Pylon::Core::SymbolicLink)
+
+    entry
+  end
+
+  def self.problem!(entry : Pylon::Core::Entry?) : Pylon::Core::Problematic
+    raise "expected a problematic entry, got #{entry.inspect}" unless entry.is_a?(Pylon::Core::Problematic)
+
+    entry
+  end
+
+  def self.dig!(entry : Pylon::Core::Entry?, *names : String) : Pylon::Core::Entry
+    current = entry
+
+    names.each do |name|
+      current = directory!(current).contents[name]?
+      raise "missing entry #{name.inspect} under #{names.inspect}" if current.nil?
+    end
+
+    raise "missing entry at #{names.inspect}" if current.nil?
+
+    current
   end
 end

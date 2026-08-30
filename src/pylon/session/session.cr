@@ -161,7 +161,7 @@ module Pylon::Session
 
       changes.each do |change|
         entry = change.new
-        digest = entry && entry.kind.file? ? entry.digest : nil
+        digest = entry.is_a?(Core::File) ? entry.digest : nil
 
         break if digest && !available.includes?(digest)
 
@@ -188,7 +188,7 @@ module Pylon::Session
         end
       end
 
-      @base = Core::Entry.synchronizable(Core::Applier.apply(@base, changes))
+      @base = Core::Applier.apply(@base, changes).try(&.synchronizable)
     end
   end
 end

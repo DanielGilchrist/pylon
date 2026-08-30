@@ -10,12 +10,12 @@ module Pylon::Core
     end
 
     private def self.widen(path : String, old : Entry?, new : Entry?, into : Array(Change)) : Nil
-      if new.nil? || !new.kind.directory? || new.contents.empty?
+      if !new.is_a?(Directory) || new.contents.empty?
         into << Change.new(path, old, new)
         return
       end
 
-      into << Change.new(path, old, Entry.directory)
+      into << Change.new(path, old, Directory.new)
 
       new.contents.each do |name, child|
         widen(Paths.join(path, name), nil, child, into)

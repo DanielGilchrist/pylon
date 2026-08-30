@@ -53,7 +53,7 @@ describe Pylon::Disk do
       target.create_symlink("link", "elsewhere.txt").should be_nil
 
       File.readlink(File.join(root, "link")).should eq("elsewhere.txt")
-      Pylon::Scan::Metadata.of(File.join(root, "link")).not_nil!.kind.should eq(Entry::Kind::SymbolicLink)
+      Pylon::Scan::Metadata.of(File.join(root, "link")).not_nil!.kind.should eq(Pylon::Scan::Metadata::Kind::SymbolicLink)
     end
   end
 

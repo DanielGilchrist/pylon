@@ -29,7 +29,7 @@ end
 describe Pylon::Session::Checkpoint do
   it "round trips an base and both caches" do
     in_sandbox do |path|
-      base = Entry.directory({"app" => Entry.directory({"user.rb" => Fixtures.f1})})
+      base = Pylon::Core::Directory.new({"app" => Pylon::Core::Directory.new({"user.rb" => Fixtures.f1})})
 
       Checkpoint.new(base, sample_cache, Pylon::Scan::Cache.new).save(path).should be_nil
 
@@ -37,7 +37,7 @@ describe Pylon::Session::Checkpoint do
       loaded.should be_a(Checkpoint)
       next unless loaded.is_a?(Checkpoint)
 
-      Entry.equal?(loaded.base, base).should be_true
+      (loaded.base == base).should be_true
 
       entry = loaded.local_cache["app/user.rb"]
       entry.metadata.inode.should eq(9_u64)
@@ -80,7 +80,7 @@ describe Pylon::Session::Checkpoint do
 
   it "reports a truncated store as damaged rather than half a state" do
     in_sandbox do |path|
-      Checkpoint.new(Entry.directory({"a" => Fixtures.f1}), sample_cache, sample_cache).save(path)
+      Checkpoint.new(Pylon::Core::Directory.new({"a" => Fixtures.f1}), sample_cache, sample_cache).save(path)
       bytes = File.read(path).to_slice.dup
 
       File.write(path, bytes[0, bytes.size // 2])

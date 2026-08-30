@@ -15,10 +15,12 @@ module Pylon::Scan
     @next_cache : Cache
     @dirty : Set(String)
 
-    private record Surveyed,
-      kind : Core::Entry::Kind,
-      metadata : Metadata? = nil,
-      target : String? = nil
+    private record SurveyedDirectory
+    private record SurveyedFile, metadata : Metadata
+    private record SurveyedLink, target : String?
+    private record SurveyedUntracked
+
+    private alias Surveyed = SurveyedDirectory | SurveyedFile | SurveyedLink | SurveyedUntracked
 
     private class Survey
       getter nodes = {} of String => Surveyed
@@ -86,7 +88,7 @@ module Pylon::Scan
       end
 
       if @ignores.ignore?(path)
-        survey.nodes[path] = Surveyed.new(kind: :untracked)
+        survey.nodes[path] = SurveyedUntracked.new
         return
       end
 
@@ -95,9 +97,9 @@ module Pylon::Scan
 
       case observed.kind
       in .directory?
-        survey.nodes[path] = Surveyed.new(kind: :directory)
+        survey.nodes[path] = SurveyedDirectory.new
         names = [] of String
-        baseline_contents = baseline.try { |entry| entry.directory? ? entry.contents : nil }
+        baseline_contents = baseline.is_a?(Core::Directory) ? baseline.contents : nil
 
         @filesystem.each_child(path) do |name|
           child = Core::Paths.join(path, name)
@@ -107,7 +109,7 @@ module Pylon::Scan
 
         survey.children[path] = names
       in .file?
-        survey.nodes[path] = Surveyed.new(kind: :file, metadata: observed)
+        survey.nodes[path] = SurveyedFile.new(observed)
         @tally.saw_file
 
         if (digest = @cache[path]?.try(&.reuse(observed, @now_ns, @granularity_ns)))
@@ -116,25 +118,23 @@ module Pylon::Scan
           survey.pending << path
         end
       in .symbolic_link?
-        survey.nodes[path] = Surveyed.new(
-          kind: :symbolic_link,
-          target: @filesystem.link_target(path),
-        )
-      in .untracked?, .problematic?
-        survey.nodes[path] = Surveyed.new(kind: :untracked)
+        survey.nodes[path] = SurveyedLink.new(@filesystem.link_target(path))
+      in .untracked?
+        survey.nodes[path] = SurveyedUntracked.new
       end
     end
 
     private def carry_cache(path : String, entry : Core::Entry) : Nil
-      if entry.kind.file?
+      case entry
+      in Core::File
         if (cached = @cache[path]?)
           @next_cache[path] = cached
         end
-
-        return
+      in Core::Directory
+        entry.contents.each { |name, child| carry_cache(Core::Paths.join(path, name), child) }
+      in Core::SymbolicLink, Core::Untracked, Core::Problematic
+        nil
       end
-
-      entry.contents.each { |name, child| carry_cache(Core::Paths.join(path, name), child) }
     end
 
     private def hash_pending(survey : Survey, digests : Hash(String, Bytes)) : Nil
@@ -188,7 +188,8 @@ module Pylon::Scan
     end
 
     private def weight(survey : Survey, path : String) : Int64
-      survey.nodes[path]?.try(&.metadata).try(&.size.to_i64) || 0_i64
+      node = survey.nodes[path]?
+      node.is_a?(SurveyedFile) ? node.metadata.size.to_i64 : 0_i64
     end
 
     private def build(survey : Survey, digests : Hash(String, Bytes), path : String) : Core::Entry?
@@ -199,8 +200,8 @@ module Pylon::Scan
       node = survey.nodes[path]?
       return nil if node.nil?
 
-      case node.kind
-      in .directory?
+      case node
+      in SurveyedDirectory
         contents = {} of String => Core::Entry
 
         survey.children[path]?.try &.each do |name|
@@ -209,26 +210,23 @@ module Pylon::Scan
           end
         end
 
-        Core::Entry.directory(contents)
-      in .file?
-        observed = node.metadata
+        Core::Directory.new(contents)
+      in SurveyedFile
         digest = digests[path]?
 
-        return Core::Entry.problematic("unreadable") if observed.nil? || digest.nil?
+        return Core::Problematic.new("unreadable") if digest.nil?
 
-        @next_cache[path] = CacheEntry.new(observed, digest)
+        @next_cache[path] = CacheEntry.new(node.metadata, digest)
 
-        Core::Entry.file(digest, executable: observed.executable?)
-      in .symbolic_link?
+        Core::File.new(digest, executable: node.metadata.executable?)
+      in SurveyedLink
         target = node.target
 
-        return Core::Entry.problematic("unreadable link") if target.nil?
+        return Core::Problematic.new("unreadable link") if target.nil?
 
-        Core::Entry.symlink(target)
-      in .untracked?
-        Core::Entry.untracked
-      in .problematic?
-        Core::Entry.problematic("unreadable")
+        Core::SymbolicLink.new(target)
+      in SurveyedUntracked
+        Core::Untracked.new
       end
     end
   end

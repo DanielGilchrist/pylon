@@ -189,7 +189,7 @@ struct Pylon::CLI
     private def show(arrow : String, colour : Colorize::ColorANSI, outcomes : Array(Write::Outcome)) : Nil
       return if outcomes.empty?
 
-      written = outcomes.select { |outcome| outcome.entry.try(&.kind.file?) }
+      written = outcomes.select { |outcome| outcome.entry.is_a?(Core::File) }
       deleted = outcomes.select { |outcome| outcome.entry.nil? }
 
       if outcomes.size > SUMMARISE_OVER && !@verbose
@@ -272,7 +272,7 @@ struct Pylon::CLI
       entry = outcome.entry
 
       return "delete".colorize.red.to_s if entry.nil?
-      return "mkdir ".colorize.dark_gray.to_s if entry.kind.directory?
+      return "mkdir ".colorize.dark_gray.to_s if entry.is_a?(Core::Directory)
 
       "write ".colorize.dark_gray.to_s
     end

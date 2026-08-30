@@ -43,7 +43,7 @@ module Pylon::Write
 
     private def independent?(change : Core::Change) : Bool
       new = change.new
-      return false if new.nil? || !new.kind.file?
+      return false unless new.is_a?(Core::File)
 
       !clear_first?(change.old, new)
     end
@@ -144,7 +144,7 @@ module Pylon::Write
     private def clear_first?(old : Core::Entry?, new : Core::Entry?) : Bool
       return false if old.nil?
       return true if new.nil?
-      return true if old.kind.directory? || new.kind.directory?
+      return true if old.is_a?(Core::Directory) || new.is_a?(Core::Directory)
 
       false
     end
@@ -153,8 +153,7 @@ module Pylon::Write
       old = change.old
       new = change.new
 
-      return nil if old.nil? || new.nil?
-      return nil unless old.kind.file? && new.kind.file?
+      return nil unless old.is_a?(Core::File) && new.is_a?(Core::File)
       return nil unless old.digest == new.digest
       return nil if old.executable? == new.executable?
 
@@ -164,10 +163,10 @@ module Pylon::Write
     end
 
     private def create(path : String, entry : Core::Entry?) : Core::Entry | Problem | Nil
-      return nil if entry.nil?
-
-      case entry.kind
-      in .directory?
+      case entry
+      in Nil, Core::Untracked, Core::Problematic
+        nil
+      in Core::Directory
         if (blocked = @filesystem.create_directory(path))
           return blocked
         end
@@ -181,27 +180,19 @@ module Pylon::Write
           contents[name] = created if created
         end
 
-        Core::Entry.directory(contents)
-      in .file?
-        digest = entry.digest
-        return nil if digest.nil?
-
-        content = @staging.content(digest)
+        Core::Directory.new(contents)
+      in Core::File
+        content = @staging.content(entry.digest)
         return nil if content.nil?
 
         @filesystem.write_file(path, content, entry.executable?) || entry
-      in .symbolic_link?
-        target = entry.target
-        return nil if target.nil?
-
-        @filesystem.create_symlink(path, target) || entry
-      in .untracked?, .problematic?
-        nil
+      in Core::SymbolicLink
+        @filesystem.create_symlink(path, entry.target) || entry
       end
     end
 
     private def incomplete?(intended : Core::Entry?, created : Core::Entry?) : Bool
-      !Core::Entry.equal?(intended, created)
+      intended != created
     end
   end
 end

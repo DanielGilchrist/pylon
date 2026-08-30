@@ -8,26 +8,28 @@ FILES_PER    =     5
 DIGEST_ALPHA = "a".to_slice
 DIGEST_BETA  = "b".to_slice
 
-def build_tree : Entry
+def build_tree : Directory
   root = {} of String => Entry
 
   DIRECTORIES.times do |index|
     contents = {} of String => Entry
-    FILES_PER.times { |file| contents["file_#{file}.rb"] = Entry.file(DIGEST_ALPHA) }
-    root["dir_#{index}"] = Entry.directory(contents)
+    FILES_PER.times { |file| contents["file_#{file}.rb"] = Pylon::Core::File.new(DIGEST_ALPHA) }
+    root["dir_#{index}"] = Pylon::Core::Directory.new(contents)
   end
 
-  Entry.directory(root)
+  Pylon::Core::Directory.new(root)
 end
 
-def with_one_change(tree : Entry) : Entry
+def with_one_change(tree : Directory) : Directory
   root = tree.contents.dup
   target = root["dir_4000"]
-  contents = target.contents.dup
-  contents["file_2.rb"] = Entry.file(DIGEST_BETA)
-  root["dir_4000"] = target.with_contents(contents)
+  raise "expected dir_4000 to be a directory" unless target.is_a?(Directory)
 
-  tree.with_contents(root)
+  contents = target.contents.dup
+  contents["file_2.rb"] = Pylon::Core::File.new(DIGEST_BETA)
+  root["dir_4000"] = Directory.new(contents)
+
+  Directory.new(root)
 end
 
 tree = build_tree

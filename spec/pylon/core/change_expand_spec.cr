@@ -14,7 +14,7 @@ private def random_entry(random : Random, depth : Int32) : Entry?
     end
   end
 
-  Entry.directory(contents)
+  Pylon::Core::Directory.new(contents)
 end
 
 describe "expanding changes" do
@@ -29,12 +29,14 @@ describe "expanding changes" do
   end
 
   it "turns a subtree into one change per entry" do
-    subtree = Entry.directory({"models" => Entry.directory({"user.rb" => Fixtures.f1})})
+    subtree = Pylon::Core::Directory.new({"models" => Pylon::Core::Directory.new({"user.rb" => Fixtures.f1})})
 
     expanded = Change.expand([Change.new("app", nil, subtree)])
 
     expanded.map(&.path).should eq(["app", "app/models", "app/models/user.rb"])
-    expanded.first.new.not_nil!.contents.should be_empty
+    root = expanded.first.new
+    root.is_a?(Pylon::Core::Directory).should be_true
+    root.contents.should be_empty if root.is_a?(Pylon::Core::Directory)
   end
 
   it "produces the same tree as the change it replaced" do
@@ -49,7 +51,7 @@ describe "expanding changes" do
       direct = Applier.apply(base, change)
       widened = Applier.apply(base, Change.expand(change))
 
-      Entry.equal?(direct, widened).should be_true, "seed=#{seed} iteration=#{iteration}"
+      (direct == widened).should be_true, "seed=#{seed} iteration=#{iteration}"
     end
   end
 end

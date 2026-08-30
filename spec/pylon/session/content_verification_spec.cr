@@ -6,13 +6,7 @@ private def stale_digest_source(root : String) : {Pylon::Session::LocalEndpoint,
   endpoint = Pylon::Session::LocalEndpoint.new(root)
   snapshot = endpoint.scan(Time.utc.to_unix_ns.to_i64 - 5_000_000_000)
 
-  tree = snapshot.root
-  tree.should_not be_nil
-  fail("scan produced no tree") if tree.nil?
-
-  entry = tree.contents["racy.rb"]
-  digest = entry.digest
-  fail("scan produced no digest") if digest.nil?
+  digest = Fixtures.file!(Fixtures.dig!(snapshot.root, "racy.rb")).digest
 
   File.write(File.join(root, "racy.rb"), "changed after the scan")
   {endpoint, digest}

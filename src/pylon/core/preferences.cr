@@ -30,10 +30,10 @@ module Pylon::Core
     end
 
     private def self.malformed(pattern : String) : String?
-      File.match?(pattern, "probe")
-      File.match?("#{pattern}/**", "probe")
+      ::File.match?(pattern, "probe")
+      ::File.match?("#{pattern}/**", "probe")
       nil
-    rescue error : File::BadPatternError
+    rescue error : ::File::BadPatternError
       error.message || "bad pattern"
     end
 
@@ -68,7 +68,7 @@ module Pylon::Core
     end
 
     private def matches?(pattern : String, path : String) : Bool
-      File.match?(pattern, path) || File.match?("#{pattern}/**", path)
+      ::File.match?(pattern, path) || ::File.match?("#{pattern}/**", path)
     end
   end
 end

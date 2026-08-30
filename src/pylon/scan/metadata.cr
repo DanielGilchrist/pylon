@@ -1,7 +1,21 @@
-require "../core/entry"
-
 module Pylon::Scan
   struct Metadata
+    enum Kind
+      Directory
+      File
+      SymbolicLink
+      Untracked
+
+      def self.from_mode(mode : UInt32) : Kind
+        case mode & LibC::S_IFMT
+        when LibC::S_IFREG then Kind::File
+        when LibC::S_IFDIR then Kind::Directory
+        when LibC::S_IFLNK then Kind::SymbolicLink
+        else                    Kind::Untracked
+        end
+      end
+    end
+
     NANOSECONDS_PER_SECOND = 1_000_000_000_i64
 
     def self.of(path : String) : Metadata?
@@ -42,8 +56,8 @@ module Pylon::Scan
     def initialize(@mode : UInt32, @size : UInt64, @mtime_ns : Int64, @inode : UInt64)
     end
 
-    def kind : Core::Entry::Kind
-      Core::Entry::Kind.from_mode(mode)
+    def kind : Kind
+      Kind.from_mode(mode)
     end
 
     def executable? : Bool

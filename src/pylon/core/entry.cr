@@ -1,50 +1,33 @@
 module Pylon::Core
-  struct Entry
-    enum Kind
-      Directory
-      File
-      SymbolicLink
-      Untracked
-      Problematic
+  struct Directory
+    private EMPTY = {} of String => Entry
 
-      def self.from_mode(mode : UInt32) : Kind
-        case mode & LibC::S_IFMT
-        when LibC::S_IFREG then Kind::File
-        when LibC::S_IFDIR then Kind::Directory
-        when LibC::S_IFLNK then Kind::SymbolicLink
-        else                    Kind::Untracked
-        end
-      end
+    getter contents : Hash(String, Entry)
 
-      def synchronizable? : Bool
-        directory? || file? || symbolic_link?
+    def initialize(contents : Hash(String, V) = EMPTY) forall V
+      if contents.is_a?(Hash(String, Entry))
+        @contents = contents
+      else
+        widened = Hash(String, Entry).new(initial_capacity: contents.size)
+        contents.each { |name, child| widened[name] = child }
+        @contents = widened
       end
     end
 
-    private EMPTY_CONTENTS = {} of String => Entry
-
-    def self.equal?(left : Entry?, right : Entry?) : Bool
-      return true if left.nil? && right.nil?
-      return false if left.nil? || right.nil?
-
-      left.equal?(right)
+    def synchronizable? : Bool
+      true
     end
 
-    def self.synchronizable(entry : Entry?) : Entry?
-      return nil if entry.nil?
-      return nil unless entry.synchronizable?
-      return entry unless entry.directory?
-
-      contents = entry.contents
-      return entry if contents.empty?
+    def synchronizable : Entry?
+      return self if contents.empty?
 
       retained = nil
 
       contents.each do |name, child|
-        kept = synchronizable(child)
+        kept = child.synchronizable
 
-        if kept.nil? || !kept.equal?(child)
-          retained ||= carry_forward(contents, name)
+        if kept.nil? || kept != child
+          retained ||= carry_forward(name)
         end
 
         if (retained_contents = retained) && !kept.nil?
@@ -52,10 +35,10 @@ module Pylon::Core
         end
       end
 
-      retained.nil? ? entry : entry.with_contents(retained)
+      retained.nil? ? self : Directory.new(retained)
     end
 
-    private def self.carry_forward(contents : Hash(String, Entry), stop_at : String) : Hash(String, Entry)
+    private def carry_forward(stop_at : String) : Hash(String, Entry)
       carried = {} of String => Entry
 
       contents.each do |name, child|
@@ -66,92 +49,66 @@ module Pylon::Core
 
       carried
     end
+  end
 
-    def self.directory(contents : Hash(String, Entry)? = nil) : Entry
-      new(kind: Kind::Directory, contents: contents)
-    end
+  struct File
+    getter digest : Bytes
 
-    def self.file(digest : Bytes, executable : Bool = false) : Entry
-      new(kind: Kind::File, digest: digest, executable: executable)
-    end
-
-    def self.symlink(target : String) : Entry
-      new(kind: Kind::SymbolicLink, target: target)
-    end
-
-    def self.untracked : Entry
-      new(kind: Kind::Untracked)
-    end
-
-    def self.problematic(problem : String) : Entry
-      new(kind: Kind::Problematic, problem: problem)
-    end
-
-    getter kind : Kind
-    getter digest : Bytes?
-    getter target : String?
-    getter problem : String?
-
-    def initialize(
-      @kind : Kind,
-      @digest : Bytes? = nil,
-      @executable : Bool = false,
-      @target : String? = nil,
-      @problem : String? = nil,
-      @contents : Hash(String, Entry)? = nil,
-    )
+    def initialize(@digest : Bytes, @executable : Bool = false)
     end
 
     def executable? : Bool
       @executable
     end
 
-    def contents : Hash(String, Entry)
-      @contents || EMPTY_CONTENTS
+    def synchronizable? : Bool
+      true
+    end
+
+    def synchronizable : Entry?
+      self
+    end
+  end
+
+  struct SymbolicLink
+    getter target : String
+
+    def initialize(@target : String)
     end
 
     def synchronizable? : Bool
-      kind.synchronizable?
+      true
     end
 
-    def untracked? : Bool
-      kind.untracked?
-    end
-
-    def problematic? : Bool
-      kind.problematic?
-    end
-
-    def directory? : Bool
-      kind.directory?
-    end
-
-    def with_contents(contents : Hash(String, Entry)) : Entry
-      Entry.new(
-        kind: kind,
-        digest: digest,
-        executable: executable?,
-        target: target,
-        problem: problem,
-        contents: contents,
-      )
-    end
-
-    def equal?(other : Entry) : Bool
-      return false unless kind == other.kind
-      return false unless digest == other.digest
-      return false unless executable? == other.executable?
-      return false unless target == other.target
-      return false unless problem == other.problem
-      return false unless contents.size == other.contents.size
-
-      contents.all? do |name, child|
-        if (other_child = other.contents[name]?)
-          child.equal?(other_child)
-        else
-          false
-        end
-      end
+    def synchronizable : Entry?
+      self
     end
   end
+
+  struct Untracked
+    def synchronizable? : Bool
+      false
+    end
+
+    def synchronizable : Entry?
+      nil
+    end
+  end
+
+  struct Problematic
+    getter problem : String
+
+    def initialize(@problem : String)
+    end
+
+    def synchronizable? : Bool
+      false
+    end
+
+    def synchronizable : Entry?
+      nil
+    end
+  end
+
+  alias Entry = Directory | File | SymbolicLink | Untracked | Problematic
 end

@@ -35,7 +35,7 @@ module Pylon::Core
         old = change.old
         new = change.new
 
-        if old && new && old.kind != new.kind
+        if old && new && old.class != new.class
           return Reason::RootTypeChange
         end
       end
@@ -44,7 +44,7 @@ module Pylon::Core
     end
 
     private def emptied_root?(base : Entry?, local : Entry?, remote : Entry?) : Bool
-      return false if base.nil? || !base.directory?
+      return false unless base.is_a?(Directory)
       return false if synchronizable_children(base) < 2
 
       empty?(local) != empty?(remote)
@@ -52,12 +52,12 @@ module Pylon::Core
 
     private def empty?(entry : Entry?) : Bool
       return true if entry.nil?
-      return false unless entry.directory?
+      return false unless entry.is_a?(Directory)
 
       synchronizable_children(entry).zero?
     end
 
-    private def synchronizable_children(entry : Entry) : Int32
+    private def synchronizable_children(entry : Directory) : Int32
       entry.contents.each_value.count(&.synchronizable?)
     end
   end

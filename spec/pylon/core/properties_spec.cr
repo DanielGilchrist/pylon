@@ -15,21 +15,22 @@ private def random_entry(random : Random, depth : Int32) : Entry?
     end
   end
 
-  Entry.directory(contents)
+  Pylon::Core::Directory.new(contents)
 end
 
 private def random_base(random : Random, depth : Int32) : Entry?
-  Entry.synchronizable(random_entry(random, depth))
+  random_entry(random, depth).try(&.synchronizable)
 end
 
 private def contains_unsynchronizable?(entry : Entry) : Bool
   return true unless entry.synchronizable?
+  return false unless entry.is_a?(Pylon::Core::Directory)
 
   entry.contents.each_value.any? { |child| contains_unsynchronizable?(child) }
 end
 
 private def synchronizable_projection(entry : Entry?) : Entry?
-  Entry.synchronizable(entry)
+  entry.try(&.synchronizable)
 end
 
 describe "reconciler properties" do
@@ -75,10 +76,8 @@ describe "reconciler properties" do
         next_local = Applier.apply(local, reconciliation.local_changes)
         next_remote = Applier.apply(remote, reconciliation.remote_changes)
 
-        converged = Entry.equal?(
-          synchronizable_projection(next_local),
-          synchronizable_projection(next_remote),
-        )
+        converged =
+          synchronizable_projection(next_local) == synchronizable_projection(next_remote)
 
         converged.should be_true,
           "seed=#{seed} iteration=#{iteration} side=#{preferences.winner("")}: replicas diverged\nalpha=#{next_local.inspect}\nbeta=#{next_remote.inspect}"

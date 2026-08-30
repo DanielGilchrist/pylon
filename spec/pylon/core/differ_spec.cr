@@ -14,7 +14,7 @@ private def random_entry(random : Random, depth : Int32) : Entry?
     end
   end
 
-  Entry.directory(contents)
+  Pylon::Core::Directory.new(contents)
 end
 
 describe Pylon::Core::Differ do
@@ -23,8 +23,8 @@ describe Pylon::Core::Differ do
   end
 
   it "describes a single changed file, not the whole tree" do
-    base = Entry.directory({"a" => Fixtures.f1, "b" => Fixtures.f1})
-    target = Entry.directory({"a" => Fixtures.f2, "b" => Fixtures.f1})
+    base = Pylon::Core::Directory.new({"a" => Fixtures.f1, "b" => Fixtures.f1})
+    target = Pylon::Core::Directory.new({"a" => Fixtures.f2, "b" => Fixtures.f1})
 
     changes = Differ.diff(base, target)
 
@@ -33,15 +33,15 @@ describe Pylon::Core::Differ do
   end
 
   it "describes additions and removals" do
-    base = Entry.directory({"gone" => Fixtures.f1})
-    target = Entry.directory({"added" => Fixtures.f2})
+    base = Pylon::Core::Directory.new({"gone" => Fixtures.f1})
+    target = Pylon::Core::Directory.new({"added" => Fixtures.f2})
 
     Differ.diff(base, target).map(&.path).sort!.should eq(["added", "gone"])
   end
 
   it "collapses a replaced subtree into one change" do
-    base = Entry.directory({"app" => Entry.directory({"a" => Fixtures.f1, "b" => Fixtures.f2})})
-    target = Entry.directory({"app" => Fixtures.f1})
+    base = Pylon::Core::Directory.new({"app" => Pylon::Core::Directory.new({"a" => Fixtures.f1, "b" => Fixtures.f2})})
+    target = Pylon::Core::Directory.new({"app" => Fixtures.f1})
 
     Differ.diff(base, target).map(&.path).should eq(["app"])
   end
@@ -56,7 +56,7 @@ describe Pylon::Core::Differ do
 
       rebuilt = Applier.apply(base, Differ.diff(base, target))
 
-      Entry.equal?(rebuilt, target).should be_true, "seed=#{seed} iteration=#{iteration}"
+      (rebuilt == target).should be_true, "seed=#{seed} iteration=#{iteration}"
     end
   end
 
@@ -64,10 +64,10 @@ describe Pylon::Core::Differ do
     contents = {} of String => Entry
     500.times { |index| contents["file_#{index}.rb"] = Fixtures.f1 }
 
-    base = Entry.directory(contents)
+    base = Pylon::Core::Directory.new(contents)
     changed = contents.dup
     changed["file_250.rb"] = Fixtures.f2
-    target = Entry.directory(changed)
+    target = Pylon::Core::Directory.new(changed)
 
     Differ.diff(base, target).size.should eq(1)
   end

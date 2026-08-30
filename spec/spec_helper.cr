@@ -32,9 +32,9 @@ def assert_changes(actual : Array(Change), expected : Array(Change), label : Str
     matching.should_not be_nil, "#{label}: unexpected change at #{change.path.inspect}"
     next if matching.nil?
 
-    Entry.equal?(change.old, matching.old).should be_true,
+    (change.old == matching.old).should be_true,
       "#{label}: old mismatch at #{change.path.inspect}"
-    Entry.equal?(change.new, matching.new).should be_true,
+    (change.new == matching.new).should be_true,
       "#{label}: new mismatch at #{change.path.inspect}"
   end
 end

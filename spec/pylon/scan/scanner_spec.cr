@@ -27,9 +27,9 @@ describe Pylon::Scan::Scanner do
     root = scan(sample).root.should_not be_nil
     next if root.nil?
 
-    root.directory?.should be_true
-    root.contents.keys.sort!.should eq(["README.md", "app"])
-    root.contents["app"].contents["models"].contents.keys.sort!.should eq(["pay.rb", "user.rb"])
+    directory = Fixtures.directory!(root)
+    directory.contents.keys.sort!.should eq(["README.md", "app"])
+    Fixtures.directory!(Fixtures.dig!(root, "app", "models")).contents.keys.sort!.should eq(["pay.rb", "user.rb"])
   end
 
   it "hashes every file on a cold scan" do
@@ -78,7 +78,7 @@ describe Pylon::Scan::Scanner do
     root = snapshot.root.should_not be_nil
     next if root.nil?
 
-    root.contents["README.md"].executable?.should be_true
+    Fixtures.file!(Fixtures.dig!(root, "README.md")).executable?.should be_true
     executable.reads.should be_empty
   end
 
@@ -88,7 +88,7 @@ describe Pylon::Scan::Scanner do
     root = snapshot.root.should_not be_nil
     next if root.nil?
 
-    root.contents["app"].untracked?.should be_true
+    Fixtures.dig!(root, "app").is_a?(Pylon::Core::Untracked).should be_true
     filesystem.reads.should eq(["README.md"])
   end
 
@@ -97,8 +97,8 @@ describe Pylon::Scan::Scanner do
     root = scan(filesystem).root.should_not be_nil
     next if root.nil?
 
-    root.contents["README.md"].problematic?.should be_true
-    root.contents["app"].directory?.should be_true
+    Fixtures.dig!(root, "README.md").is_a?(Pylon::Core::Problematic).should be_true
+    Fixtures.dig!(root, "app").is_a?(Pylon::Core::Directory).should be_true
   end
 
   it "produces a tree the reconciler treats as settled against itself" do
@@ -135,7 +135,7 @@ describe "accelerated scanning" do
     second = Scanner.new(quiet, first.cache, NOW, parallelism: 1, baseline: first.root).scan
 
     quiet.reads.should be_empty
-    Entry.equal?(second.root, first.root).should be_true
+    (second.root == first.root).should be_true
     second.cache.size.should eq(first.cache.size)
   end
 
@@ -156,8 +156,8 @@ describe "accelerated scanning" do
     root = second.root.should_not be_nil
     next if root.nil?
 
-    root.contents["README.md"].digest.should eq(first.root.not_nil!.contents["README.md"].digest)
-    root.contents["app"].contents["models"].contents.keys.sort!.should eq(["pay.rb", "user.rb"])
+    Fixtures.file!(Fixtures.dig!(root, "README.md")).digest.should eq(Fixtures.file!(Fixtures.dig!(first.root, "README.md")).digest)
+    Fixtures.directory!(Fixtures.dig!(root, "app", "models")).contents.keys.sort!.should eq(["pay.rb", "user.rb"])
   end
 
   it "carries cache entries forward for untouched subtrees" do
@@ -197,7 +197,7 @@ describe "accelerated scanning" do
     root = second.root.should_not be_nil
     next if root.nil?
 
-    root.contents["app"].contents["models"].contents.keys.sort!.should eq(["new.rb", "pay.rb", "user.rb"])
+    Fixtures.directory!(Fixtures.dig!(root, "app", "models")).contents.keys.sort!.should eq(["new.rb", "pay.rb", "user.rb"])
   end
 
   it "notices a deletion inside a dirty directory" do
@@ -219,6 +219,6 @@ describe "accelerated scanning" do
     root = second.root.should_not be_nil
     next if root.nil?
 
-    root.contents["app"].contents["models"].contents.keys.should eq(["user.rb"])
+    Fixtures.directory!(Fixtures.dig!(root, "app", "models")).contents.keys.should eq(["user.rb"])
   end
 end

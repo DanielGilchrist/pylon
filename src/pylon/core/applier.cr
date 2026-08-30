@@ -35,7 +35,7 @@ module Pylon::Core
       current = node.assigned? ? node.value : base
       return current if node.children.empty?
 
-      directory = current && current.kind.directory? ? current : Entry.directory
+      directory = current.is_a?(Directory) ? current : Directory.new
       contents = directory.contents.dup
 
       node.children.each do |name, child|
@@ -48,7 +48,7 @@ module Pylon::Core
         end
       end
 
-      directory.with_contents(contents)
+      Directory.new(contents)
     end
 
     private def segments(path : String) : Array(String)

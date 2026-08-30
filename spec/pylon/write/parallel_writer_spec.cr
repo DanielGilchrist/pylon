@@ -9,12 +9,12 @@ private FILES = 120
 private def bulk_changes : Array(Pylon::Core::Change)
   changes = [] of Pylon::Core::Change
 
-  changes << Pylon::Core::Change.new("nested", nil, Pylon::Core::Entry.directory)
+  changes << Pylon::Core::Change.new("nested", nil, Pylon::Core::Directory.new)
 
   FILES.times do |index|
     content = "content #{index}\n" * (index + 1)
     digest = Digest::SHA256.digest("file#{index}").to_slice
-    entry = Pylon::Core::Entry.file(digest, executable: index.even?)
+    entry = Pylon::Core::File.new(digest, executable: index.even?)
     path = index < FILES // 2 ? "file#{index}.cr" : "nested/file#{index}.cr"
     changes << Pylon::Core::Change.new(path, nil, entry)
   end
@@ -27,11 +27,9 @@ private def staged_contents(changes : Array(Pylon::Core::Change)) : Pylon::Wire:
 
   changes.each_with_index do |change, index|
     entry = change.new
-    next if entry.nil?
+    next unless entry.is_a?(Pylon::Core::File)
 
-    if (digest = entry.digest)
-      contents[digest] = "content for #{change.path}\n".to_slice
-    end
+    contents[entry.digest] = "content for #{change.path}\n".to_slice
   end
 
   contents
@@ -68,7 +66,7 @@ describe "Writer running independent file writes in parallel" do
 
       changes.each do |change|
         entry = change.new
-        next if entry.nil? || !entry.kind.file?
+        next unless entry.is_a?(Pylon::Core::File)
 
         left = File.read(File.join(parallel_root, change.path))
         right = File.read(File.join(sequential_root, change.path))
@@ -107,7 +105,7 @@ describe "Writer running independent file writes in parallel" do
   it "still reports a skip per missing staged content" do
     changes = bulk_changes
     contents = staged_contents(changes)
-    missing = changes.compact_map { |change| change.new.try(&.digest) }.first(5)
+    missing = changes.compact_map { |change| (entry = change.new).is_a?(Pylon::Core::File) ? entry.digest : nil }.first(5)
     missing.each { |digest| contents.delete(digest) }
 
     root = File.tempname("pylon-parallel-skip")

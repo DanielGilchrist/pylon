@@ -2,7 +2,7 @@ require "../../spec_helper"
 require "../../../src/pylon/core/safety"
 
 private def populated : Entry
-  Entry.directory({"a" => Fixtures.f1, "b" => Fixtures.f2})
+  Pylon::Core::Directory.new({"a" => Fixtures.f1, "b" => Fixtures.f2})
 end
 
 private NO_CHANGES = [] of Change
@@ -13,7 +13,7 @@ describe Pylon::Core::Safety do
   end
 
   it "halts when one side lost everything" do
-    Safety.check(populated, Entry.directory, populated, NO_CHANGES)
+    Safety.check(populated, Pylon::Core::Directory.new, populated, NO_CHANGES)
       .should eq(Safety::Reason::EndpointEmptiedRoot)
 
     Safety.check(populated, populated, nil, NO_CHANGES)
@@ -21,19 +21,19 @@ describe Pylon::Core::Safety do
   end
 
   it "allows both sides emptying, which is a deliberate act" do
-    Safety.check(populated, Entry.directory, Entry.directory, NO_CHANGES).should be_nil
+    Safety.check(populated, Pylon::Core::Directory.new, Pylon::Core::Directory.new, NO_CHANGES).should be_nil
   end
 
   it "ignores a root that never had much in it" do
-    small = Entry.directory({"a" => Fixtures.f1})
+    small = Pylon::Core::Directory.new({"a" => Fixtures.f1})
 
-    Safety.check(small, Entry.directory, small, NO_CHANGES).should be_nil
+    Safety.check(small, Pylon::Core::Directory.new, small, NO_CHANGES).should be_nil
   end
 
   it "does not count ignored children towards a populated root" do
-    ignored = Entry.directory({"a" => Fixtures.untracked, "b" => Fixtures.untracked})
+    ignored = Pylon::Core::Directory.new({"a" => Fixtures.untracked, "b" => Fixtures.untracked})
 
-    Safety.check(ignored, Entry.directory, ignored, NO_CHANGES).should be_nil
+    Safety.check(ignored, Pylon::Core::Directory.new, ignored, NO_CHANGES).should be_nil
   end
 
   it "halts on a change that would delete the root" do

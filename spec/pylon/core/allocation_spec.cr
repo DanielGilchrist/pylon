@@ -8,10 +8,10 @@ private def wide_tree(files : Int32) : Entry
   20.times do |directory|
     contents = {} of String => Entry
     (files // 20).times { |file| contents["file_#{file}.rb"] = Fixtures.f1 }
-    directories["dir_#{directory}"] = Entry.directory(contents)
+    directories["dir_#{directory}"] = Pylon::Core::Directory.new(contents)
   end
 
-  Entry.directory(directories)
+  Pylon::Core::Directory.new(directories)
 end
 
 private def changes_for(tree : Entry) : Array(Change)

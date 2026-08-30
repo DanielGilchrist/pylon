@@ -15,15 +15,14 @@ module Pylon::Core
     end
 
     private def collect(entry : Entry?, wanted : Array(Bytes), seen : Set(Bytes)) : Nil
-      return if entry.nil?
-
-      if entry.kind.file?
-        digest = entry.digest
-        wanted << digest if digest && seen.add?(digest)
-        return
+      case entry
+      in Nil, SymbolicLink, Untracked, Problematic
+        nil
+      in File
+        wanted << entry.digest if seen.add?(entry.digest)
+      in Directory
+        entry.contents.each_value { |child| collect(child, wanted, seen) }
       end
-
-      entry.contents.each_value { |child| collect(child, wanted, seen) }
     end
   end
 end

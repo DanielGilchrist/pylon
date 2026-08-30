@@ -25,26 +25,31 @@ private def random_entry(random : Random, depth : Int32) : Entry?
     end
   end
 
-  Entry.directory(contents)
+  Pylon::Core::Directory.new(contents)
 end
 
 describe Pylon::Wire::Binary do
   it "round trips every kind of entry" do
-    Entry.equal?(round_trip_entry(nil), nil).should be_true
+    (round_trip_entry(nil) == nil).should be_true
 
     {Fixtures.f1, Fixtures.f1x, Fixtures.symlink_relative, Fixtures.untracked,
      Fixtures.problematic, Fixtures.d0, Fixtures.d1}.each do |entry|
-      Entry.equal?(round_trip_entry(entry), entry).should be_true
+      (round_trip_entry(entry) == entry).should be_true
     end
   end
 
   it "round trips a symlink target and a problem message" do
-    round_trip_entry(Entry.symlink("../elsewhere")).not_nil!.target.should eq("../elsewhere")
-    round_trip_entry(Entry.problematic("permission denied")).not_nil!.problem.should eq("permission denied")
+    link = round_trip_entry(Pylon::Core::SymbolicLink.new("../elsewhere"))
+    link.is_a?(Pylon::Core::SymbolicLink).should be_true
+    link.target.should eq("../elsewhere") if link.is_a?(Pylon::Core::SymbolicLink)
+
+    problem = round_trip_entry(Pylon::Core::Problematic.new("permission denied"))
+    problem.is_a?(Pylon::Core::Problematic).should be_true
+    problem.problem.should eq("permission denied") if problem.is_a?(Pylon::Core::Problematic)
   end
 
   it "distinguishes an empty directory from a missing entry" do
-    round_trip_entry(Entry.directory).should_not be_nil
+    round_trip_entry(Pylon::Core::Directory.new).should_not be_nil
     round_trip_entry(nil).should be_nil
   end
 
@@ -55,7 +60,7 @@ describe Pylon::Wire::Binary do
     500.times do |iteration|
       entry = random_entry(random, 3)
 
-      Entry.equal?(round_trip_entry(entry), entry).should be_true,
+      (round_trip_entry(entry) == entry).should be_true,
         "seed=#{seed} iteration=#{iteration}"
     end
   end

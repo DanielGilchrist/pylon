@@ -54,62 +54,63 @@ module Pylon::Wire
     end
 
     def write_entry(io : IO, entry : Core::Entry?) : Nil
-      if entry.nil?
+      case entry
+      in Nil
         io.write_byte(0_u8)
-        return
-      end
+      in Core::Directory
+        io.write_byte(1_u8)
+        io.write_bytes(entry.contents.size.to_u32, FORMAT)
 
-      io.write_byte(entry.kind.value.to_u8 + 1)
-      write_bytes(io, entry.digest)
-      write_bool(io, entry.executable?)
-      write_string(io, entry.target)
-      write_string(io, entry.problem)
-
-      io.write_bytes(entry.contents.size.to_u32, FORMAT)
-
-      entry.contents.each do |name, child|
-        write_string(io, name)
-        write_entry(io, child)
+        entry.contents.each do |name, child|
+          write_string(io, name)
+          write_entry(io, child)
+        end
+      in Core::File
+        io.write_byte(2_u8)
+        write_bytes(io, entry.digest)
+        write_bool(io, entry.executable?)
+      in Core::SymbolicLink
+        io.write_byte(3_u8)
+        write_string(io, entry.target)
+      in Core::Untracked
+        io.write_byte(4_u8)
+      in Core::Problematic
+        io.write_byte(5_u8)
+        write_string(io, entry.problem)
       end
     end
 
     def read_entry(io : IO) : Core::Entry?
-      tag = read_byte(io)
-      return nil if tag == 0
+      case read_byte(io)
+      when 0
+        nil
+      when 1
+        count = read_u32(io)
+        return Core::Directory.new if count.zero?
 
-      kind = Core::Entry::Kind.from_value?(tag.to_i32 - 1)
-      raise Truncated.new("unknown entry kind in message") if kind.nil?
-
-      digest = read_bytes(io)
-      executable = read_bool(io)
-      target = read_string(io)
-      problem = read_string(io)
-
-      count = read_u32(io)
-      contents : Hash(String, Core::Entry)? = nil
-
-      if count > 0
-        built = Hash(String, Core::Entry).new(initial_capacity: count)
+        contents = Hash(String, Core::Entry).new(initial_capacity: count)
 
         count.times do
           name = read_required_string(io)
           child = read_entry(io)
           raise Truncated.new("missing child entry in message") if child.nil?
 
-          built[name] = child
+          contents[name] = child
         end
 
-        contents = built
+        Core::Directory.new(contents)
+      when 2
+        digest = read_required_bytes(io)
+        Core::File.new(digest, executable: read_bool(io))
+      when 3
+        Core::SymbolicLink.new(read_required_string(io))
+      when 4
+        Core::Untracked.new
+      when 5
+        Core::Problematic.new(read_required_string(io))
+      else
+        raise Truncated.new("unknown entry kind in message")
       end
-
-      Core::Entry.new(
-        kind: kind,
-        digest: digest,
-        executable: executable,
-        target: target,
-        problem: problem,
-        contents: contents,
-      )
     end
 
     def write_changes(io : IO, changes : Array(Core::Change)) : Nil

@@ -13,9 +13,9 @@ module Pylon::Core
     end
 
     private def walk(path : String, base : Entry?, target : Entry?, into : Array(Change)) : Nil
-      return if Entry.equal?(base, target)
+      return if base == target
 
-      unless base && target && base.kind.directory? && target.kind.directory?
+      unless base.is_a?(Directory) && target.is_a?(Directory)
         into << Change.new(path, base, target)
         return
       end

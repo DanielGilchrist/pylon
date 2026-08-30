@@ -4,7 +4,7 @@ require "../wire/binary"
 module Pylon::Session
   struct Checkpoint
     MAGIC   = "PYLON\0"
-    VERSION = 1_u32
+    VERSION = 2_u32
     DIGEST  = "sha256"
 
     record Absent

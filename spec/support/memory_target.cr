@@ -4,7 +4,7 @@ require "../../src/pylon/write/problem"
 
 class MemoryTarget
   record Node,
-    kind : Pylon::Core::Entry::Kind,
+    kind : Pylon::Scan::Metadata::Kind,
     content : Bytes = Bytes.empty,
     target : String = "",
     executable : Bool = false,
@@ -15,7 +15,7 @@ class MemoryTarget
   getter nodes : Hash(String, Node)
   property? writable = true
 
-  def initialize(@nodes = {"" => Node.new(kind: Pylon::Core::Entry::Kind::Directory)})
+  def initialize(@nodes = {"" => Node.new(kind: Pylon::Scan::Metadata::Kind::Directory)})
     @next_inode = 100_u64
   end
 
@@ -25,11 +25,10 @@ class MemoryTarget
 
     mode =
       case node.kind
-      in Pylon::Core::Entry::Kind::Directory    then LibC::S_IFDIR | 0o755
-      in Pylon::Core::Entry::Kind::File         then LibC::S_IFREG | (node.executable ? 0o755 : 0o644)
-      in Pylon::Core::Entry::Kind::SymbolicLink then LibC::S_IFLNK | 0o777
-      in Pylon::Core::Entry::Kind::Untracked    then LibC::S_IFIFO | 0o644
-      in Pylon::Core::Entry::Kind::Problematic  then LibC::S_IFREG | 0o644
+      in Pylon::Scan::Metadata::Kind::Directory    then LibC::S_IFDIR | 0o755
+      in Pylon::Scan::Metadata::Kind::File         then LibC::S_IFREG | (node.executable ? 0o755 : 0o644)
+      in Pylon::Scan::Metadata::Kind::SymbolicLink then LibC::S_IFLNK | 0o777
+      in Pylon::Scan::Metadata::Kind::Untracked    then LibC::S_IFIFO | 0o644
       end
 
     Pylon::Scan::Metadata.new(
@@ -44,7 +43,7 @@ class MemoryTarget
     return read_only unless writable?
 
     operations << "mkdir #{path}"
-    @nodes[path] = Node.new(kind: Pylon::Core::Entry::Kind::Directory, inode: take_inode)
+    @nodes[path] = Node.new(kind: Pylon::Scan::Metadata::Kind::Directory, inode: take_inode)
     nil
   end
 
@@ -53,7 +52,7 @@ class MemoryTarget
 
     operations << "write #{path}"
     @nodes[path] = Node.new(
-      kind: Pylon::Core::Entry::Kind::File,
+      kind: Pylon::Scan::Metadata::Kind::File,
       content: content,
       executable: executable,
       inode: take_inode,
@@ -66,7 +65,7 @@ class MemoryTarget
     return read_only unless writable?
 
     operations << "symlink #{path}"
-    @nodes[path] = Node.new(kind: Pylon::Core::Entry::Kind::SymbolicLink, target: target, inode: take_inode)
+    @nodes[path] = Node.new(kind: Pylon::Scan::Metadata::Kind::SymbolicLink, target: target, inode: take_inode)
     nil
   end
 
@@ -92,7 +91,7 @@ class MemoryTarget
   def seed_file(path : String, content : String, executable = false, inode = 1_u64, mtime_ns = 1_000_i64) : Bytes
     bytes = content.to_slice
     @nodes[path] = Node.new(
-      kind: Pylon::Core::Entry::Kind::File,
+      kind: Pylon::Scan::Metadata::Kind::File,
       content: bytes,
       executable: executable,
       inode: inode,
@@ -102,7 +101,7 @@ class MemoryTarget
   end
 
   def seed_directory(path : String) : Nil
-    @nodes[path] = Node.new(kind: Pylon::Core::Entry::Kind::Directory, inode: take_inode)
+    @nodes[path] = Node.new(kind: Pylon::Scan::Metadata::Kind::Directory, inode: take_inode)
   end
 
   private def read_only : Pylon::Write::Problem

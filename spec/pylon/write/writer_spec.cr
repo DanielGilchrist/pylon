@@ -23,7 +23,7 @@ describe Pylon::Write::Writer do
     digest = staging.add("hello")
 
     outcomes = Writer.new(target, staging, Pylon::Scan::Cache.new)
-      .write([Change.new("greeting.txt", nil, Entry.file(digest))])
+      .write([Change.new("greeting.txt", nil, Pylon::Core::File.new(digest))])
 
     outcomes.size.should eq(1)
     outcomes.first.applied?.should be_true
@@ -36,7 +36,7 @@ describe Pylon::Write::Writer do
     staging = MemoryStaging.new
     digest = staging.add("body")
 
-    subtree = Entry.directory({"models" => Entry.directory({"user.rb" => Entry.file(digest)})})
+    subtree = Pylon::Core::Directory.new({"models" => Pylon::Core::Directory.new({"user.rb" => Pylon::Core::File.new(digest)})})
 
     outcome = Writer.new(target, staging, Pylon::Scan::Cache.new)
       .write([Change.new("app", nil, subtree)]).first
@@ -56,7 +56,7 @@ describe Pylon::Write::Writer do
     incoming = staging.add("from the other side")
 
     outcome = Writer.new(target, staging, cache)
-      .write([Change.new("notes.txt", Entry.file(original), Entry.file(incoming))]).first
+      .write([Change.new("notes.txt", Pylon::Core::File.new(original), Pylon::Core::File.new(incoming))]).first
 
     outcome.applied?.should be_false
     outcome.skipped.should eq(Skipped::ModificationDetected)
@@ -71,7 +71,7 @@ describe Pylon::Write::Writer do
     incoming = staging.add("replacement")
 
     outcome = Writer.new(target, staging, Pylon::Scan::Cache.new)
-      .write([Change.new("notes.txt", Entry.file(digest), Entry.file(incoming))]).first
+      .write([Change.new("notes.txt", Pylon::Core::File.new(digest), Pylon::Core::File.new(incoming))]).first
 
     outcome.skipped.should eq(Skipped::UnknownState)
     target.operations.should be_empty
@@ -84,7 +84,7 @@ describe Pylon::Write::Writer do
     staging = MemoryStaging.new
 
     outcome = Writer.new(target, staging, cache).write([
-      Change.new("script.sh", Entry.file(digest), Entry.file(digest, executable: true)),
+      Change.new("script.sh", Pylon::Core::File.new(digest), Pylon::Core::File.new(digest, executable: true)),
     ]).first
 
     outcome.applied?.should be_true
@@ -100,7 +100,7 @@ describe Pylon::Write::Writer do
     incoming = staging.add("after")
 
     outcome = Writer.new(target, staging, cache)
-      .write([Change.new("notes.txt", Entry.file(original), Entry.file(incoming))]).first
+      .write([Change.new("notes.txt", Pylon::Core::File.new(original), Pylon::Core::File.new(incoming))]).first
 
     outcome.applied?.should be_true
     target.operations.should eq(["write notes.txt"])
@@ -114,9 +114,9 @@ describe Pylon::Write::Writer do
     staging = MemoryStaging.new
     incoming = staging.add("now a file")
 
-    old = Entry.directory({"user.rb" => Entry.file(digest)})
+    old = Pylon::Core::Directory.new({"user.rb" => Pylon::Core::File.new(digest)})
     outcome = Writer.new(target, staging, cache)
-      .write([Change.new("app", old, Entry.file(incoming))]).first
+      .write([Change.new("app", old, Pylon::Core::File.new(incoming))]).first
 
     outcome.applied?.should be_true
     target.operations.should eq(["remove app", "write app"])
@@ -128,7 +128,7 @@ describe Pylon::Write::Writer do
     cache = cache_for(target, ["gone.txt"])
 
     outcome = Writer.new(target, MemoryStaging.new, cache)
-      .write([Change.new("gone.txt", Entry.file(digest), nil)]).first
+      .write([Change.new("gone.txt", Pylon::Core::File.new(digest), nil)]).first
 
     outcome.applied?.should be_true
     outcome.entry.should be_nil
@@ -141,7 +141,7 @@ describe Pylon::Write::Writer do
     missing = Digest::SHA256.digest("never staged".to_slice)
 
     outcome = Writer.new(target, staging, Pylon::Scan::Cache.new)
-      .write([Change.new("ghost.txt", nil, Entry.file(missing))]).first
+      .write([Change.new("ghost.txt", nil, Pylon::Core::File.new(missing))]).first
 
     outcome.applied?.should be_false
     outcome.skipped.should eq(Skipped::StagedContentMissing)
@@ -156,7 +156,7 @@ describe Pylon::Write::Writer do
     digest = staging.add("hello")
 
     outcome = Writer.new(target, staging, Pylon::Scan::Cache.new)
-      .write([Change.new("greeting.txt", nil, Entry.file(digest))]).first
+      .write([Change.new("greeting.txt", nil, Pylon::Core::File.new(digest))]).first
 
     outcome.applied?.should be_false
     outcome.skipped.should eq(Skipped::WriteFailed)
@@ -172,7 +172,7 @@ describe Pylon::Write::Writer do
     target.writable = false
 
     outcome = Writer.new(target, staging, cache)
-      .write([Change.new("stuck", Entry.file(digest), nil)]).first
+      .write([Change.new("stuck", Pylon::Core::File.new(digest), nil)]).first
 
     outcome.applied?.should be_false
     outcome.skipped.should eq(Skipped::WriteFailed)
@@ -187,17 +187,17 @@ describe Pylon::Write::Writer do
     present = staging.add("here")
     absent = Digest::SHA256.digest("absent".to_slice)
 
-    subtree = Entry.directory({
-      "kept.rb" => Entry.file(present),
-      "lost.rb" => Entry.file(absent),
+    subtree = Pylon::Core::Directory.new({
+      "kept.rb" => Pylon::Core::File.new(present),
+      "lost.rb" => Pylon::Core::File.new(absent),
     })
 
     outcome = Writer.new(target, staging, Pylon::Scan::Cache.new)
       .write([Change.new("app", nil, subtree)]).first
 
     outcome.applied?.should be_false
-    entry = outcome.entry.should_not be_nil
-    next if entry.nil?
+    entry = outcome.entry
+    next unless entry.is_a?(Pylon::Core::Directory)
 
     entry.contents.keys.should eq(["kept.rb"])
   end
