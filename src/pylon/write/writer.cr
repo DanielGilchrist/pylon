@@ -8,7 +8,11 @@ require "./outcome"
 
 module Pylon::Write
   struct Writer(F, S)
-    DEFAULT_PARALLELISM = System.cpu_count.to_i * 2
+    {% if flag?(:darwin) %}
+      DEFAULT_PARALLELISM = 2
+    {% else %}
+      DEFAULT_PARALLELISM = System.cpu_count.to_i * 2
+    {% end %}
     PARALLEL_THRESHOLD  = 16
 
     def initialize(@filesystem : F, @staging : S, @cache : Scan::Cache, @parallelism : Int32 = DEFAULT_PARALLELISM)
