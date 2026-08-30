@@ -71,7 +71,7 @@ struct Pylon::CLI
       case update.direction
       in .to_remote?
         sent = Math.max(@streamed, update.confirmed)
-        @spinner.show("↑ sending #{sent}/#{update.total}#{throughput} · #{update.confirmed} written on the remote")
+        @spinner.show("↑ sending #{sent}/#{update.total}#{throughput}")
       in .to_local?
         @spinner.show("↓ receiving #{update.confirmed}/#{update.total}")
       end
