@@ -32,7 +32,11 @@ module Pylon::Watch
         return nil
       end
 
-      new(descriptor, wake[0], wake[1], root, Scan::Ignores.new(ignores), signals)
+      watcher = new(descriptor, wake[0], wake[1], root, Scan::Ignores.new(ignores), signals)
+      return watcher if watcher.watching?
+
+      watcher.close
+      nil
     end
 
     def initialize(
@@ -52,6 +56,7 @@ module Pylon::Watch
       @fresh = false
       @stopping = false
       @done = Channel(Nil).new
+      @missed = false
 
       watch_tree("")
 
@@ -96,10 +101,21 @@ module Pylon::Watch
       nil
     end
 
+    def watching? : Bool
+      @paths.has_value?("")
+    end
+
     private def add_watch(relative : String) : Nil
       wd = LibInotify.inotify_add_watch(@descriptor, absolute(relative).check_no_null_byte, WATCH_MASK)
 
-      return if wd < 0
+      if wd < 0
+        unless @missed || relative.empty?
+          @missed = true
+          STDERR.puts("pylon: some directories could not be watched (inotify watch limit?), changes in them will not be noticed")
+        end
+
+        return
+      end
 
       @paths[wd] = relative
     end

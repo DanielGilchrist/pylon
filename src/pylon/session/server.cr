@@ -17,6 +17,7 @@ module Pylon::Session
       @output : IO,
       @subscriber : Watch::Any? = nil,
       @checkpoints : Checkpoint::Schedule? = nil,
+      @log : IO = STDERR,
     )
       @lock = Sync::Mutex.new
       @stopping = false
@@ -44,7 +45,8 @@ module Pylon::Session
     private def greet : Bool
       Wire.write_greeting(@output)
       true
-    rescue IO::Error
+    rescue error : IO::Error
+      @log.puts("pylon: the greeting could not be sent, stopping: #{error.message}")
       false
     end
 
@@ -56,7 +58,11 @@ module Pylon::Session
           loop do
             message = Wire.read_message(@input)
             break if message.is_a?(Wire::Closed)
-            break if message.is_a?(Wire::Invalid)
+
+            if message.is_a?(Wire::Invalid)
+              @log.puts("pylon: stopped reading requests: #{message.reason}")
+              break
+            end
 
             requests.send(message)
           end
@@ -113,8 +119,8 @@ module Pylon::Session
 
         @sent = current
       end
-    rescue IO::Error
-      nil
+    rescue error : IO::Error
+      @log.puts("pylon: a tree update could not be sent: #{error.message}")
     end
 
     private def drain : Nil
@@ -154,6 +160,9 @@ module Pylon::Session
       end
 
       true
+    rescue error : IO::Error
+      @log.puts("pylon: a response could not be sent, stopping: #{error.message}")
+      false
     end
   end
 end
