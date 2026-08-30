@@ -31,10 +31,11 @@ describe Pylon::Session::Checkpoint do
     in_sandbox do |path|
       base = Entry.directory({"app" => Entry.directory({"user.rb" => Fixtures.f1})})
 
-      Checkpoint.new(base, sample_cache, Pylon::Scan::Cache.new).save(path).should be_true
+      Checkpoint.new(base, sample_cache, Pylon::Scan::Cache.new).save(path).should be_nil
 
-      loaded = Checkpoint.load(path).should_not be_nil
-      next if loaded.nil?
+      loaded = Checkpoint.load(path)
+      loaded.should be_a(Checkpoint)
+      next unless loaded.is_a?(Checkpoint)
 
       Entry.equal?(loaded.base, base).should be_true
 
@@ -51,40 +52,55 @@ describe Pylon::Session::Checkpoint do
     in_sandbox do |path|
       Checkpoint.new.save(path)
 
-      loaded = Checkpoint.load(path).should_not be_nil
-      next if loaded.nil?
+      loaded = Checkpoint.load(path)
+      loaded.should be_a(Checkpoint)
+      next unless loaded.is_a?(Checkpoint)
 
       loaded.base.should be_nil
     end
   end
 
-  it "returns nothing for a file that is not a store" do
+  it "reports a missing state file as absent" do
     in_sandbox do |path|
-      File.write(path, "not a pylon state file at all")
-
-      Checkpoint.load(path).should be_nil
+      Checkpoint.load(path).should be_a(Checkpoint::Absent)
     end
   end
 
-  it "returns nothing for a truncated store rather than half a state" do
+  it "says why a file that is not a store was ignored" do
+    in_sandbox do |path|
+      File.write(path, "not a pylon state file at all")
+
+      loaded = Checkpoint.load(path)
+      loaded.should be_a(Checkpoint::Damaged)
+      next unless loaded.is_a?(Checkpoint::Damaged)
+
+      loaded.reason.should eq("not a pylon state file")
+    end
+  end
+
+  it "reports a truncated store as damaged rather than half a state" do
     in_sandbox do |path|
       Checkpoint.new(Entry.directory({"a" => Fixtures.f1}), sample_cache, sample_cache).save(path)
       bytes = File.read(path).to_slice.dup
 
       File.write(path, bytes[0, bytes.size // 2])
 
-      Checkpoint.load(path).should be_nil
+      Checkpoint.load(path).should be_a(Checkpoint::Damaged)
     end
   end
 
-  it "returns nothing when the format version moves on" do
+  it "reports a state file from another version as damaged" do
     in_sandbox do |path|
       Checkpoint.new.save(path)
       bytes = File.read(path).to_slice.dup
       bytes[Checkpoint::MAGIC.bytesize] = 99_u8
       File.write(path, bytes)
 
-      Checkpoint.load(path).should be_nil
+      loaded = Checkpoint.load(path)
+      loaded.should be_a(Checkpoint::Damaged)
+      next unless loaded.is_a?(Checkpoint::Damaged)
+
+      loaded.reason.should eq("written by a different pylon version")
     end
   end
 

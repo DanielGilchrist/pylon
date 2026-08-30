@@ -72,7 +72,7 @@ struct Pylon::CLI
 
       ignores = Scan::Ignores.new(ignore)
       reporter = Reporter.new(STDOUT, verbose?, dry_run?)
-      restored = state.try { |path| Session::Checkpoint.load(path) } || Session::Checkpoint.new
+      restored = restore(reporter)
 
       transport = Session::ProcessTransport.open(
         "ssh",
@@ -105,7 +105,11 @@ struct Pylon::CLI
         )
 
         checkpoints = state.try do |path|
-          Session::Checkpoint::Schedule.new(path, -> { Session::Checkpoint.new(session.base, left.cache, restored.remote_cache) })
+          Session::Checkpoint::Schedule.new(
+            path,
+            -> { Session::Checkpoint.new(session.base, left.cache, restored.remote_cache) },
+            on_problem: ->(problem : String) { reporter.warn(problem) },
+          )
         end
 
         drive(session, reporter, checkpoints, remote_endpoint, left, target, signals)
@@ -166,6 +170,20 @@ struct Pylon::CLI
         fail_with(reporter, "#{fault.explain}. Check that #{remote_command.inspect} exists on #{target.host}")
       in Session::Incompatible, Session::Misbehaved
         fail_with(reporter, fault.explain)
+      end
+    end
+
+    private def restore(reporter : Reporter) : Session::Checkpoint
+      path = state
+      return Session::Checkpoint.new if path.nil?
+
+      case loaded = Session::Checkpoint.load(path)
+      in Session::Checkpoint then loaded
+      in Session::Checkpoint::Absent
+        Session::Checkpoint.new
+      in Session::Checkpoint::Damaged
+        reporter.warn("ignoring the sync state at #{path} (#{loaded.reason}), scanning from scratch")
+        Session::Checkpoint.new
       end
     end
 

@@ -26,15 +26,23 @@ struct Pylon::CLI
       endpoint = Session::LocalEndpoint.new(root, Scan::Ignores.new(ignore), compression: compression)
 
       state.try do |path|
-        restored = Session::Checkpoint.load(path)
-        endpoint.cache = restored.local_cache if restored
+        case restored = Session::Checkpoint.load(path)
+        in Session::Checkpoint then endpoint.cache = restored.local_cache
+        in Session::Checkpoint::Absent
+        in Session::Checkpoint::Damaged
+          STDERR.puts("pylon: ignoring the sync state at #{path} (#{restored.reason}), scanning from scratch")
+        end
       end
 
       subscriber = Watch::Watcher.open(root, ignore, Channel(Nil).new(1))
       endpoint.accelerate! if subscriber
 
       checkpoints = state.try do |path|
-        Session::Checkpoint::Schedule.new(path, -> { Session::Checkpoint.new(nil, endpoint.cache) })
+        Session::Checkpoint::Schedule.new(
+          path,
+          -> { Session::Checkpoint.new(nil, endpoint.cache) },
+          on_problem: ->(problem : String) { STDERR.puts("pylon: #{problem}") },
+        )
       end
 
       IO::FileDescriptor.set_blocking(STDIN.fd, false)

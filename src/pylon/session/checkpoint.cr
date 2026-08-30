@@ -7,13 +7,16 @@ module Pylon::Session
     VERSION = 1_u32
     DIGEST  = "sha256"
 
-    def self.load(path : String) : Checkpoint?
+    record Absent
+    record Damaged, reason : String
+
+    def self.load(path : String) : Checkpoint | Absent | Damaged
       File.open(path, "rb") do |io|
         magic = Bytes.new(MAGIC.bytesize)
         io.read_fully(magic)
-        return nil unless String.new(magic) == MAGIC
-        return nil unless io.read_bytes(UInt32, Wire::FORMAT) == VERSION
-        return nil unless Wire::Binary.read_string(io) == DIGEST
+        return Damaged.new("not a pylon state file") unless String.new(magic) == MAGIC
+        return Damaged.new("written by a different pylon version") unless io.read_bytes(UInt32, Wire::FORMAT) == VERSION
+        return Damaged.new("unknown digest algorithm") unless Wire::Binary.read_string(io) == DIGEST
 
         new(
           base: Wire::Binary.read_entry(io),
@@ -21,8 +24,10 @@ module Pylon::Session
           remote_cache: Wire::Binary.read_cache(io),
         )
       end
-    rescue File::Error | IO::EOFError | Wire::Truncated
-      nil
+    rescue File::NotFoundError
+      Absent.new
+    rescue error : File::Error | IO::EOFError | Wire::Truncated
+      Damaged.new(error.message || error.class.name)
     end
 
     getter base : Core::Entry?
@@ -36,7 +41,7 @@ module Pylon::Session
     )
     end
 
-    def save(path : String) : Bool
+    def save(path : String) : Damaged?
       Dir.mkdir_p(File.dirname(path))
       temporary = "#{path}.#{Random::Secure.hex(8)}"
 
@@ -50,10 +55,10 @@ module Pylon::Session
       end
 
       File.rename(temporary, path)
-      true
-    rescue File::Error
+      nil
+    rescue error : File::Error
       File.delete?(temporary) if temporary
-      false
+      Damaged.new(error.message || error.class.name)
     end
   end
 end

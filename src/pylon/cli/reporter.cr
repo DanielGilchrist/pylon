@@ -98,6 +98,13 @@ struct Pylon::CLI
       @errors.puts("pylon: #{message}")
     end
 
+    def warn(message : String) : Nil
+      interrupted = @spinner.active?
+      clear_progress
+      @errors.puts("pylon: #{message}")
+      @spinner.resume if interrupted
+    end
+
     def relay(line : String) : Nil
       interrupted = @spinner.active?
       clear_progress
