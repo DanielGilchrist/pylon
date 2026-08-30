@@ -142,7 +142,6 @@ module Pylon::Wire
         write_string(io, outcome.path)
         write_entry(io, outcome.entry)
         write_skipped(io, outcome.skipped)
-        write_string(io, outcome.problem)
       end
     end
 
@@ -151,21 +150,35 @@ module Pylon::Wire
       outcomes = Array(Write::Outcome).new(count)
 
       count.times do
-        outcomes << Write::Outcome.new(read_required_string(io), read_entry(io), read_skipped(io), read_string(io))
+        outcomes << Write::Outcome.new(read_required_string(io), read_entry(io), read_skipped(io))
       end
 
       outcomes
     end
 
     def write_skipped(io : IO, skipped : Write::Skipped?) : Nil
-      io.write_byte(skipped.nil? ? 0_u8 : skipped.value.to_u8 + 1)
+      case skipped
+      in Nil                         then io.write_byte(0_u8)
+      in Write::ModificationDetected then io.write_byte(1_u8)
+      in Write::UnknownState         then io.write_byte(2_u8)
+      in Write::StagedContentMissing then io.write_byte(3_u8)
+      in Write::DryRun               then io.write_byte(4_u8)
+      in Write::WriteFailed
+        io.write_byte(5_u8)
+        write_string(io, skipped.reason)
+      end
     end
 
     def read_skipped(io : IO) : Write::Skipped?
-      byte = read_byte(io)
-      return nil if byte == 0
-
-      Write::Skipped.from_value?(byte.to_i32 - 1) || raise Truncated.new("unknown skip reason in message")
+      case read_byte(io)
+      when 0 then nil
+      when 1 then Write::ModificationDetected.new
+      when 2 then Write::UnknownState.new
+      when 3 then Write::StagedContentMissing.new
+      when 4 then Write::DryRun.new
+      when 5 then Write::WriteFailed.new(read_required_string(io))
+      else        raise Truncated.new("unknown skip reason in message")
+      end
     end
 
     def write_cache(io : IO, cache : Scan::Cache) : Nil

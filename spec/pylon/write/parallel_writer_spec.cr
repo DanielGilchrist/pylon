@@ -118,7 +118,7 @@ describe "Writer running independent file writes in parallel" do
         Pylon::Scan::Cache.new,
       ).write(changes)
 
-      outcomes.count { |outcome| outcome.skipped.try(&.staged_content_missing?) }.should eq(missing.size)
+      outcomes.count { |outcome| outcome.skipped.is_a?(Pylon::Write::StagedContentMissing) }.should eq(missing.size)
       outcomes.count(&.applied?).should eq(changes.size - missing.size)
     ensure
       FileUtils.rm_rf(root)

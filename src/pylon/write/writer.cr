@@ -114,9 +114,9 @@ module Pylon::Write
 
       case verdict
       in .modification_detected?
-        return Outcome.new(change.path, change.old, :modification_detected)
+        return Outcome.new(change.path, change.old, ModificationDetected.new)
       in .unknown_state?
-        return Outcome.new(change.path, change.old, :unknown_state)
+        return Outcome.new(change.path, change.old, UnknownState.new)
       in .proceed?
       end
 
@@ -126,17 +126,17 @@ module Pylon::Write
 
       if clear_first?(change.old, change.new)
         if (blocked = @filesystem.remove(change.path))
-          return Outcome.new(change.path, change.old, :write_failed, blocked.reason)
+          return Outcome.new(change.path, change.old, WriteFailed.new(blocked.reason))
         end
       end
 
       created = create(change.path, change.new)
 
       if created.is_a?(Problem)
-        return Outcome.new(change.path, change.old, :write_failed, created.reason)
+        return Outcome.new(change.path, change.old, WriteFailed.new(created.reason))
       end
 
-      return Outcome.new(change.path, created, :staged_content_missing) if incomplete?(change.new, created)
+      return Outcome.new(change.path, created, StagedContentMissing.new) if incomplete?(change.new, created)
 
       Outcome.new(change.path, created)
     end

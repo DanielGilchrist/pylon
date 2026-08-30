@@ -78,8 +78,8 @@ module Pylon::Session
       if @dry_run
         return Report.new(
           reconciliation.conflicts,
-          local_changes.map { |change| Write::Outcome.new(change.path, change.new, :dry_run) },
-          remote_changes.map { |change| Write::Outcome.new(change.path, change.new, :dry_run) },
+          local_changes.map { |change| Write::Outcome.new(change.path, change.new, Write::DryRun.new) },
+          remote_changes.map { |change| Write::Outcome.new(change.path, change.new, Write::DryRun.new) },
           troubles: reconciliation.troubles,
         )
       end

@@ -59,7 +59,7 @@ describe Pylon::Write::Writer do
       .write([Change.new("notes.txt", Pylon::Core::File.new(original), Pylon::Core::File.new(incoming))]).first
 
     outcome.applied?.should be_false
-    outcome.skipped.should eq(Skipped::ModificationDetected)
+    outcome.skipped.should eq(ModificationDetected.new)
     target.operations.should be_empty
     String.new(target.nodes["notes.txt"].content).should eq("edited by hand")
   end
@@ -73,7 +73,7 @@ describe Pylon::Write::Writer do
     outcome = Writer.new(target, staging, Pylon::Scan::Cache.new)
       .write([Change.new("notes.txt", Pylon::Core::File.new(digest), Pylon::Core::File.new(incoming))]).first
 
-    outcome.skipped.should eq(Skipped::UnknownState)
+    outcome.skipped.should eq(UnknownState.new)
     target.operations.should be_empty
   end
 
@@ -144,7 +144,7 @@ describe Pylon::Write::Writer do
       .write([Change.new("ghost.txt", nil, Pylon::Core::File.new(missing))]).first
 
     outcome.applied?.should be_false
-    outcome.skipped.should eq(Skipped::StagedContentMissing)
+    outcome.skipped.should eq(StagedContentMissing.new)
     outcome.entry.should be_nil
     target.nodes.has_key?("ghost.txt").should be_false
   end
@@ -159,8 +159,7 @@ describe Pylon::Write::Writer do
       .write([Change.new("greeting.txt", nil, Pylon::Core::File.new(digest))]).first
 
     outcome.applied?.should be_false
-    outcome.skipped.should eq(Skipped::WriteFailed)
-    outcome.problem.should eq("the target is read-only")
+    outcome.skipped.should eq(WriteFailed.new("the target is read-only"))
     outcome.entry.should be_nil
   end
 
@@ -175,8 +174,7 @@ describe Pylon::Write::Writer do
       .write([Change.new("stuck", Pylon::Core::File.new(digest), nil)]).first
 
     outcome.applied?.should be_false
-    outcome.skipped.should eq(Skipped::WriteFailed)
-    outcome.problem.should eq("the target is read-only")
+    outcome.skipped.should eq(WriteFailed.new("the target is read-only"))
     outcome.entry.should_not be_nil
     target.nodes.has_key?("stuck").should be_true
   end

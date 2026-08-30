@@ -2,29 +2,42 @@ require "../core/change"
 require "../core/entry"
 
 module Pylon::Write
-  enum Skipped
-    ModificationDetected
-    UnknownState
-    StagedContentMissing
-    DryRun
-    WriteFailed
-
+  record ModificationDetected do
     def explain : String
-      case self
-      in .modification_detected?  then "modification detected"
-      in .unknown_state?          then "unknown state"
-      in .staged_content_missing? then "staged content missing"
-      in .dry_run?                then "dry run"
-      in .write_failed?           then "the write failed"
-      end
+      "modification detected"
     end
   end
+
+  record UnknownState do
+    def explain : String
+      "unknown state"
+    end
+  end
+
+  record StagedContentMissing do
+    def explain : String
+      "staged content missing"
+    end
+  end
+
+  record DryRun do
+    def explain : String
+      "dry run"
+    end
+  end
+
+  record WriteFailed, reason : String do
+    def explain : String
+      reason
+    end
+  end
+
+  alias Skipped = ModificationDetected | UnknownState | StagedContentMissing | DryRun | WriteFailed
 
   record Outcome,
     path : String,
     entry : Core::Entry?,
-    skipped : Skipped? = nil,
-    problem : String? = nil do
+    skipped : Skipped? = nil do
     # Both ends apply these to their own copy of the remote tree so the next
     # delta has a shared baseline.
     def self.changes(outcomes : Array(Outcome)) : Array(Core::Change)

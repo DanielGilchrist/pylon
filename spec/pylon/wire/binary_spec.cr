@@ -84,7 +84,8 @@ describe Pylon::Wire::Binary do
   it "round trips outcomes including the skip reason" do
     outcomes = [
       Pylon::Write::Outcome.new("ok.rb", Fixtures.f1),
-      Pylon::Write::Outcome.new("bad.rb", nil, Pylon::Write::Skipped::ModificationDetected),
+      Pylon::Write::Outcome.new("bad.rb", nil, Pylon::Write::ModificationDetected.new),
+      Pylon::Write::Outcome.new("worse.rb", nil, Pylon::Write::WriteFailed.new("disk full")),
     ]
 
     io = IO::Memory.new
@@ -93,8 +94,9 @@ describe Pylon::Wire::Binary do
 
     decoded = Binary.read_outcomes(io)
     decoded[0].applied?.should be_true
-    decoded[1].skipped.should eq(Pylon::Write::Skipped::ModificationDetected)
+    decoded[1].skipped.should eq(Pylon::Write::ModificationDetected.new)
     decoded[1].entry.should be_nil
+    decoded[2].skipped.should eq(Pylon::Write::WriteFailed.new("disk full"))
   end
 
   it "round trips an empty byte string distinctly from a missing one" do

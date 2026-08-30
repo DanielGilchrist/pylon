@@ -25,7 +25,7 @@ private def removed(path : String) : Pylon::Write::Outcome
   Pylon::Write::Outcome.new(path, nil)
 end
 
-private def skipped(path : String, reason : Pylon::Write::Skipped = Pylon::Write::Skipped::ModificationDetected) : Pylon::Write::Outcome
+private def skipped(path : String, reason : Pylon::Write::Skipped = Pylon::Write::ModificationDetected.new) : Pylon::Write::Outcome
   Pylon::Write::Outcome.new(path, nil, reason)
 end
 
