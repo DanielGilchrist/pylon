@@ -49,7 +49,7 @@ metadata = Metadata.from(stat)
 if metadata.kind.file?
 ```
 
-When the input can be malformed, parsing fails and the failure is a value the caller must handle. `Metadata.of` returns `Metadata?`, `Target.parse` returns `Target | Invalid`, `Observation.from` returns `Observation?`.
+When the input can be malformed, parsing fails and the failure is a value the caller must handle. `Metadata.of` returns `Metadata | Problem | Nil` (nil is absence, `Problem` says why it could not be examined), `Target.parse` returns `Target | Invalid`.
 
 Never default a missing or malformed field into something that happens to type-check.
 
@@ -110,7 +110,9 @@ abstract struct ContentSource
 end
 ```
 
-The principle also runs the other way: model the awkward real-world states instead of omitting them. `Core::Entry::Kind` includes `Untracked` and `Problematic`, so ignored and broken paths are ordinary tree nodes and the differ and reconciler need no special cases for them.
+One kind, one type: when a record carries a kind discriminant plus fields that are only meaningful for some kinds, split it into a union of per-kind types. `Core::Entry` is the model: `Directory | File | SymbolicLink | Untracked | Problematic`, where a `File` always has a digest and a `Directory` never does, so no reader ever checks a field the kind cannot have and the wire decoder cannot build a directory carrying a digest. A kind enum survives only where a flat tag is the honest shape, such as `Scan::Metadata::Kind` parsed from a stat mode.
+
+The principle also runs the other way: model the awkward real-world states instead of omitting them. The `Core::Entry` union includes `Untracked` and `Problematic`, so ignored and broken paths are ordinary tree nodes and the differ and reconciler need no special cases for them.
 
 ### Errors are values
 
@@ -160,9 +162,16 @@ end
 
 A `rescue` anywhere else means an expected failure was modelled as an exception, fix the model instead. Never rescue broadly, and never collapse a failure into a bare `nil` or `Bool` that discards why it failed when a caller could act on the reason.
 
+Two mechanisms are the only exceptions, and both exist so the rescue lives in exactly one place:
+
+- The wire decoder aborts a parse by raising `Wire::Truncated` internally; every decode entry point runs inside `Wire::Truncated.contain`, which converts the abort (and any `IO::Error` from the stream) into `Wire::Invalid`. Never rescue `Truncated` anywhere else, and never let it escape a public entry point.
+- An exception left unhandled in a fiber is swallowed: the fiber prints to stderr and dies, and any waiter proceeds as if the work completed. `Pylon::Fibers` owns the only broad rescues: `future`/`await` and `parallel` capture an unexpected exception inside the fiber and re-raise it in the waiter. Spawn worker fibers through `Fibers`, never hand-roll the capture.
+
 ### Assertions are a last resort
 
 An assertion is any construct that says "trust me" instead of proving it: `.not_nil!`, `.as` casts, `raise "unreachable"`. Each one is a place the compiler stopped checking and a runtime crash became possible. Basically never use them. If you absolutely must, it is required that you leave a comment explaining why. Ensure you validate the why is correct and be thorough in validating its necessity.
+
+Pointer casts at a `lib` binding boundary (`buffer.to_unsafe.as(Void*)` into a C function) are a calling convention, not an assertion, and need no comment. `.as` on our own types remains banned.
 
 Prefer, in order:
 
@@ -188,51 +197,53 @@ The last resort itself: an invariant the type system genuinely cannot express, w
 Match enums and unions with `in`, never `when`, so adding a variant lets the compiler inform us of all of the cases that should handle it.
 
 ```crystal
-# Bad: a new Kind falls through silently
-case entry.kind
-when .file?      then write_file(entry)
-when .directory? then create_directory(entry)
+# Bad: a new entry type falls through silently
+case entry
+when Core::File      then write_file(entry)
+when Core::Directory then create_directory(entry)
 end
 
-# Good: adding a Kind is a compile error here until it is handled
-case entry.kind
-in .file?                     then write_file(entry)
-in .directory?                then create_directory(entry)
-in .symbolic_link?            then create_symlink(entry)
-in .untracked?, .problematic? then nil
+# Good: adding a type to the Entry union is a compile error here until it is handled
+case entry
+in Core::File                        then write_file(entry)
+in Core::Directory                   then create_directory(entry)
+in Core::SymbolicLink                then create_symlink(entry)
+in Core::Untracked, Core::Problematic then nil
 end
 ```
 
-Prefer the `.file?` shorthand over spelling out `Kind::File` in `in` branches, and prefer symbol autocasting over enum constants wherever the compiler knows the target type: arguments, named arguments and default values. Both are checked at compile time, a typo does not compile.
+The same applies to consuming a union with `is_a?`: a chain of `if value.is_a?(...)` checks over a union has no exhaustiveness either, so a new variant silently takes whatever the fallthrough does. Consume a union-typed value with `case ... in`; a lone `is_a?` is for sites where only one variant can ever matter, exactly like a lone enum predicate.
+
+Prefer the `.file?` shorthand over spelling out `Kind::File` in `in` branches on enums, and prefer symbol autocasting over enum constants wherever the compiler knows the target type: arguments, named arguments and default values. Both are checked at compile time, a typo does not compile.
 
 ```crystal
 # Bad
-Surveyed.new(kind: Core::Entry::Kind::Untracked)
+Preferences::Rule.new(Preferences::Side::Local, pattern)
 
 # Good: the symbol is autocast to the enum and verified by the compiler
-Surveyed.new(kind: :untracked)
+Preferences::Rule.new(:local, pattern)
 ```
 
-The same reasoning applies to lone comparisons. `==` on an enum is invisible to the compiler when a variant is added, so exhaustive matching is the norm and a direct check is the exception, reserved for sites where only one variant can ever matter.
+The same reasoning applies to lone comparisons. `==` against a string is invisible to the compiler when a variant is added, so exhaustive matching is the norm and a direct check is the exception, reserved for sites where only one variant can ever matter.
 
 ```crystal
 # Bad: a typo compiles and never matches
-outcome.problem == "modification detected"
+outcome.skipped.try(&.explain) == "modification detected"
 
-# Acceptable only when this site genuinely cares about a single variant,
-# enums generate a predicate per member
-outcome.skipped.try(&.dry_run?)
+# Acceptable only when this site genuinely cares about a single variant
+outcome.skipped.is_a?(Write::DryRun)
 
 # The norm: the compiler drags this site back when a variant is added
 case outcome.skipped
-in Nil                                      then record(outcome)
-in .modification_detected?, .unknown_state? then retry_later(outcome)
-in .staged_content_missing?                 then request_content(outcome)
-in .dry_run?                                then preview(outcome)
+in Nil                                          then record(outcome)
+in Write::ModificationDetected, Write::UnknownState then retry_later(outcome)
+in Write::StagedContentMissing                  then request_content(outcome)
+in Write::DryRun                                then preview(outcome)
+in Write::WriteFailed                           then report(outcome)
 end
 ```
 
-Give the owning type intention-revealing predicates (`Outcome#applied?`, `Outcome#skipped?`) so most callers never touch the enum at all.
+Give the owning type intention-revealing predicates (`Outcome#applied?`, `Outcome#skipped?`) so most callers never touch the union at all.
 
 Abstract structs cannot be exhaustively cased and Crystal doesn't support sealed classes. This must be modelled using `alias` with a union type (`Wire::Message`, `Watch::Dirty`). An abstract struct suits method dispatch instead (`ContentSource` above).
 
@@ -284,8 +295,8 @@ Pylon explicitly makes use of execution contexts introduced in Crystal 1.21:
 
 - The default context has parallelism 1. Parallel hashing gets its own `Fiber::ExecutionContext::Parallel`.
 - The inotify read runs on an `Isolated` context because the fd cannot be driven by the event loop without deadlocking it.
-- A fiber that raises inside `WaitGroup.wait` **takes the process down**. Catch inside the fiber and hand the error back (`Session#cycle`).
-- Block variables are shared across every fiber spawned in a loop, so a buffer captured by closure is one buffer written by all workers concurrently. Pass per-worker state as method parameters (`Scanner#hash_slice`).
+- An unhandled exception in a fiber **does not stop the process**: the fiber prints to stderr and dies, `WaitGroup.wait` returns as if the work completed, and the caller continues on partial results (a half-scanned tree reconciles as a mass deletion). `Pylon::Fibers` (`future`/`await`, `parallel`) turns that into a crash on the waiting fiber instead. Spawn concurrent work through it, never with a bare `spawn` plus `WaitGroup`.
+- Block variables are shared across every fiber spawned in a loop, so a buffer captured by closure is one buffer written by all workers concurrently. Pass per-worker state as method parameters (`Scanner#hash_slice`); the loop body handed to `Fibers.parallel` should be a single method call carrying everything worker-specific.
 
 ## Testing
 
