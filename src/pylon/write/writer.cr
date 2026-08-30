@@ -1,5 +1,5 @@
-require "wait_group"
 require "../core/change"
+require "../fibers"
 require "../core/paths"
 require "../core/entry"
 require "../scan/snapshot"
@@ -69,20 +69,8 @@ module Pylon::Write
       groups = independent.each_slice(stripe).to_a
       slices = Array(Array(Outcome)).new(groups.size) { [] of Outcome }
 
-      failure : Exception? = nil
-      context = Fiber::ExecutionContext::Parallel.new("write", groups.size)
-      waiting = WaitGroup.new(groups.size)
-
-      groups.each_with_index do |group, worker|
-        write_slice(context, waiting, changes, group, slices[worker]) do |error|
-          failure ||= error
-        end
-      end
-
-      waiting.wait
-
-      if (write_failure = failure)
-        raise write_failure
+      Fibers.parallel("write", groups.size) do |worker|
+        write_group(changes, groups[worker], slices[worker])
       end
 
       collected = Array(Outcome).new(independent.size)
@@ -90,23 +78,8 @@ module Pylon::Write
       collected
     end
 
-    private def write_slice(
-      context : Fiber::ExecutionContext::Parallel,
-      waiting : WaitGroup,
-      changes : Array(Core::Change),
-      indices : Array(Int32),
-      into : Array(Outcome),
-      &on_error : Exception ->
-    ) : Nil
-      context.spawn do
-        begin
-          indices.each { |index| into << write_one(changes[index]) }
-        rescue error
-          on_error.call(error)
-        ensure
-          waiting.done
-        end
-      end
+    private def write_group(changes : Array(Core::Change), indices : Array(Int32), into : Array(Outcome)) : Nil
+      indices.each { |index| into << write_one(changes[index]) }
     end
 
     private def interleave(

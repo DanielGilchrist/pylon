@@ -1,4 +1,4 @@
-require "wait_group"
+require "../fibers"
 require "../core/entry"
 require "../core/paths"
 require "./cache_entry"
@@ -157,47 +157,33 @@ module Pylon::Scan
       end
 
       partials = Array.new(workers) { {} of String => Bytes }
-      context = Fiber::ExecutionContext::Parallel.new("scan-digest", workers)
-      waiting = WaitGroup.new(workers)
 
-      workers.times do |worker|
-        hash_slice(context, waiting, survey, pending, partials[worker], worker, workers)
+      Pylon::Fibers.parallel("scan-digest", workers) do |worker|
+        hash_slice(survey, pending, partials[worker], worker, workers)
       end
 
-      waiting.wait
       partials.each { |partial| digests.merge!(partial) }
     end
 
     private def hash_slice(
-      context : Fiber::ExecutionContext::Parallel,
-      waiting : WaitGroup,
       survey : Survey,
       pending : Array(String),
       into : Hash(String, Bytes),
       offset : Int32,
       stride : Int32,
     ) : Nil
-      filesystem = @filesystem
-      tally = @tally
+      buffer = Bytes.new(READ_BUFFER_BYTES)
+      index = offset
 
-      context.spawn do
-        begin
-          buffer = Bytes.new(READ_BUFFER_BYTES)
-          index = offset
+      while index < pending.size
+        path = pending[index]
 
-          while index < pending.size
-            path = pending[index]
-
-            if (digest = filesystem.digest(path, buffer))
-              into[path] = digest
-              tally.hashed(weight(survey, path))
-            end
-
-            index += stride
-          end
-        ensure
-          waiting.done
+        if (digest = @filesystem.digest(path, buffer))
+          into[path] = digest
+          @tally.hashed(weight(survey, path))
         end
+
+        index += stride
       end
     end
 

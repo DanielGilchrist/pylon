@@ -1,5 +1,5 @@
-require "wait_group"
 require "../core"
+require "../fibers"
 require "./fault"
 require "./progress"
 require "./report"
@@ -27,37 +27,11 @@ module Pylon::Session
 
     def cycle(now_ns : Int64) : Report | Fault
       started = Time.instant
-      local_scanned : Scan::Snapshot | Fault | Nil = nil
-      remote_scanned : Scan::Snapshot | Fault | Nil = nil
-      failure : Exception? = nil
 
-      # A fiber that raises inside WaitGroup takes the process down with it,
-      # so each side hands its error back instead.
-      WaitGroup.wait do |waiting|
-        waiting.spawn do
-          begin
-            local_scanned = @local.scan(now_ns)
-          rescue error
-            failure ||= error
-          end
-        end
-
-        waiting.spawn do
-          begin
-            remote_scanned = @remote.scan(now_ns)
-          rescue error
-            failure ||= error
-          end
-        end
-      end
-
-      if (scan_failure = failure)
-        raise scan_failure
-      end
-
-      local_snapshot = local_scanned
-      remote_snapshot = remote_scanned
-      raise "a scan fiber returned without a snapshot or a failure" if local_snapshot.nil? || remote_snapshot.nil?
+      local_pending = Fibers.future { @local.scan(now_ns) }
+      remote_pending = Fibers.future { @remote.scan(now_ns) }
+      local_snapshot = Fibers.await(local_pending)
+      remote_snapshot = Fibers.await(remote_pending)
 
       return local_snapshot if local_snapshot.is_a?(Fault)
       return remote_snapshot if remote_snapshot.is_a?(Fault)
