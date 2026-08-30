@@ -9,6 +9,7 @@ require "./checkpoint/schedule"
 module Pylon::Session
   class Server
     @sent : Core::Entry? = nil
+    @pushed : Channel(Nil)? = nil
 
     def initialize(
       @endpoint : LocalEndpoint,
@@ -33,6 +34,8 @@ module Pylon::Session
       end
     ensure
       @stopping = true
+      wake
+      @pushed.try(&.receive?)
       @checkpoints.try(&.save)
     end
 
@@ -55,12 +58,28 @@ module Pylon::Session
       return if subscriber.nil?
 
       push
+      pushed = Channel(Nil).new
+      @pushed = pushed
 
       spawn do
-        until @stopping
-          subscriber.signals.receive?
-          push
+        begin
+          until @stopping
+            subscriber.signals.receive?
+            push unless @stopping
+          end
+        ensure
+          pushed.close
         end
+      end
+    end
+
+    private def wake : Nil
+      subscriber = @subscriber
+      return if subscriber.nil?
+
+      select
+      when subscriber.signals.send(nil)
+      else
       end
     end
 

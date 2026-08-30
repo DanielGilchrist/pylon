@@ -19,6 +19,8 @@ lib LibInotify
   IN_NONBLOCK = 0x00000800
   IN_CLOEXEC  = 0x00080000
 
+  POLLIN = 1_i16
+
   struct Event
     wd : Int32
     mask : UInt32
@@ -26,6 +28,13 @@ lib LibInotify
     len : UInt32
   end
 
+  struct PollDescriptor
+    fd : LibC::Int
+    events : LibC::Short
+    revents : LibC::Short
+  end
+
   fun inotify_init1(flags : Int32) : Int32
   fun inotify_add_watch(fd : Int32, pathname : UInt8*, mask : UInt32) : Int32
+  fun poll(descriptors : PollDescriptor*, count : LibC::ULong, timeout_ms : LibC::Int) : LibC::Int
 end

@@ -25,16 +25,33 @@ module Pylon::Watch
       descriptor = LibInotify.inotify_init1(LibInotify::IN_CLOEXEC)
       return nil if descriptor < 0
 
-      new(descriptor, root, Scan::Ignores.new(ignores), signals)
+      wake = StaticArray(LibC::Int, 2).new(0)
+
+      if LibC.pipe(wake) < 0
+        LibC.close(descriptor)
+        return nil
+      end
+
+      new(descriptor, wake[0], wake[1], root, Scan::Ignores.new(ignores), signals)
     end
 
-    def initialize(descriptor : Int32, @root : String, @ignores : Scan::Ignores, @signals : Channel(Nil))
+    def initialize(
+      descriptor : Int32,
+      wake_read : Int32,
+      wake_write : Int32,
+      @root : String,
+      @ignores : Scan::Ignores,
+      @signals : Channel(Nil),
+    )
       @descriptor = descriptor
+      @wake_read = wake_read
+      @wake_write = wake_write
       @paths = {} of Int32 => String
       @dirty = Set(String).new
       @lock = Sync::Mutex.new
       @fresh = false
       @stopping = false
+      @done = Channel(Nil).new
 
       watch_tree("")
 
@@ -53,8 +70,15 @@ module Pylon::Watch
     end
 
     def close : Nil
+      return if @stopping
+
       @stopping = true
+      wake = 1_u8
+      LibC.write(@wake_write, pointerof(wake).as(Void*), LibC::SizeT.new(1))
+      @done.receive?
       LibC.close(@descriptor)
+      LibC.close(@wake_read)
+      LibC.close(@wake_write)
     end
 
     private def watch_tree(relative : String) : Nil
@@ -74,6 +98,7 @@ module Pylon::Watch
 
     private def add_watch(relative : String) : Nil
       wd = LibInotify.inotify_add_watch(@descriptor, absolute(relative).check_no_null_byte, WATCH_MASK)
+
       return if wd < 0
 
       @paths[wd] = relative
@@ -82,13 +107,36 @@ module Pylon::Watch
     private def listen : Nil
       buffer = Bytes.new(READ_BUFFER_BYTES)
 
-      until @stopping
+      while awaited?
         read = LibC.read(@descriptor, buffer.to_unsafe.as(Void*), LibC::SizeT.new(buffer.size))
         break if read <= 0
 
         consume(buffer[0, read])
         signal
       end
+    ensure
+      @done.close
+    end
+
+    private def awaited? : Bool
+      loop do
+        return false if @stopping
+
+        watched = StaticArray[poll_readable(@descriptor), poll_readable(@wake_read)]
+        ready = LibInotify.poll(watched.to_unsafe, LibC::ULong.new(2), -1)
+
+        next if ready < 0 && Errno.value.eintr?
+        return false if ready < 0
+        return false if watched[1].revents != 0
+        return true if watched[0].revents != 0
+      end
+    end
+
+    private def poll_readable(descriptor : Int32) : LibInotify::PollDescriptor
+      watched = LibInotify::PollDescriptor.new
+      watched.fd = descriptor
+      watched.events = LibInotify::POLLIN
+      watched
     end
 
     private def consume(bytes : Bytes) : Nil

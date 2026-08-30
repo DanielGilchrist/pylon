@@ -50,6 +50,7 @@ module Pylon::Watch
       @fresh = false
       @stopping = false
       @ready = Channel(Bool).new
+      @done = Channel(Nil).new
       @context = Fiber::ExecutionContext::Isolated.new("fsevents") { watch }
     end
 
@@ -70,7 +71,10 @@ module Pylon::Watch
     end
 
     def close : Nil
+      return if @stopping
+
       @stopping = true
+      @done.receive?
     end
 
     protected def consume(count : LibC::SizeT, paths : UInt8**, flags : UInt32*) : Nil
@@ -165,6 +169,8 @@ module Pylon::Watch
       LibFSEvents.stream_invalidate(stream)
       LibFSEvents.stream_release(stream)
       release(cf_paths, cf_root)
+    ensure
+      @done.close
     end
 
     private def release(*references : LibFSEvents::CFRef) : Nil
