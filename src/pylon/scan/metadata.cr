@@ -1,3 +1,5 @@
+require "../problem"
+
 module Pylon::Scan
   struct Metadata
     enum Kind
@@ -18,11 +20,16 @@ module Pylon::Scan
 
     NANOSECONDS_PER_SECOND = 1_000_000_000_i64
 
-    def self.of(path : String) : Metadata?
+    def self.of(path : String) : Metadata | Problem | Nil
       stat = uninitialized LibC::Stat
-      return nil unless LibC.lstat(path.check_no_null_byte, pointerof(stat)) == 0
+      return from(stat) if LibC.lstat(path.check_no_null_byte, pointerof(stat)) == 0
 
-      from(stat)
+      case errno = Errno.value
+      when Errno::ENOENT, Errno::ENOTDIR
+        nil
+      else
+        Problem.new("could not be examined (#{errno})")
+      end
     end
 
     def self.from(stat : LibC::Stat) : Metadata

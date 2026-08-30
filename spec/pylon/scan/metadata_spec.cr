@@ -83,8 +83,9 @@ describe "Pylon::Scan::Metadata.of" do
     File.write(path, "hello")
 
     begin
-      observed = Metadata.of(path).should_not be_nil
-      next if observed.nil?
+      observed = Metadata.of(path)
+      observed.is_a?(Metadata).should be_true
+      next unless observed.is_a?(Metadata)
 
       observed.kind.should eq(Pylon::Scan::Metadata::Kind::File)
       observed.size.should eq(5_u64)
@@ -92,7 +93,9 @@ describe "Pylon::Scan::Metadata.of" do
       observed.executable?.should be_false
 
       File.chmod(path, 0o755)
-      Metadata.of(path).not_nil!.executable?.should be_true
+      changed = Metadata.of(path)
+      changed.executable?.should be_true if changed.is_a?(Metadata)
+      changed.is_a?(Metadata).should be_true
     ensure
       File.delete?(path)
     end

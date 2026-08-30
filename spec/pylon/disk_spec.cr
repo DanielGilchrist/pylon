@@ -29,12 +29,12 @@ describe Pylon::Disk do
     in_sandbox do |root, target|
       path = File.join(root, "notes.txt")
       File.write(path, "before")
-      original_inode = Pylon::Scan::Metadata.of(path).not_nil!.inode
+      original_inode = Fixtures.metadata!(Pylon::Scan::Metadata.of(path)).inode
 
       target.write_file("notes.txt", "after".to_slice, false).should be_nil
 
       File.read(path).should eq("after")
-      Pylon::Scan::Metadata.of(path).not_nil!.inode.should_not eq(original_inode)
+      Fixtures.metadata!(Pylon::Scan::Metadata.of(path)).inode.should_not eq(original_inode)
     end
   end
 
@@ -53,7 +53,7 @@ describe Pylon::Disk do
       target.create_symlink("link", "elsewhere.txt").should be_nil
 
       File.readlink(File.join(root, "link")).should eq("elsewhere.txt")
-      Pylon::Scan::Metadata.of(File.join(root, "link")).not_nil!.kind.should eq(Pylon::Scan::Metadata::Kind::SymbolicLink)
+      Fixtures.metadata!(Pylon::Scan::Metadata.of(File.join(root, "link"))).kind.should eq(Pylon::Scan::Metadata::Kind::SymbolicLink)
     end
   end
 

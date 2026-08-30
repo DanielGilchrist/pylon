@@ -1,3 +1,5 @@
+require "../problem"
+
 module Pylon::Write
-  record Problem, reason : String
+  alias Problem = Pylon::Problem
 end

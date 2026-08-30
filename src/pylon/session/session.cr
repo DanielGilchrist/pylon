@@ -67,6 +67,7 @@ module Pylon::Session
           [] of Write::Outcome,
           [] of Write::Outcome,
           halt,
+          reconciliation.troubles,
         )
       end
 
@@ -78,6 +79,7 @@ module Pylon::Session
           reconciliation.conflicts,
           local_changes.map { |change| Write::Outcome.new(change.path, change.new, :dry_run) },
           remote_changes.map { |change| Write::Outcome.new(change.path, change.new, :dry_run) },
+          troubles: reconciliation.troubles,
         )
       end
 
@@ -105,7 +107,7 @@ module Pylon::Session
         {% end %}
       end
 
-      Report.new(reconciliation.conflicts, local_outcomes, remote_outcomes)
+      Report.new(reconciliation.conflicts, local_outcomes, remote_outcomes, troubles: reconciliation.troubles)
     end
 
     private def ship(changes : Array(Core::Change), source, target, direction : Direction) : Array(Write::Outcome) | Fault

@@ -93,7 +93,7 @@ module Pylon::Session
 
       wanted.each do |want|
         content = @disk.read(want.path)
-        next if content.nil?
+        next unless content.is_a?(Bytes)
 
         contents[want.digest] = content if Digest::SHA256.digest(content).to_slice == want.digest
       end

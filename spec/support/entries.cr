@@ -1,4 +1,5 @@
 require "../../src/pylon/core"
+require "../../src/pylon/scan/metadata"
 
 module Fixtures
   include Pylon::Core
@@ -99,5 +100,13 @@ module Fixtures
     raise "missing entry at #{names.inspect}" if current.nil?
 
     current
+  end
+end
+
+module Fixtures
+  def self.metadata!(observed : Pylon::Scan::Metadata | Pylon::Problem | Nil) : Pylon::Scan::Metadata
+    raise "expected metadata, got #{observed.inspect}" unless observed.is_a?(Pylon::Scan::Metadata)
+
+    observed
   end
 end

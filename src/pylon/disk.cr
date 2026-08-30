@@ -13,7 +13,7 @@ module Pylon
     def initialize(@root : String)
     end
 
-    def metadata(relative_path : String) : Scan::Metadata?
+    def metadata(relative_path : String) : Scan::Metadata | Problem | Nil
       Scan::Metadata.of(absolute(relative_path))
     end
 
@@ -21,7 +21,7 @@ module Pylon
       Dir.each_child(absolute(relative_path)) { |name| yield name }
     end
 
-    def digest(relative_path : String, buffer : Bytes = Bytes.new(READ_BUFFER_BYTES)) : Bytes?
+    def digest(relative_path : String, buffer : Bytes = Bytes.new(READ_BUFFER_BYTES)) : Bytes | Problem
       digest = Digest::SHA256.new
 
       File.open(absolute(relative_path)) do |file|
@@ -31,18 +31,18 @@ module Pylon
       end
 
       digest.final
-    rescue File::Error
-      nil
+    rescue error : File::Error
+      problem(error)
     end
 
-    def read(relative_path : String) : Bytes?
+    def read(relative_path : String) : Bytes | Problem
       File.open(absolute(relative_path)) do |file|
         buffer = Bytes.new(file.size)
         file.read_fully(buffer)
         buffer
       end
-    rescue File::Error | IO::EOFError
-      nil
+    rescue error : File::Error | IO::EOFError
+      Problem.new(error.message || error.class.name)
     end
 
     def stream(relative_path : String, digest : Bytes, io : IO, buffer : Bytes, codec, scratch : Bytes) : Nil
@@ -61,10 +61,10 @@ module Pylon
       Wire::Chunks.write_end(io, valid: false)
     end
 
-    def link_target(relative_path : String) : String?
+    def link_target(relative_path : String) : String | Problem
       File.readlink(absolute(relative_path))
-    rescue File::Error
-      nil
+    rescue error : File::Error
+      problem(error)
     end
 
     def create_directory(relative_path : String) : Write::Problem?
@@ -92,10 +92,16 @@ module Pylon
 
     def set_executable(relative_path : String, executable : Bool) : Write::Problem?
       path = absolute(relative_path)
-      mode = Scan::Metadata.of(path).try(&.mode)
-      return Write::Problem.new("the permissions could not be read") if mode.nil?
 
-      permissions = (mode & 0o7777_u32)
+      case observed = Scan::Metadata.of(path)
+      in Nil
+        return Write::Problem.new("the permissions could not be read: the file is missing")
+      in Problem
+        return Write::Problem.new("the permissions could not be read: #{observed.reason}")
+      in Scan::Metadata
+      end
+
+      permissions = (observed.mode & 0o7777_u32)
       permissions =
         if executable
           permissions | ((permissions & 0o444_u32) >> 2)

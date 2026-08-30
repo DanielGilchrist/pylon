@@ -6,7 +6,8 @@ module Pylon::Write
   module Guard
     extend self
 
-    def check(expected : Core::Entry?, cached : Scan::CacheEntry?, observed : Scan::Metadata?) : Verdict
+    def check(expected : Core::Entry?, cached : Scan::CacheEntry?, observed : Scan::Metadata | Problem | Nil) : Verdict
+      return Verdict::UnknownState if observed.is_a?(Problem)
       return observed.nil? ? Verdict::Proceed : Verdict::ModificationDetected if expected.nil?
       return Verdict::ModificationDetected if observed.nil?
 

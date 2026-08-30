@@ -15,16 +15,20 @@ module Pylon::Core
       getter local_changes = [] of Change
       getter remote_changes = [] of Change
       getter conflicts = [] of Conflict
+      getter troubles = [] of Trouble
 
       def initialize(@preferences : Preferences)
       end
 
       def result : Reconciliation
-        Reconciliation.new(base_changes, local_changes, remote_changes, conflicts)
+        Reconciliation.new(base_changes, local_changes, remote_changes, conflicts, troubles)
       end
 
       def walk(path : String, base : Entry?, local : Entry?, remote : Entry?) : Nil
-        return if unreadable?(local) || unreadable?(remote)
+        if unreadable?(local) || unreadable?(remote)
+          note_troubles(path, local, remote)
+          return
+        end
 
         if ignored?(local) && ignored?(remote)
           untrack(path, base)
@@ -155,6 +159,11 @@ module Pylon::Core
         return if base.nil?
 
         base_changes << Change.new(path, base, nil)
+      end
+
+      private def note_troubles(path : String, local : Entry?, remote : Entry?) : Nil
+        troubles << Trouble.new(path, :local, local.problem) if local.is_a?(Problematic)
+        troubles << Trouble.new(path, :remote, remote.problem) if remote.is_a?(Problematic)
       end
 
       private def unreadable?(entry : Entry?) : Bool

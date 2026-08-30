@@ -92,6 +92,14 @@ describe Pylon::Scan::Scanner do
     filesystem.reads.should eq(["README.md"])
   end
 
+  it "keeps a path whose metadata cannot be examined as problematic rather than absent" do
+    filesystem = sample.with("app/models/user.rb", statable: false)
+    root = scan(filesystem).root
+
+    flagged = Fixtures.problem!(Fixtures.dig!(root, "app", "models", "user.rb"))
+    flagged.problem.should contain("EACCES")
+  end
+
   it "marks an unreadable file problematic rather than failing the scan" do
     filesystem = sample.with("README.md", readable: false)
     root = scan(filesystem).root.should_not be_nil

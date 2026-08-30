@@ -1,5 +1,6 @@
 require "digest/sha256"
 require "../../src/pylon/scan/metadata"
+require "../../src/pylon/problem"
 
 struct MemoryFilesystem
   record Node,
@@ -9,7 +10,8 @@ struct MemoryFilesystem
     executable : Bool = false,
     inode : UInt64 = 0_u64,
     mtime_ns : Int64 = 0_i64,
-    readable : Bool = true
+    readable : Bool = true,
+    statable : Bool = true
 
   getter reads = [] of String
 
@@ -48,9 +50,10 @@ struct MemoryFilesystem
     MemoryFilesystem.new(nodes)
   end
 
-  def metadata(relative_path : String) : Pylon::Scan::Metadata?
+  def metadata(relative_path : String) : Pylon::Scan::Metadata | Pylon::Problem | Nil
     node = @nodes[relative_path]?
     return nil if node.nil?
+    return Pylon::Problem.new("could not be examined (EACCES)") unless node.statable
 
     mode =
       case node.kind
@@ -81,9 +84,9 @@ struct MemoryFilesystem
     end
   end
 
-  def digest(relative_path : String, buffer : Bytes = Bytes.empty) : Bytes?
+  def digest(relative_path : String, buffer : Bytes = Bytes.empty) : Bytes | Pylon::Problem
     node = @nodes[relative_path]
-    return nil unless node.readable
+    return Pylon::Problem.new("could not be read (EACCES)") unless node.readable
 
     reads << relative_path
     Digest::SHA256.digest(node.content)

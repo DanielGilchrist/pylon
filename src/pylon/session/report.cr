@@ -7,12 +7,14 @@ module Pylon::Session
     getter local_outcomes : Array(Write::Outcome)
     getter remote_outcomes : Array(Write::Outcome)
     getter halt : Core::Safety::Reason?
+    getter troubles : Array(Core::Trouble)
 
     def initialize(
       @conflicts : Array(Core::Conflict),
       @local_outcomes : Array(Write::Outcome),
       @remote_outcomes : Array(Write::Outcome),
       @halt : Core::Safety::Reason? = nil,
+      @troubles : Array(Core::Trouble) = [] of Core::Trouble,
     )
     end
 

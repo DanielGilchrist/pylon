@@ -13,6 +13,7 @@ struct Pylon::CLI
 
     def initialize(@io : IO, @verbose : Bool = false, @dry_run : Bool = false, @errors : IO = STDERR)
       @announced = Set(String).new
+      @announced_troubles = Set(String).new
       @spinner = Spinner.new(@io)
       @streamed = 0
       @streamed_bytes = 0_u64
@@ -136,6 +137,7 @@ struct Pylon::CLI
       incoming = report.local_outcomes.select(&.applied?)
       skipped = @verbose ? report.skipped : [] of Write::Outcome
       spoke = announce(report.conflicts)
+      spoke = announce_troubles(report.troubles) || spoke
 
       return unless spoke || !outgoing.empty? || !incoming.empty? || !skipped.empty?
 
@@ -184,6 +186,24 @@ struct Pylon::CLI
 
       @announced = current
       !(fresh.empty? && cleared.empty?)
+    end
+
+    private def announce_troubles(troubles : Array(Core::Trouble)) : Bool
+      current = Set(String).new(initial_capacity: troubles.size)
+      spoke = false
+
+      troubles.each do |trouble|
+        key = "#{trouble.side}:#{trouble.path}:#{trouble.reason}"
+        current << key
+        next if @announced_troubles.includes?(key)
+
+        where = trouble.side.remote? ? " on the remote" : ""
+        @io.puts "#{indent}#{"!".colorize.yellow.bold} #{"unreadable#{where}".colorize.yellow} #{trouble.path} #{"(#{trouble.reason}; it will not sync until this is fixed)".colorize.dark_gray}"
+        spoke = true
+      end
+
+      @announced_troubles = current
+      spoke
     end
 
     private def show(arrow : String, colour : Colorize::ColorANSI, outcomes : Array(Write::Outcome)) : Nil

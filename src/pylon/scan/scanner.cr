@@ -17,16 +17,17 @@ module Pylon::Scan
 
     private record SurveyedDirectory
     private record SurveyedFile, metadata : Metadata
-    private record SurveyedLink, target : String?
+    private record SurveyedLink, target : String | Problem
     private record SurveyedUntracked
+    private record SurveyedProblem, reason : String
 
-    private alias Surveyed = SurveyedDirectory | SurveyedFile | SurveyedLink | SurveyedUntracked
+    private alias Surveyed = SurveyedDirectory | SurveyedFile | SurveyedLink | SurveyedUntracked | SurveyedProblem
 
     private class Survey
       getter nodes = {} of String => Surveyed
       getter children = {} of String => Array(String)
       getter pending = [] of String
-      getter reused = {} of String => Bytes
+      getter reused = {} of String => Bytes | Problem
       getter carried = {} of String => Core::Entry
     end
 
@@ -92,8 +93,14 @@ module Pylon::Scan
         return
       end
 
-      observed = @filesystem.metadata(path)
-      return if observed.nil?
+      case observed = @filesystem.metadata(path)
+      in Nil
+        return
+      in Problem
+        survey.nodes[path] = SurveyedProblem.new(observed.reason)
+        return
+      in Metadata
+      end
 
       case observed.kind
       in .directory?
@@ -137,26 +144,18 @@ module Pylon::Scan
       end
     end
 
-    private def hash_pending(survey : Survey, digests : Hash(String, Bytes)) : Nil
+    private def hash_pending(survey : Survey, digests : Hash(String, Bytes | Problem)) : Nil
       pending = survey.pending
       return if pending.empty?
 
       workers = Math.min(@parallelism, pending.size)
 
       if workers <= 1
-        buffer = Bytes.new(READ_BUFFER_BYTES)
-
-        pending.each do |path|
-          if (digest = @filesystem.digest(path, buffer))
-            digests[path] = digest
-            @tally.hashed(weight(survey, path))
-          end
-        end
-
+        hash_slice(survey, pending, digests, 0, 1)
         return
       end
 
-      partials = Array.new(workers) { {} of String => Bytes }
+      partials = Array.new(workers) { {} of String => Bytes | Problem }
 
       Pylon::Fibers.parallel("scan-digest", workers) do |worker|
         hash_slice(survey, pending, partials[worker], worker, workers)
@@ -168,7 +167,7 @@ module Pylon::Scan
     private def hash_slice(
       survey : Survey,
       pending : Array(String),
-      into : Hash(String, Bytes),
+      into : Hash(String, Bytes | Problem),
       offset : Int32,
       stride : Int32,
     ) : Nil
@@ -177,12 +176,9 @@ module Pylon::Scan
 
       while index < pending.size
         path = pending[index]
-
-        if (digest = @filesystem.digest(path, buffer))
-          into[path] = digest
-          @tally.hashed(weight(survey, path))
-        end
-
+        digest = @filesystem.digest(path, buffer)
+        into[path] = digest
+        @tally.hashed(weight(survey, path)) if digest.is_a?(Bytes)
         index += stride
       end
     end
@@ -192,7 +188,7 @@ module Pylon::Scan
       node.is_a?(SurveyedFile) ? node.metadata.size.to_i64 : 0_i64
     end
 
-    private def build(survey : Survey, digests : Hash(String, Bytes), path : String) : Core::Entry?
+    private def build(survey : Survey, digests : Hash(String, Bytes | Problem), path : String) : Core::Entry?
       if (carried = survey.carried[path]?)
         return carried
       end
@@ -212,21 +208,26 @@ module Pylon::Scan
 
         Core::Directory.new(contents)
       in SurveyedFile
-        digest = digests[path]?
-
-        return Core::Problematic.new("unreadable") if digest.nil?
-
-        @next_cache[path] = CacheEntry.new(node.metadata, digest)
-
-        Core::File.new(digest, executable: node.metadata.executable?)
+        case digest = digests[path]?
+        in Nil
+          Core::Problematic.new("the file vanished during the scan")
+        in Problem
+          Core::Problematic.new(digest.reason)
+        in Bytes
+          @next_cache[path] = CacheEntry.new(node.metadata, digest)
+          Core::File.new(digest, executable: node.metadata.executable?)
+        end
       in SurveyedLink
-        target = node.target
-
-        return Core::Problematic.new("unreadable link") if target.nil?
-
-        Core::SymbolicLink.new(target)
+        case target = node.target
+        in Problem
+          Core::Problematic.new("the link target #{target.reason}")
+        in String
+          Core::SymbolicLink.new(target)
+        end
       in SurveyedUntracked
         Core::Untracked.new
+      in SurveyedProblem
+        Core::Problematic.new(node.reason)
       end
     end
   end
