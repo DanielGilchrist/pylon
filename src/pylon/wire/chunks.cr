@@ -13,7 +13,8 @@ module Pylon::Wire
 
     def write_chunk(io : IO, source : Bytes, codec, scratch : Bytes) : Nil
       packed = codec.compress(source, scratch)
-      raise Truncated.new("compression failed: #{packed.message}") if packed.is_a?(Compress::Error)
+      # This can only happen if zstd fails to compress the buffer. I'm not sure how this can fail yet so we fail loudly for now.
+      raise "compression into a bound-sized buffer failed: #{packed.message}" if packed.is_a?(Compress::Error)
 
       io.write_bytes(packed.size.to_u32 + 1, FORMAT)
       io.write_bytes(source.size.to_u32, FORMAT)
