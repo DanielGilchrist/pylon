@@ -1,6 +1,7 @@
 require "../core/applier"
 require "../wire/message"
 require "./fault"
+require "./pending_write"
 
 module Pylon::Session
   class RemoteEndpoint
@@ -48,11 +49,12 @@ module Pylon::Session
       nil
     end
 
-    def write_begin(changes : Array(Core::Change), source : Wire::ContentSource) : Nil
+    def write_begin(changes : Array(Core::Change), source : Wire::ContentSource) : PendingWrite
       transmit(Wire::WriteRequest.new(changes, source))
+      PendingWrite.new(Proc(Array(Write::Outcome) | Fault).new { receive_written })
     end
 
-    def write_await : Array(Write::Outcome) | Fault
+    private def receive_written : Array(Write::Outcome) | Fault
       reply = await
       return reply if reply.is_a?(Fault)
       return unexpected("a write response", reply) unless reply.is_a?(Wire::WriteResponse)

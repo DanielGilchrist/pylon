@@ -5,6 +5,7 @@ require "./progress"
 require "./report"
 require "../core/digests"
 require "../write/writer"
+require "./pending_write"
 
 module Pylon::Session
   class Session(A, B)
@@ -114,7 +115,7 @@ module Pylon::Session
       outcomes = [] of Write::Outcome
       total = changes.size
       pending = changes
-      inflight = 0
+      inflight = Deque(PendingWrite).new(WRITE_WINDOW)
       total_bytes = source.payload_size(changes)
 
       notify(direction, outcomes, total, total_bytes)
@@ -128,21 +129,19 @@ module Pylon::Session
 
         break if batch.empty?
 
-        target.write_begin(batch, provided)
-        inflight += 1
+        inflight.push(target.write_begin(batch, provided))
 
-        if inflight == WRITE_WINDOW
-          written = target.write_await
+        if inflight.size == WRITE_WINDOW && (oldest = inflight.shift?)
+          written = oldest.await
           return written if written.is_a?(Fault)
 
           outcomes.concat(written)
-          inflight -= 1
           notify(direction, outcomes, total, total_bytes)
         end
       end
 
-      inflight.times do
-        written = target.write_await
+      while (oldest = inflight.shift?)
+        written = oldest.await
         return written if written.is_a?(Fault)
 
         outcomes.concat(written)

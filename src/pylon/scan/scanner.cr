@@ -15,6 +15,8 @@ module Pylon::Scan
     @next_cache : Cache
     @dirty : Set(String)
 
+    private record PendingFile, path : String, size : Int64
+
     private record SurveyedDirectory
     private record SurveyedFile, metadata : Metadata
     private record SurveyedLink, target : String | Problem
@@ -26,7 +28,7 @@ module Pylon::Scan
     private class Survey
       getter nodes = {} of String => Surveyed
       getter children = {} of String => Array(String)
-      getter pending = [] of String
+      getter pending = [] of PendingFile
       getter reused = {} of String => Bytes | Problem
       getter carried = {} of String => Core::Entry
     end
@@ -122,7 +124,7 @@ module Pylon::Scan
         if (digest = @cache[path]?.try(&.reuse(observed, @now_ns, @granularity_ns)))
           survey.reused[path] = digest
         else
-          survey.pending << path
+          survey.pending << PendingFile.new(path, observed.size.to_i64)
         end
       in .symbolic_link?
         survey.nodes[path] = SurveyedLink.new(@filesystem.link_target(path))
@@ -166,7 +168,7 @@ module Pylon::Scan
 
     private def hash_slice(
       survey : Survey,
-      pending : Array(String),
+      pending : Array(PendingFile),
       into : Hash(String, Bytes | Problem),
       offset : Int32,
       stride : Int32,
@@ -175,17 +177,12 @@ module Pylon::Scan
       index = offset
 
       while index < pending.size
-        path = pending[index]
-        digest = @filesystem.digest(path, buffer)
-        into[path] = digest
-        @tally.hashed(weight(survey, path)) if digest.is_a?(Bytes)
+        file = pending[index]
+        digest = @filesystem.digest(file.path, buffer)
+        into[file.path] = digest
+        @tally.hashed(file.size) if digest.is_a?(Bytes)
         index += stride
       end
-    end
-
-    private def weight(survey : Survey, path : String) : Int64
-      node = survey.nodes[path]?
-      node.is_a?(SurveyedFile) ? node.metadata.size.to_i64 : 0_i64
     end
 
     private def build(survey : Survey, digests : Hash(String, Bytes | Problem), path : String) : Core::Entry?
