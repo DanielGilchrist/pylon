@@ -82,29 +82,21 @@ module Pylon::Session
       end
 
       loop do
-        message = Wire.read_message(@input)
-
-        if message.is_a?(Wire::Closed)
+        case message = Wire.read_message(@input)
+        in Wire::Closed
           @fault ||= Stopped.new
           @responses.close
           return
-        end
-
-        if message.is_a?(Wire::Invalid)
+        in Wire::Invalid
           @fault ||= Stopped.new(message.reason)
           @responses.close
           return
-        end
-
-        if message.is_a?(Wire::TreeUpdate)
+        in Wire::TreeUpdate
           @tree = message.root
           @sequence = message.sequence
           @known = true
           signal
-          next
-        end
-
-        if message.is_a?(Wire::TreeDelta)
+        in Wire::TreeDelta
           if message.sequence == @sequence + 1
             @tree = Core::Applier.apply(@tree, message.changes)
             @sequence = message.sequence
@@ -113,10 +105,13 @@ module Pylon::Session
           end
 
           signal
-          next
+        in Wire::Failure, Wire::ScanResponse, Wire::ContentsResponse, Wire::WriteResponse
+          @responses.send(message)
+        in Wire::ScanRequest, Wire::ContentsRequest, Wire::WriteRequest
+          @fault ||= Misbehaved.new("the server sent a #{message.class.name}, which only clients send")
+          @responses.close
+          return
         end
-
-        @responses.send(message)
       end
     end
 
