@@ -91,6 +91,30 @@ describe "Writer running independent file writes in parallel" do
     end
   end
 
+  it "creates every directory before the files inside it, whatever ran in parallel" do
+    changes = [] of Pylon::Core::Change
+    contents = Pylon::Wire::Contents.new
+
+    20.times do |index|
+      digest = Digest::SHA256.digest("nested#{index}").to_slice
+      contents[digest] = "body #{index}".to_slice
+      changes << Pylon::Core::Change.new("d#{index}", nil, Pylon::Core::Directory.new)
+      changes << Pylon::Core::Change.new("d#{index}/file.rb", nil, Pylon::Core::File.new(digest))
+    end
+
+    root = File.tempname("pylon-parallel-nested")
+    Dir.mkdir_p(root)
+
+    begin
+      outcomes = build_writer(Pylon::Disk.new(root), contents).write(changes)
+
+      outcomes.count(&.applied?).should eq(changes.size)
+      20.times { |index| File.read(File.join(root, "d#{index}", "file.rb")).should eq("body #{index}") }
+    ensure
+      FileUtils.rm_rf(root)
+    end
+  end
+
   it "still reports a skip per missing staged content" do
     changes = bulk_changes
     contents = staged_contents(changes)
