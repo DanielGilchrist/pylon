@@ -1,10 +1,8 @@
 module Pylon::Core
   struct Directory
-    private EMPTY = {} of String => Entry
-
     getter contents : Hash(String, Entry)
 
-    def initialize(contents : Hash(String, V) = EMPTY) forall V
+    def initialize(contents : Hash(String, V) = Hash(String, Entry).new) forall V
       if contents.is_a?(Hash(String, Entry))
         @contents = contents
       else
