@@ -1,0 +1,55 @@
+require "file_utils"
+require "../../spec_helper"
+require "../../../src/pylon/session/local_endpoint"
+require "../../../src/pylon/session/session"
+
+include Pylon::Session
+
+private def tick : Int64
+  Time.utc.to_unix_ns.to_i64 + Random.rand(1_000_000_i64)
+end
+
+private def in_progress_pair(file_count : Int32, & : Array(Progress), Session(LocalEndpoint, LocalEndpoint) ->)
+  base = File.join(Dir.tempdir, "pylon-progress-#{Random::Secure.hex(8)}")
+  local_root = File.join(base, "local")
+  remote_root = File.join(base, "remote")
+  Dir.mkdir_p(local_root)
+  Dir.mkdir_p(remote_root)
+
+  file_count.times { |index| File.write(File.join(local_root, "file_#{index}.rb"), "body #{index}") }
+
+  updates = [] of Progress
+  session = Session.new(
+    LocalEndpoint.new(local_root),
+    LocalEndpoint.new(remote_root),
+    on_progress: ->(update : Progress) { updates << update },
+  )
+
+  begin
+    yield updates, session
+  ensure
+    FileUtils.rm_rf(base)
+  end
+end
+
+describe "session progress reporting" do
+  it "reports progress on a transfer large enough to be worth narrating" do
+    in_progress_pair(201) do |updates, session|
+      cycle!(session, tick)
+
+      updates.should_not be_empty
+      updates.each(&.direction.to_remote?.should(be_true))
+      updates.map(&.total).uniq!.should eq([201])
+      updates.map(&.confirmed).each_cons_pair { |before, after| (before <= after).should be_true }
+      updates.last.confirmed.should eq(201)
+    end
+  end
+
+  it "stays silent on a small transfer" do
+    in_progress_pair(3) do |updates, session|
+      cycle!(session, tick)
+
+      updates.should be_empty
+    end
+  end
+end
