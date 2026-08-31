@@ -49,6 +49,30 @@ describe Pylon::Write::Writer do
     target.operations.should eq(["mkdir app", "mkdir app/models", "write app/models/user.rb"])
   end
 
+  it "creates a symlink and reports it as applied" do
+    target = MemoryTarget.new
+
+    outcome = writer(target, MemoryStaging.new, Pylon::Scan::Cache.new)
+      .write([Change.new("link", nil, Pylon::Core::SymbolicLink.new("elsewhere"))]).first
+
+    outcome.applied?.should be_true
+    outcome.entry.should eq(Pylon::Core::SymbolicLink.new("elsewhere"))
+    target.operations.should eq(["symlink link"])
+    target.nodes["link"].target.should eq("elsewhere")
+  end
+
+  it "says why a symlink could not be created" do
+    target = MemoryTarget.new
+    target.writable = false
+
+    outcome = writer(target, MemoryStaging.new, Pylon::Scan::Cache.new)
+      .write([Change.new("link", nil, Pylon::Core::SymbolicLink.new("elsewhere"))]).first
+
+    outcome.applied?.should be_false
+    outcome.skipped.should eq(WriteFailed.new("the target is read-only"))
+    outcome.entry.should be_nil
+  end
+
   it "refuses to overwrite a file that changed since it was scanned" do
     target = MemoryTarget.new
     original = target.seed_file("notes.txt", "original")
