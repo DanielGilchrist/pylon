@@ -14,6 +14,14 @@ module Pylon::Watch
   class FSEvents
     include Walk
 
+    private record Unresolved
+
+    enum Start
+      Running
+      CreateFailed
+      StartFailed
+    end
+
     LATENCY_SECONDS   = 0.05
     STOP_POLL_SECONDS =  0.5
 
@@ -39,11 +47,17 @@ module Pylon::Watch
         Unavailable.new("the sync root could not be resolved: #{resolved.reason}")
       in String
         watcher = new(resolved, Scan::Ignores.new(ignores), signals)
-        watcher.watching? ? watcher : Unavailable.new("the FSEvents stream could not be started")
+
+        case watcher.started
+        in Start::Running      then watcher
+        in Start::CreateFailed then Unavailable.new("the FSEvents stream could not be created")
+        in Start::StartFailed  then Unavailable.new("the FSEvents stream could not be started")
+        in Nil                 then Unavailable.new("the watcher stopped before the stream started")
+        end
       end
     end
 
-    @watching : Bool? = nil
+    @started : Start? | Unresolved = Unresolved.new
 
     def initialize(@root : String, @ignores : Scan::Ignores, @signals : Channel(Nil))
       @prefix = "#{@root}/"
@@ -51,16 +65,16 @@ module Pylon::Watch
       @lock = Sync::Mutex.new
       @fresh = false
       @stopping = false
-      @ready = Channel(Bool).new
+      @ready = Channel(Start).new
       @done = Channel(Nil).new
       @context = Fibers.isolated(:fs_events) { watch }
     end
 
-    def watching? : Bool
-      watching = @watching
-      return watching unless watching.nil?
+    def started : Start?
+      started = @started
+      return started unless started.is_a?(Unresolved)
 
-      @watching = @ready.receive? == true
+      @started = @ready.receive?
     end
 
     def drain : Dirty
@@ -145,7 +159,7 @@ module Pylon::Watch
 
       if stream.null?
         release(cf_paths, cf_root)
-        @ready.send(false)
+        @ready.send(Start::CreateFailed)
         return
       end
 
@@ -155,11 +169,11 @@ module Pylon::Watch
         LibFSEvents.stream_invalidate(stream)
         LibFSEvents.stream_release(stream)
         release(cf_paths, cf_root)
-        @ready.send(false)
+        @ready.send(Start::StartFailed)
         return
       end
 
-      @ready.send(true)
+      @ready.send(Start::Running)
 
       until @stopping
         LibFSEvents.run_loop_run_in_mode(LibFSEvents.kCFRunLoopDefaultMode, STOP_POLL_SECONDS, 0_u8)
