@@ -46,6 +46,11 @@ describe Pylon::Core::Safety do
       .should eq(Safety::Reason::RootTypeChange)
   end
 
+  it "calls a root type change by its name even though one side no longer holds a directory" do
+    Safety.check(populated, Fixtures.f1, populated, [Change.new("", populated, Fixtures.f1)])
+      .should eq(Safety::Reason::RootTypeChange)
+  end
+
   it "allows creating the root where there was nothing" do
     Safety.check(nil, nil, populated, [Change.new("", nil, populated)]).should be_nil
   end
