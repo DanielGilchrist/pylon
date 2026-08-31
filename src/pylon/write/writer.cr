@@ -144,9 +144,15 @@ module Pylon::Write
     private def clear_first?(old : Core::Entry?, new : Core::Entry?) : Bool
       return false if old.nil?
       return true if new.nil?
-      return true if old.is_a?(Core::Directory) || new.is_a?(Core::Directory)
 
-      false
+      directory?(old) || directory?(new)
+    end
+
+    private def directory?(entry : Core::Entry) : Bool
+      case entry
+      in Core::Directory                                                     then true
+      in Core::File, Core::SymbolicLink, Core::Untracked, Core::Problematic then false
+      end
     end
 
     private def swap_permissions(change : Core::Change) : Outcome?
