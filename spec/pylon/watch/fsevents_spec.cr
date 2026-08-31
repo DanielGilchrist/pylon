@@ -59,4 +59,33 @@ describe Pylon::Watch::FSEvents do
       FileUtils.rm_rf(root)
     end
   end
+
+  it "reports the files inside a directory moved into the root" do
+    root = File.tempname("pylon-fsevents-move")
+    staging = File.tempname("pylon-fsevents-staging")
+    Dir.mkdir_p(root)
+    Dir.mkdir_p(File.join(staging, "incoming", "sub"))
+    File.write(File.join(staging, "incoming", "top.rb"), "puts 1")
+    File.write(File.join(staging, "incoming", "sub", "inner.rb"), "puts 2")
+
+    watcher = FSEvents.open(root, [] of String)
+    watcher.should be_a(FSEvents)
+    next unless watcher.is_a?(FSEvents)
+
+    begin
+      sleep(200.milliseconds)
+      File.rename(File.join(staging, "incoming"), File.join(root, "incoming"))
+
+      seen = drain_within(watcher, 5.0) do |dirty|
+        dirty.is_a?(Everything) ||
+          (dirty.is_a?(Touched) && dirty.paths.includes?("incoming/sub/inner.rb"))
+      end
+
+      seen.should be_true
+    ensure
+      watcher.close
+      FileUtils.rm_rf(root)
+      FileUtils.rm_rf(staging)
+    end
+  end
 end
