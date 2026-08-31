@@ -281,6 +281,15 @@ record Wanted, digest : Bytes, path : String
 def wanted : Array(Wanted)
 ```
 
+### One type per file
+
+A file defines one top-level type, named after it (`struct RelativePath` in `relative_path.cr`). Do not nest other types within a file, they should be split out properly into their own file through namespacing. This keeps the codebase easy to navigate and find appropriate types. If two independent types share a file, split them and have one `require` the other where it needs it.
+
+There are two exceptions to this:
+
+- A sealed union: the variant types and the `alias` that unites them are one modelled concept (`Directory | File | … `, `alias Entry` in `entry.cr` or `Everything`/`Touched`/`alias Dirty` in `dirty.cr`). They only have meaning as a set, so they are defined together, in a file named after the union.
+- A type nested inside and scoped to its owner (`Metadata::Kind`, `Target::Invalid`, `Checkpoint::Damaged`). It is part of that type's surface and lives with it.
+
 ### Performance is measured, never estimated
 
 - Hot paths get allocation budgets as specs via `assert_allocates_under(budget, what, &)` (`spec/support/allocations.cr`), so regressions fail to compile.

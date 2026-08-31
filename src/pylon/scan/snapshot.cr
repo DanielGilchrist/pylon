@@ -1,9 +1,7 @@
 require "../core/entry"
-require "./cache_entry"
+require "./cache"
 
 module Pylon::Scan
-  alias Cache = Hash(String, CacheEntry)
-
   struct Snapshot
     getter root : Core::Entry?
     getter cache : Cache
