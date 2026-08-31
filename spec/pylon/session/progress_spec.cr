@@ -42,11 +42,14 @@ describe "session progress reporting" do
       updates.map(&.total).uniq!.should eq([201])
       updates.map(&.confirmed).each_cons_pair { |before, after| (before <= after).should be_true }
       updates.last.confirmed.should eq(201)
+
+      expected_bytes = (0...201).sum(0_u64) { |index| "body #{index}".bytesize.to_u64 }
+      updates.last.total_bytes.should eq(expected_bytes)
     end
   end
 
-  it "stays silent on a small transfer" do
-    in_progress_pair(3) do |updates, session|
+  it "stays silent up to and including the narration threshold" do
+    in_progress_pair(200) do |updates, session|
       cycle!(session, tick)
 
       updates.should be_empty
