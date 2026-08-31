@@ -29,6 +29,8 @@ module Pylon::Wire
   PROTOCOL = 2_u32
   IDENTITY = "PYLON"
 
+  record Closed
+
   record Compatible
   record Incompatible, version : UInt32
   record Foreign
@@ -63,8 +65,6 @@ module Pylon::Wire
                   WriteResponse |
                   TreeUpdate |
                   TreeDelta
-
-  record Closed
 
   def self.write_message(io : IO, message : Message) : Problem?
     transmit("the stream failed mid-message") { message.write(io) }
