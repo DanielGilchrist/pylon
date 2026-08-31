@@ -8,7 +8,23 @@ require "./chunks"
 require "./write_response"
 require "./tree_delta"
 require "./tree_update"
+require "../problem"
+require "digest/sha256"
 
+# stdlibs `IO` reports failures on the peer stream by throwing exceptions, and the peer
+# vanishing (it exited, the connection dropped, a reset) is expected. We want to avoid
+# exceptions as they can leave the application in undesirable states but also make potential
+# failures invisible to the type system. Here we effectively wrap the session's stream IO
+# to explicitly handle the exceptions as they happen and convert them into values. This allows
+# us to encode the potential failures into the return type and force callers to handle them as
+# needed. Each wrap is one method: `transmit` converts a failed write into a `Problem` so the
+# caller decides whether it stops the session; `read_greeting` converts a stream that dies
+# before the greeting completes into `Unreachable` carrying the reason, distinct from a
+# non-pylon peer; `first_byte` maps the boundary between frames, where `IO#read_byte` reports
+# a clean end-of-stream as nil and our own side closing the stream throws while `io.closed?`
+# is true (both an orderly `Closed`), and anything else throwing is the stream breaking, which
+# becomes `Invalid` carrying the reason so an abnormal death is not misreported as a clean
+# close. Structural failures inside a frame are latched as values by `Reader` instead.
 module Pylon::Wire
   PROTOCOL = 2_u32
   IDENTITY = "PYLON"
@@ -16,12 +32,15 @@ module Pylon::Wire
   record Compatible
   record Incompatible, version : UInt32
   record Foreign
+  record Unreachable, reason : String
 
-  alias Greeting = Compatible | Incompatible | Foreign
+  alias Greeting = Compatible | Incompatible | Foreign | Unreachable
 
-  def self.write_greeting(io : IO) : Nil
-    io.write(IDENTITY.to_slice)
-    io.write_bytes(PROTOCOL, FORMAT)
+  def self.write_greeting(io : IO) : Problem?
+    transmit("the greeting could not be written") do
+      io.write(IDENTITY.to_slice)
+      io.write_bytes(PROTOCOL, FORMAT)
+    end
   end
 
   def self.read_greeting(io : IO) : Greeting
@@ -31,8 +50,8 @@ module Pylon::Wire
 
     version = io.read_bytes(UInt32, FORMAT)
     version == PROTOCOL ? Compatible.new : Incompatible.new(version)
-  rescue IO::Error
-    Foreign.new
+  rescue error : IO::Error
+    Unreachable.new(error.message || "the stream ended during the greeting")
   end
 
   alias Message = Failure |
@@ -47,58 +66,72 @@ module Pylon::Wire
 
   record Closed
 
-  def self.read_message(io : IO) : Message | Closed | Invalid
-    byte = first_byte(io)
-    return Closed.new if byte.nil?
-
-    Truncated.contain do
-      tag = Tag.from_value?(byte)
-      next Invalid.new("unknown message tag #{byte}, both sides must run the same pylon version") if tag.nil?
-
-      decode(tag, io)
-    end
+  def self.write_message(io : IO, message : Message) : Problem?
+    transmit("the stream failed mid-message") { message.write(io) }
   end
 
-  private def self.first_byte(io : IO) : UInt8?
-    io.read_byte
-  rescue IO::Error
+  private def self.transmit(fallback : String, & : ->) : Problem?
+    yield
     nil
+  rescue error : IO::Error
+    Problem.new(error.message || fallback)
   end
 
-  private def self.decode(tag : Tag, io : IO) : Message
-    case tag
-    in .failure?           then Failure.new(Binary.read_required_string(io))
-    in .scan_request?      then ScanRequest.new(io.read_bytes(Int64, FORMAT))
-    in .scan_response?     then ScanResponse.new(Chunks.read_entry(io))
-    in .contents_request?  then read_contents_request(io)
-    in .contents_response? then ContentsResponse.new(read_contents(io))
-    in .write_request?     then WriteRequest.new(Binary.read_changes(io), read_contents(io))
-    in .write_response?    then WriteResponse.new(Binary.read_outcomes(io))
-    in .tree_update?       then TreeUpdate.new(io.read_bytes(UInt32, FORMAT), Chunks.read_entry(io))
-    in .tree_delta?        then TreeDelta.new(io.read_bytes(UInt32, FORMAT), Binary.read_changes(io))
+  def self.read_message(io : IO) : Message | Closed | Invalid
+    case byte = first_byte(io)
+    in Closed, Invalid
+      byte
+    in UInt8
+      tag = Tag.from_value?(byte)
+      return Invalid.new("unknown message tag #{byte}, both sides must run the same pylon version") if tag.nil?
+
+      reader = Reader.new(io)
+      reader.result(decode(tag, reader))
     end
   end
 
-  def self.read_contents_request(io : IO) : ContentsRequest
-    budget = io.read_bytes(UInt64, FORMAT)
-    ContentsRequest.new(read_digests(io), budget)
+  private def self.first_byte(io : IO) : UInt8 | Closed | Invalid
+    io.read_byte || Closed.new
+  rescue error : IO::Error
+    io.closed? ? Closed.new : Invalid.new(error.message || "the stream failed between messages")
   end
 
-  def self.read_digests(io : IO) : Array(Bytes)
-    count = io.read_bytes(UInt32, FORMAT)
-    Array(Bytes).new(count) { Binary.read_required_bytes(io) }
+  private def self.decode(tag : Tag, reader : Reader) : Message
+    case tag
+    in .failure?           then Failure.new(reader.required_string)
+    in .scan_request?      then ScanRequest.new(reader.i64)
+    in .scan_response?     then ScanResponse.new(Chunks.read_entry(reader))
+    in .contents_request?  then read_contents_request(reader)
+    in .contents_response? then ContentsResponse.new(read_contents(reader))
+    in .write_request?     then WriteRequest.new(Binary.read_changes(reader), read_contents(reader))
+    in .write_response?    then WriteResponse.new(Binary.read_outcomes(reader))
+    in .tree_update?       then TreeUpdate.new(reader.u32, Chunks.read_entry(reader))
+    in .tree_delta?        then TreeDelta.new(reader.u32, Binary.read_changes(reader))
+    end
   end
 
-  def self.read_contents(io : IO) : Contents
-    count = io.read_bytes(UInt32, FORMAT)
-    contents = Contents.new(initial_capacity: count)
+  def self.read_contents_request(reader : Reader) : ContentsRequest
+    budget = reader.u64
+    ContentsRequest.new(read_digests(reader), budget)
+  end
+
+  def self.read_digests(reader : Reader) : Array(Bytes)
+    digests = Array(Bytes).new
+    reader.repeat(reader.count) { digests << reader.digest }
+    digests
+  end
+
+  def self.read_contents(reader : Reader) : Contents
+    contents = Contents.new
     codec = Compress::Zstd.new
     scratch = Chunks.scratch
 
-    count.times do
-      digest = Binary.read_required_bytes(io)
-      content = Chunks.read_all(io, codec, scratch)
-      contents[digest] = content if content
+    reader.repeat(reader.count) do
+      digest = reader.digest
+      content = Chunks.read_all(reader, codec, scratch)
+      next if content.nil?
+
+      contents[digest] = content if Digest::SHA256.digest(content) == digest
     end
 
     contents

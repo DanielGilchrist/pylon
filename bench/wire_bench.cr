@@ -16,7 +16,7 @@ encode = Time.instant - started
 
 buffer.rewind
 started = Time.instant
-Pylon::Wire::Binary.read_entry(buffer)
+Pylon::Wire::Binary.read_entry(Pylon::Wire::Reader.new(buffer))
 decode = Time.instant - started
 
 puts "entries:  #{snapshot.cache.size} files"

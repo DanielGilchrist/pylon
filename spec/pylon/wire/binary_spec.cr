@@ -7,7 +7,13 @@ private def round_trip_entry(entry : Entry?) : Entry?
   io = IO::Memory.new
   Binary.write_entry(io, entry)
   io.rewind
-  Binary.read_entry(io)
+  Binary.read_entry(Reader.new(io))
+end
+
+private def fails_to_decode(bytes : Bytes, & : Reader ->) : Bool
+  reader = Reader.new(IO::Memory.new(bytes))
+  yield reader
+  reader.failed?
 end
 
 private CONTENTS = {nil, Fixtures.f1, Fixtures.f2, Fixtures.f1x, Fixtures.untracked, Fixtures.problematic}
@@ -76,7 +82,7 @@ describe Pylon::Wire::Binary do
     Binary.write_changes(io, changes)
     io.rewind
 
-    decoded = Binary.read_changes(io)
+    decoded = Binary.read_changes(Reader.new(io))
     decoded.size.should eq(3)
     decoded.zip(changes) { |actual, expected| (actual == expected).should be_true }
   end
@@ -92,7 +98,7 @@ describe Pylon::Wire::Binary do
     Binary.write_outcomes(io, outcomes)
     io.rewind
 
-    decoded = Binary.read_outcomes(io)
+    decoded = Binary.read_outcomes(Reader.new(io))
     decoded[0].applied?.should be_true
     decoded[1].skipped.should eq(Pylon::Write::ModificationDetected.new)
     decoded[1].entry.should be_nil
@@ -105,17 +111,50 @@ describe Pylon::Wire::Binary do
     Binary.write_bytes(io, nil)
     io.rewind
 
-    Binary.read_bytes(io).should eq(Bytes.empty)
-    Binary.read_bytes(io).should be_nil
+    reader = Reader.new(io)
+    reader.bytes?.should eq(Bytes.empty)
+    reader.bytes?.should be_nil
+    reader.failed?.should be_false
   end
 
-  it "raises rather than silently truncating a half written message" do
+  it "reports a half written message as a failure rather than silently truncating it" do
     io = IO::Memory.new
     Binary.write_entry(io, Fixtures.d1)
-    truncated = IO::Memory.new(io.to_slice[0, 3])
 
-    expect_raises(Pylon::Wire::Truncated) do
-      Binary.read_entry(truncated)
-    end
+    fails_to_decode(io.to_slice[0, 3]) { |reader| Binary.read_entry(reader) }.should be_true
+  end
+
+  it "refuses a traversing change path rather than letting it reach disk" do
+    io = IO::Memory.new
+    Binary.write_changes(io, [Pylon::Core::Change.new("../../etc/passwd", nil, Fixtures.f1)])
+
+    fails_to_decode(io.to_slice) { |reader| Binary.read_changes(reader) }.should be_true
+  end
+
+  it "refuses a directory child name that is not a single component" do
+    io = IO::Memory.new
+    Binary.write_entry(io, Pylon::Core::Directory.new({"../escape" => Fixtures.f1}))
+
+    fails_to_decode(io.to_slice) { |reader| Binary.read_entry(reader) }.should be_true
+  end
+
+  it "refuses a file entry whose digest is not the sha-256 width" do
+    io = IO::Memory.new
+    io.write_byte(2_u8)
+    Binary.write_bytes(io, "short".to_slice)
+    Binary.write_bool(io, false)
+
+    fails_to_decode(io.to_slice) { |reader| Binary.read_entry(reader) }.should be_true
+  end
+
+  it "refuses a field larger than the frame limit before allocating it" do
+    io = IO::Memory.new
+    io.write_bytes((Pylon::Wire::MAX_FIELD_BYTES + 2).to_u32, Pylon::Wire::FORMAT)
+
+    fails_to_decode(io.to_slice) { |reader| reader.string? }.should be_true
+  end
+
+  it "refuses a byte that is neither 0 nor 1 where a bool was promised" do
+    fails_to_decode(Bytes[2_u8]) { |reader| reader.bool }.should be_true
   end
 end

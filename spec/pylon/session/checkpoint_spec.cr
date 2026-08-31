@@ -20,7 +20,7 @@ private def sample_cache : Pylon::Scan::Cache
 
   cache["app/user.rb"] = Pylon::Scan::CacheEntry.new(
     Pylon::Scan::Metadata.new(mode: 33188_u32, size: 42_u64, mtime_ns: 1_700_i64, inode: 9_u64),
-    "digest-a".to_slice,
+    Digest::SHA256.digest("digest-a"),
   )
 
   cache
@@ -43,7 +43,7 @@ describe Pylon::Session::Checkpoint do
       entry.metadata.inode.should eq(9_u64)
       entry.metadata.mtime_ns.should eq(1_700_i64)
       entry.metadata.size.should eq(42_u64)
-      entry.digest.should eq("digest-a".to_slice)
+      entry.digest.should eq(Digest::SHA256.digest("digest-a"))
       loaded.remote_cache.should be_empty
     end
   end

@@ -1,21 +1,15 @@
 require "../core/change"
-require "./truncated"
+require "./reader"
 require "../core/entry"
 require "../scan/cache_entry"
 require "../write/writer"
 
 module Pylon::Wire
-  FORMAT = IO::ByteFormat::LittleEndian
-
   module Binary
     extend self
 
     def write_bool(io : IO, value : Bool) : Nil
       io.write_byte(value ? 1_u8 : 0_u8)
-    end
-
-    def read_bool(io : IO) : Bool
-      read_byte(io) == 1_u8
     end
 
     def write_bytes(io : IO, value : Bytes?) : Nil
@@ -28,29 +22,8 @@ module Pylon::Wire
       io.write(value)
     end
 
-    def read_bytes(io : IO) : Bytes?
-      size = read_u32(io)
-      return nil if size == 0
-
-      buffer = Bytes.new(size - 1)
-      read_exact(io, buffer)
-      buffer
-    end
-
     def write_string(io : IO, value : String?) : Nil
       write_bytes(io, value.try(&.to_slice))
-    end
-
-    def read_string(io : IO) : String?
-      read_bytes(io).try { |bytes| String.new(bytes) }
-    end
-
-    def read_required_string(io : IO) : String
-      read_string(io) || raise Truncated.new("missing string in message")
-    end
-
-    def read_required_bytes(io : IO) : Bytes
-      read_bytes(io) || raise Truncated.new("missing bytes in message")
     end
 
     def write_entry(io : IO, entry : Core::Entry?) : Nil
@@ -80,36 +53,38 @@ module Pylon::Wire
       end
     end
 
-    def read_entry(io : IO) : Core::Entry?
-      case read_byte(io)
+    def read_entry(reader : Reader) : Core::Entry?
+      case reader.byte
       when 0
         nil
       when 1
-        count = read_u32(io)
-        return Core::Directory.new if count.zero?
+        count = reader.count
+        contents = Hash(String, Core::Entry).new
 
-        contents = Hash(String, Core::Entry).new(initial_capacity: count)
+        reader.repeat(count) do
+          name = reader.name
+          child = read_entry(reader)
 
-        count.times do
-          name = read_required_string(io)
-          child = read_entry(io)
-          raise Truncated.new("missing child entry in message") if child.nil?
+          if child.nil?
+            reader.fail("missing child entry in message") unless reader.failed?
+            next
+          end
 
           contents[name] = child
         end
 
         Core::Directory.new(contents)
       when 2
-        digest = read_required_bytes(io)
-        Core::File.new(digest, executable: read_bool(io))
+        Core::File.new(reader.digest, executable: reader.bool)
       when 3
-        Core::SymbolicLink.new(read_required_string(io))
+        Core::SymbolicLink.new(reader.required_string)
       when 4
         Core::Untracked.new
       when 5
-        Core::Problematic.new(read_required_string(io))
+        Core::Problematic.new(reader.required_string)
       else
-        raise Truncated.new("unknown entry kind in message")
+        reader.fail("unknown entry kind in message, both sides must run the same pylon version") unless reader.failed?
+        nil
       end
     end
 
@@ -123,13 +98,12 @@ module Pylon::Wire
       end
     end
 
-    def read_changes(io : IO) : Array(Core::Change)
-      count = read_u32(io)
-      changes = Array(Core::Change).new(count)
+    def read_changes(reader : Reader) : Array(Core::Change)
+      changes = Array(Core::Change).new
 
-      count.times do
-        path = read_required_string(io)
-        changes << Core::Change.new(path, read_entry(io), read_entry(io))
+      reader.repeat(reader.count) do
+        path = reader.path
+        changes << Core::Change.new(path, read_entry(reader), read_entry(reader))
       end
 
       changes
@@ -145,12 +119,11 @@ module Pylon::Wire
       end
     end
 
-    def read_outcomes(io : IO) : Array(Write::Outcome)
-      count = read_u32(io)
-      outcomes = Array(Write::Outcome).new(count)
+    def read_outcomes(reader : Reader) : Array(Write::Outcome)
+      outcomes = Array(Write::Outcome).new
 
-      count.times do
-        outcomes << Write::Outcome.new(read_required_string(io), read_entry(io), read_skipped(io))
+      reader.repeat(reader.count) do
+        outcomes << Write::Outcome.new(reader.path, read_entry(reader), read_skipped(reader))
       end
 
       outcomes
@@ -169,15 +142,17 @@ module Pylon::Wire
       end
     end
 
-    def read_skipped(io : IO) : Write::Skipped?
-      case read_byte(io)
+    def read_skipped(reader : Reader) : Write::Skipped?
+      case reader.byte
       when 0 then nil
       when 1 then Write::ModificationDetected.new
       when 2 then Write::UnknownState.new
       when 3 then Write::StagedContentMissing.new
       when 4 then Write::DryRun.new
-      when 5 then Write::WriteFailed.new(read_required_string(io))
-      else        raise Truncated.new("unknown skip reason in message")
+      when 5 then Write::WriteFailed.new(reader.required_string)
+      else
+        reader.fail("unknown skip reason in message, both sides must run the same pylon version") unless reader.failed?
+        nil
       end
     end
 
@@ -196,43 +171,23 @@ module Pylon::Wire
       end
     end
 
-    def read_cache(io : IO) : Scan::Cache
-      count = read_u32(io)
-      cache = Scan::Cache.new(initial_capacity: count)
+    def read_cache(reader : Reader) : Scan::Cache
+      cache = Scan::Cache.new
 
-      count.times do
-        path = read_required_string(io)
+      reader.repeat(reader.count) do
+        path = reader.path
 
         metadata = Scan::Metadata.new(
-          mode: io.read_bytes(UInt32, FORMAT),
-          size: io.read_bytes(UInt64, FORMAT),
-          mtime_ns: io.read_bytes(Int64, FORMAT),
-          inode: io.read_bytes(UInt64, FORMAT),
+          mode: reader.u32,
+          size: reader.u64,
+          mtime_ns: reader.i64,
+          inode: reader.u64,
         )
 
-        cache[path] = Scan::CacheEntry.new(metadata, read_required_bytes(io))
+        cache[path] = Scan::CacheEntry.new(metadata, reader.digest)
       end
 
       cache
-    end
-
-    private def read_byte(io : IO) : UInt8
-      byte = io.read_byte
-      raise Truncated.new("stream ended mid-message") if byte.nil?
-
-      byte
-    end
-
-    private def read_u32(io : IO) : UInt32
-      io.read_bytes(UInt32, FORMAT)
-    rescue IO::EOFError
-      raise Truncated.new("stream ended mid-message")
-    end
-
-    private def read_exact(io : IO, buffer : Bytes) : Nil
-      io.read_fully(buffer)
-    rescue IO::EOFError
-      raise Truncated.new("stream ended mid-message")
     end
   end
 end

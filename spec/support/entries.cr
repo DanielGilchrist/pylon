@@ -1,17 +1,25 @@
+require "digest/sha256"
 require "../../src/pylon/core"
 require "../../src/pylon/scan/metadata"
 
 module Fixtures
   include Pylon::Core
 
-  D1 = "d1".to_slice
-  D2 = "d2".to_slice
+  def self.built(local : Array(String) = [] of String, remote : Array(String) = [] of String) : Preferences
+    case preferences = Preferences.build(local, remote)
+    in Preferences          then preferences
+    in Preferences::Invalid then raise "the fixture preferences are not a valid glob: #{preferences.message}"
+    end
+  end
 
-  LOCAL_WINS  = Preferences.new([Preferences::Rule.new(:local, ".")])
-  REMOTE_WINS = Preferences.new([Preferences::Rule.new(:remote, ".")])
+  D1 = Digest::SHA256.digest("d1")
+  D2 = Digest::SHA256.digest("d2")
 
-  ALL_PREFERENCES  = [Preferences.none, LOCAL_WINS, REMOTE_WINS]
-  NO_PREFERENCES   = [Preferences.none]
+  LOCAL_WINS  = built(local: ["."])
+  REMOTE_WINS = built(remote: ["."])
+
+  ALL_PREFERENCES   = [Preferences.none, LOCAL_WINS, REMOTE_WINS]
+  NO_PREFERENCES    = [Preferences.none]
   PREFERRING_LOCAL  = [LOCAL_WINS]
   PREFERRING_REMOTE = [REMOTE_WINS]
 

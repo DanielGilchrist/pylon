@@ -25,7 +25,7 @@ describe "content verification against the advertised digest" do
       endpoint.content_source([digest], 1_u64 * 1024 * 1024).write(wire)
       wire.rewind
 
-      contents = Pylon::Wire.read_contents(wire)
+      contents = Pylon::Wire.read_contents(Pylon::Wire::Reader.new(wire))
       contents.has_key?(digest).should be_false
     ensure
       FileUtils.rm_rf(root)

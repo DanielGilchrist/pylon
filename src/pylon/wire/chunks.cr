@@ -12,9 +12,7 @@ module Pylon::Wire
     end
 
     def write_chunk(io : IO, source : Bytes, codec, scratch : Bytes) : Nil
-      packed = codec.compress(source, scratch)
-      # This can only happen if zstd fails to compress the buffer. I'm not sure how this can fail yet so we fail loudly for now.
-      raise "compression into a bound-sized buffer failed: #{packed.message}" if packed.is_a?(Compress::Error)
+      packed = pack(codec, source, scratch)
 
       io.write_bytes(packed.size.to_u32 + 1, FORMAT)
       io.write_bytes(source.size.to_u32, FORMAT)
@@ -44,33 +42,66 @@ module Pylon::Wire
       write_all(io, packed.to_slice, Compress::Zstd.new, scratch)
     end
 
-    def read_entry(io : IO) : Core::Entry?
-      packed = read_all(io, Compress::Zstd.new, scratch)
-      raise Truncated.new("the tree payload arrived invalidated") if packed.nil?
+    def read_entry(reader : Reader) : Core::Entry?
+      packed = read_all(reader, Compress::Zstd.new, scratch)
+      return if reader.failed?
 
-      Binary.read_entry(IO::Memory.new(packed))
+      if packed.nil?
+        reader.fail("the tree payload arrived invalidated")
+        return
+      end
+
+      inner = Reader.new(IO::Memory.new(packed))
+      entry = Binary.read_entry(inner)
+      reader.fail(inner.reason) if inner.failed?
+      entry
     end
 
-    def read_all(io : IO, codec, scratch : Bytes) : Bytes?
+    def read_all(reader : Reader, codec, scratch : Bytes) : Bytes?
       collected = IO::Memory.new
 
       loop do
-        packed_size = io.read_bytes(UInt32, FORMAT)
-        break if packed_size == 0
+        packed_size = reader.u32
+        break if reader.failed? || packed_size == 0
 
-        raw_size = io.read_bytes(UInt32, FORMAT)
+        if packed_size - 1 > scratch.size
+          reader.fail("a chunk claims #{packed_size - 1} packed bytes, over the #{scratch.size} limit")
+          break
+        end
+
+        raw_size = reader.u32
+
+        if raw_size > CHUNK_BYTES
+          reader.fail("a chunk claims #{raw_size} raw bytes, over the #{CHUNK_BYTES} limit")
+          break
+        end
+
         packed = scratch[0, packed_size - 1]
-        io.read_fully(packed)
+        reader.fill(packed)
+        break if reader.failed?
 
         unpacked = codec.decompress(packed, Bytes.new(raw_size))
-        raise Truncated.new("decompression failed: #{unpacked.message}") if unpacked.is_a?(Compress::Error)
+
+        if unpacked.is_a?(Compress::Error)
+          reader.fail("decompression failed: #{unpacked.message}")
+          break
+        end
 
         collected.write(unpacked)
       end
 
-      return nil unless Binary.read_bool(io)
+      return if reader.failed?
 
-      collected.to_slice
+      reader.bool ? collected.to_slice : nil
+    end
+
+    private def pack(codec, source : Bytes, scratch : Bytes) : Bytes
+      packed = codec.compress(source, scratch)
+
+      # An error here is a bug where the caller built mismatched buffers so we want to blow up loudly.
+      raise "compression into a bound-sized buffer failed, a caller passed mismatched buffers: #{packed.message}" if packed.is_a?(Compress::Error)
+
+      packed
     end
   end
 end

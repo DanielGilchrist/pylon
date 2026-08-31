@@ -1,3 +1,4 @@
+require "../filesystem"
 require "../scan/snapshot"
 require "../wire/binary"
 
@@ -11,29 +12,28 @@ module Pylon::Session
     record Damaged, reason : String
 
     def self.load(path : String) : Checkpoint | Absent | Damaged
-      File.open(path, "rb") { |io| read(io) }
-    rescue File::NotFoundError
-      Absent.new
-    rescue error : File::Error
-      Damaged.new(error.message || error.class.name)
+      case loaded = Filesystem.open(path, "rb") { |io| read(io) }
+      in Missing             then Absent.new
+      in Problem             then Damaged.new(loaded.reason)
+      in Checkpoint, Damaged then loaded
+      end
     end
 
     private def self.read(io : IO) : Checkpoint | Damaged
-      loaded = Wire::Truncated.contain do
-        magic = Bytes.new(MAGIC.bytesize)
-        io.read_fully(magic)
-        next Damaged.new("not a pylon state file") unless String.new(magic) == MAGIC
-        next Damaged.new("written by a different pylon version") unless io.read_bytes(UInt32, Wire::FORMAT) == VERSION
-        next Damaged.new("unknown digest algorithm") unless Wire::Binary.read_string(io) == DIGEST
+      reader = Wire::Reader.new(io)
 
-        new(
-          base: Wire::Binary.read_entry(io),
-          local_cache: Wire::Binary.read_cache(io),
-          remote_cache: Wire::Binary.read_cache(io),
-        )
-      end
+      magic = reader.take(MAGIC.bytesize)
+      return Damaged.new("not a pylon state file") if reader.failed? || String.new(magic) != MAGIC
+      return Damaged.new("written by a different pylon version") if reader.u32 != VERSION
+      return Damaged.new("unknown digest algorithm") if reader.string? != DIGEST
 
-      loaded.is_a?(Wire::Invalid) ? Damaged.new(loaded.reason) : loaded
+      base = Wire::Binary.read_entry(reader)
+      local_cache = Wire::Binary.read_cache(reader)
+      remote_cache = Wire::Binary.read_cache(reader)
+
+      return Damaged.new(reader.reason) if reader.failed?
+
+      new(base: base, local_cache: local_cache, remote_cache: remote_cache)
     end
 
     getter base : Core::Entry?
@@ -48,23 +48,37 @@ module Pylon::Session
     end
 
     def save(path : String) : Damaged?
-      Dir.mkdir_p(File.dirname(path))
+      if (blocked = Filesystem.ensure_directory(File.dirname(path)))
+        return Damaged.new(blocked.reason)
+      end
+
       temporary = "#{path}.#{Random::Secure.hex(8)}"
 
-      File.open(temporary, "wb") do |io|
+      written = Filesystem.open(temporary, "wb") do |io|
         io.write(MAGIC.to_slice)
         io.write_bytes(VERSION, Wire::FORMAT)
         Wire::Binary.write_string(io, DIGEST)
         Wire::Binary.write_entry(io, base)
         Wire::Binary.write_cache(io, local_cache)
         Wire::Binary.write_cache(io, remote_cache)
+        nil
       end
 
-      File.rename(temporary, path)
+      case written
+      in Nil
+      in Missing
+        return Damaged.new("the state directory vanished while saving")
+      in Problem
+        Filesystem.delete(temporary)
+        return Damaged.new(written.reason)
+      end
+
+      if (blocked = Filesystem.rename(temporary, path))
+        Filesystem.delete(temporary)
+        return Damaged.new(blocked.reason)
+      end
+
       nil
-    rescue error : File::Error
-      File.delete?(temporary) if temporary
-      Damaged.new(error.message || error.class.name)
     end
   end
 end
