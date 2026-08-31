@@ -19,7 +19,7 @@ describe "a remote that is not there" do
     session = Session.new(LocalEndpoint.new(root), RemoteEndpoint.new(client, client))
 
     begin
-      session.cycle(Time.utc.to_unix_ns.to_i64).should be_a(Incompatible)
+      session.cycle(Time.utc.to_unix_ns.to_i64).should be_a(Stopped)
     ensure
       FileUtils.rm_rf(root)
     end

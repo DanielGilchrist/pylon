@@ -34,9 +34,16 @@ describe Pylon::Session::SSH do
   end
 end
 
+private def opened(command : String, arguments : Array(String)) : ProcessTransport
+  case transport = ProcessTransport.open(command, arguments)
+  in Pylon::Problem   then fail(transport.reason)
+  in ProcessTransport then transport
+  end
+end
+
 describe Pylon::Session::ProcessTransport do
   it "carries bytes to a child process and back" do
-    transport = ProcessTransport.open("cat", [] of String)
+    transport = opened("cat", [] of String)
 
     transport.writer.puts("hello over the pipe")
     transport.writer.flush
@@ -46,7 +53,7 @@ describe Pylon::Session::ProcessTransport do
   end
 
   it "reports the child's exit status" do
-    transport = ProcessTransport.open("sh", ["-c", "exit 3"])
+    transport = opened("sh", ["-c", "exit 3"])
 
     transport.close.exit_code.should eq(3)
   end
@@ -57,8 +64,17 @@ describe Pylon::Session::ProcessTransport do
       lines.send(line)
     end
 
+    fail(transport.reason) if transport.is_a?(Pylon::Problem)
+
     lines.receive.should eq("one")
     lines.receive.should eq("two")
     transport.close.success?.should be_true
+  end
+
+  it "reports a command that cannot be started instead of raising" do
+    opened = ProcessTransport.open("pylon-no-such-binary", [] of String)
+
+    fail("expected a problem, got a transport") unless opened.is_a?(Pylon::Problem)
+    opened.reason.should contain("pylon-no-such-binary could not be started")
   end
 end

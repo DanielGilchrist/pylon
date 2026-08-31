@@ -43,11 +43,12 @@ module Pylon::Session
     end
 
     private def greet : Bool
-      Wire.write_greeting(@output)
+      if (problem = Wire.write_greeting(@output))
+        @log.puts("pylon: the greeting could not be sent, stopping: #{problem.reason}")
+        return false
+      end
+
       true
-    rescue error : IO::Error
-      @log.puts("pylon: the greeting could not be sent, stopping: #{error.message}")
-      false
     end
 
     private def receive_ahead : Channel(Wire::Message)
@@ -66,7 +67,6 @@ module Pylon::Session
 
             requests.send(message)
           end
-        rescue Channel::ClosedError
         ensure
           requests.close
         end
@@ -106,21 +106,23 @@ module Pylon::Session
     end
 
     private def push : Nil
-      @lock.synchronize do
+      problem = @lock.synchronize do
         drain
         current = @endpoint.scan(Time.utc.to_unix_ns.to_i64).root
         @sequence += 1
 
-        if @sent.nil?
-          Wire::TreeUpdate.new(@sequence, current).write(@output)
-        else
-          Wire::TreeDelta.new(@sequence, Core::Differ.diff(@sent, current)).write(@output)
-        end
+        failed =
+          if @sent.nil?
+            Wire.write_message(@output, Wire::TreeUpdate.new(@sequence, current))
+          else
+            Wire.write_message(@output, Wire::TreeDelta.new(@sequence, Core::Differ.diff(@sent, current)))
+          end
 
-        @sent = current
+        @sent = current if failed.nil?
+        failed
       end
-    rescue error : IO::Error
-      @log.puts("pylon: a tree update could not be sent: #{error.message}")
+
+      @log.puts("pylon: a tree update could not be sent: #{problem.reason}") if problem
     end
 
     private def drain : Nil
@@ -131,38 +133,42 @@ module Pylon::Session
     end
 
     private def serve(request : Wire::Message) : Bool
-      case request
-      in Wire::ScanRequest
-        @lock.synchronize do
-          drain
-          current = @endpoint.scan(request.now_ns).root
-          @sent = current
-          Wire::ScanResponse.new(current).write(@output)
-        end
-      in Wire::ContentsRequest
-        @lock.synchronize do
-          Wire::ContentsResponse.new(@endpoint.content_source(request.digests, request.budget)).write(@output)
-        end
-      in Wire::WriteRequest
-        @lock.synchronize do
-          outcomes = @endpoint.write(request.changes, Wire::ContentSource::Materialised.new(request.contents))
-          @sent = Core::Applier.apply(@sent, Write::Outcome.changes(outcomes)) unless @sent.nil?
-          Wire::WriteResponse.new(outcomes).write(@output)
-          @checkpoints.try(&.save_if_due)
-        end
-      in Wire::Failure, Wire::ScanResponse, Wire::TreeUpdate, Wire::TreeDelta,
-         Wire::ContentsResponse, Wire::WriteResponse
-        @lock.synchronize do
-          Wire::Failure.new("unexpected message from the client").write(@output)
+      problem =
+        case request
+        in Wire::ScanRequest
+          @lock.synchronize do
+            drain
+            current = @endpoint.scan(request.now_ns).root
+            @sent = current
+            Wire.write_message(@output, Wire::ScanResponse.new(current))
+          end
+        in Wire::ContentsRequest
+          @lock.synchronize do
+            Wire.write_message(@output, Wire::ContentsResponse.new(@endpoint.content_source(request.digests, request.budget)))
+          end
+        in Wire::WriteRequest
+          @lock.synchronize do
+            outcomes = @endpoint.write(request.changes, Wire::ContentSource::Materialised.new(request.contents))
+            @sent = Core::Applier.apply(@sent, Write::Outcome.changes(outcomes)) unless @sent.nil?
+            failed = Wire.write_message(@output, Wire::WriteResponse.new(outcomes))
+            @checkpoints.try(&.save_if_due) if failed.nil?
+            failed
+          end
+        in Wire::Failure, Wire::ScanResponse, Wire::TreeUpdate, Wire::TreeDelta,
+           Wire::ContentsResponse, Wire::WriteResponse
+          @lock.synchronize do
+            Wire.write_message(@output, Wire::Failure.new("unexpected message from the client"))
+          end
+
+          return false
         end
 
+      if problem
+        @log.puts("pylon: a response could not be sent, stopping: #{problem.reason}")
         return false
       end
 
       true
-    rescue error : IO::Error
-      @log.puts("pylon: a response could not be sent, stopping: #{error.message}")
-      false
     end
   end
 end

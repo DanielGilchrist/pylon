@@ -46,7 +46,7 @@ puts "tree:      #{files} files, #{(total_bytes / (1024.0 * 1024.0)).round(1)} M
 
 level = (ENV["BULK_COMPRESSION"]? || "1").to_i
 
-transport =
+opened =
   if (latency = ENV["BULK_LATENCY_MS"]?) || ENV["BULK_RATE_BYTES"]?
     proxy = File.expand_path("../bin/latency_proxy", __DIR__)
 
@@ -59,6 +59,12 @@ transport =
     Session::ProcessTransport.open(proxy, [latency || "0", rate, binary, "serve", remote_root, "--compression", level.to_s])
   else
     Session::ProcessTransport.open(binary, ["serve", remote_root, "--compression", level.to_s])
+  end
+
+transport =
+  case opened
+  in Pylon::Problem            then abort("the server could not be started: #{opened.reason}")
+  in Session::ProcessTransport then opened
   end
 
 left = Session::LocalEndpoint.new(local_root, compression: level)

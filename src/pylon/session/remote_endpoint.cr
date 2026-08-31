@@ -81,6 +81,9 @@ module Pylon::Session
           "the remote did not identify itself as a pylon server. It may be an outdated pylon binary or the wrong command",
         ))
         return
+      in Wire::Unreachable
+        stop_with(Stopped.new("the connection failed before the remote identified itself: #{greeting.reason}"))
+        return
       end
 
       loop do
@@ -149,11 +152,12 @@ module Pylon::Session
       end
 
       @exchanges += 1
-      request.write(@output)
+
+      if (problem = Wire.write_message(@output, request))
+        return (@fault ||= Stopped.new(problem.reason))
+      end
+
       nil
-    rescue error : IO::Error
-      @fault ||= Stopped.new(error.message)
-      @fault
     end
 
     private def await : Wire::Message | Fault

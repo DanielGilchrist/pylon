@@ -38,7 +38,7 @@ module Pylon::Compress
     end
 
     private def failed(code : LibC::SizeT) : Error?
-      return nil if LibZstd.is_error(code) == 0
+      return if LibZstd.is_error(code) == 0
 
       Error.new(String.new(LibZstd.error_name(code)))
     end

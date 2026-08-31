@@ -125,7 +125,7 @@ module Pylon::Session
         next 0_u64 unless entry.is_a?(Core::File)
 
         cached = @cache[change.path]?
-        return nil if cached.nil?
+        return if cached.nil?
 
         cached.metadata.size
       end
