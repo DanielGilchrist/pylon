@@ -25,7 +25,7 @@ Run all three checks before considering a change done. The end-to-end script cat
 - `write/` applies changes to a filesystem. `Guard` refuses a write when the on-disk state no longer matches the cache, `Outcome` reports what happened per path.
 - `wire/` the binary protocol. `Message` is the frame union, `Binary` encodes and decodes, `Chunks` moves zstd-compressed content, `ContentSource` supplies content to send.
 - `session/` orchestration. `Session` runs the cycle, `Server` is the remote side (`pylon serve` over ssh stdin/stdout), `LocalEndpoint` and `RemoteEndpoint` give both sides one interface, `Checkpoint` persists the base and caches between runs.
-- `watch/` file watchers, inotify on linux, watchman on mac.
+- `watch/` file watchers, inotify on linux, FSEvents on mac.
 - `compress/` zstd through hand-rolled lib bindings, `Identity` is the no-op codec for specs.
 - `cli/` the `sync`, `serve` and `local` commands plus terminal reporting.
 - `disk.cr` the real filesystem, specs substitute in-memory fakes.
@@ -116,7 +116,13 @@ The principle also runs the other way: model the awkward real-world states inste
 
 ### Errors are values
 
-Exceptions are not part of control flow in this codebase, expected or otherwise. If a failure can be handled anywhere, even only at the very top before exiting, it is a return value carrying everything needed to handle it, and the union return type forces every caller to deal with it. The only permitted raises are assertions (next principle), and those are never rescued, they end the process.
+An exception is a hidden second return path with none of the guarantees the first one has:
+
+- It does not appear in the signature, so the compiler cannot force anyone to handle it, and a caller only finds out it exists when it throws.
+- It unwinds through every frame between the raise and the rescue, abandoning whatever those frames were mid-way through. State that was going to be finished or rolled back is simply left as it was.
+- Left unhandled in a fiber it is swallowed: the fiber dies and any waiter continues as if the work completed, on partial data.
+
+The only permitted raises are assertions (next principle) that aren't intended to be rescued as they communicate a bug in the program.
 
 ```crystal
 # Bad: the failure is invisible in the signature, callers find out when it
@@ -135,37 +141,35 @@ def self.parse(specification : String) : Target | Invalid
 abstract def compress(source : Bytes, into : Bytes) : Bytes | Error
 ```
 
-The stdlib and C bindings do raise. Reach for the non-raising variant first, most raising APIs have one: `Hash#[]?`, `File.info?`, `Channel#receive?`, `Enum.from_value?`.
+The stdlib and C bindings do raise. Quarantine each raising call: a method whose body is that one call, rescuing the specific classes it is documented to raise, converting each into a value on the spot. The raise and the rescue sit together with nothing between them, so there is no ambiguity around what raised or why. `Filesystem` is the model:
 
 ```crystal
-# Bad: exception as control flow when a nil-returning API exists
-info = begin
-  File.info(path)
-rescue File::Error
-  nil
+def info(path : String) : ::File::Info | Missing | Problem
+  ::File.info(path, follow_symlinks: false)
+rescue ::File::NotFoundError
+  Missing.new
+rescue error : ::File::Error
+  problem(error)
 end
-
-# Good
-info = File.info?(path)
 ```
 
-When no non-raising API exists (reading a file's content, for example), quarantine the exception: rescue immediately around the foreign call and convert to a value on the spot, so it never crosses one of our own method boundaries. This is parse-don't-validate applied to failures.
+A rescue always names the class it expects. A blanket `rescue`, or one over several calls, catches raises it never anticipated, our own bugs included. Split each raising call into its own quarantine and let the composing method handle values.
 
 ```crystal
-# Good: no `?` variant exists here, the exception lives and dies inside the boundary method
-def read(path : String) : Bytes | Failure
-  File.open(path) { |file| ... }
-rescue error : IO::Error
+# Bad: blanket rescue over three calls. It's difficult to tell what could raise for what reason. A bug
+# in transform (say a nil deref) is reported generically with everything else.
+def load(path : String) : Config | Failure
+  raw = read_raw(path)
+  parsed = parse(raw)
+  transform(parsed)
+rescue error
   Failure.new(path, error.message)
 end
 ```
 
-A `rescue` anywhere else means an expected failure was modelled as an exception, fix the model instead. Never rescue broadly, and never collapse a failure into a bare `nil` or `Bool` that discards why it failed when a caller could act on the reason.
+The only blanket rescue lives in `Pylon::Fibers`, which converts the exception into a value and handles it gracefully elsewhere.
 
-Two mechanisms are the only exceptions, and both exist so the rescue lives in exactly one place:
-
-- The wire decoder aborts a parse by raising `Wire::Truncated` internally; every decode entry point runs inside `Wire::Truncated.contain`, which converts the abort (and any `IO::Error` from the stream) into `Wire::Invalid`. Never rescue `Truncated` anywhere else, and never let it escape a public entry point.
-- An exception left unhandled in a fiber is swallowed: the fiber prints to stderr and dies, and any waiter proceeds as if the work completed. `Pylon::Fibers` owns the only broad rescues: `future`/`await` and `parallel` capture an unexpected exception inside the fiber and re-raise it in the waiter. Spawn worker fibers through `Fibers`, never hand-roll the capture.
+The stdlib's nil-returning variants (`File.info?`, `Enum.from_value?`) collapse the failure into `nil` which silently hides the problem, so use one only where we genuinely do not care about the reason (which is almost never). This is different from `Hash#[]?` or `Channel#receive?`, where nil is the honest answer (the key is absent, the channel closed), not a discarded failure.
 
 ### Assertions are a last resort
 
@@ -303,9 +307,9 @@ There are two exceptions to this:
 Pylon explicitly makes use of execution contexts introduced in Crystal 1.21:
 
 - The default context has parallelism 1. Parallel hashing gets its own `Fiber::ExecutionContext::Parallel`.
-- The inotify read runs on an `Isolated` context because the fd cannot be driven by the event loop without deadlocking it.
-- An unhandled exception in a fiber **does not stop the process**: the fiber prints to stderr and dies, `WaitGroup.wait` returns as if the work completed, and the caller continues on partial results (a half-scanned tree reconciles as a mass deletion). `Pylon::Fibers` (`future`/`await`, `parallel`) turns that into a crash on the waiting fiber instead. Spawn concurrent work through it, never with a bare `spawn` plus `WaitGroup`.
-- Block variables are shared across every fiber spawned in a loop, so a buffer captured by closure is one buffer written by all workers concurrently. Pass per-worker state as method parameters (`Scanner#hash_slice`); the loop body handed to `Fibers.parallel` should be a single method call carrying everything worker-specific.
+- Both watchers run on an `Isolated` context: the inotify fd cannot be driven by the event loop without deadlocking it, and the FSEvents run loop blocks its thread by design.
+- An unhandled exception in a fiber **does not stop the process**: the caller continues on partial results (a half-scanned tree reconciles as a mass deletion). Spawn every fiber through `Pylon::Fibers`, never with a bare `spawn` (see the errors as values principle).
+- Block variables are shared across every fiber spawned in a loop, so a buffer captured by closure is one buffer written by all workers concurrently. Pass per-worker state as method parameters (`Scanner#hash_slice`). The loop body handed to `Fibers.parallel` should be a single method call carrying everything worker-specific.
 
 ## Testing
 
