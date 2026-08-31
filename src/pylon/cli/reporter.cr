@@ -1,4 +1,5 @@
 require "colorize"
+require "../scan/tally"
 require "../session/session"
 require "./spinner"
 
