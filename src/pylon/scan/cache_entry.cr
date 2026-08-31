@@ -9,8 +9,8 @@ module Pylon::Scan
     end
 
     def reuse(observed : Metadata, now_ns : Int64, granularity_ns : Int64) : Bytes?
-      return nil if observed.racy?(now_ns, granularity_ns)
-      return nil unless metadata.same_content?(observed)
+      return if observed.racy?(now_ns, granularity_ns)
+      return unless metadata.same_content?(observed)
 
       digest
     end

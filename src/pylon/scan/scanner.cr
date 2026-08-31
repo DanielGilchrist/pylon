@@ -1,4 +1,5 @@
 require "../fibers"
+require "../filesystem"
 require "../core/entry"
 require "../core/paths"
 require "./cache_entry"
@@ -110,13 +111,20 @@ module Pylon::Scan
         names = [] of String
         baseline_contents = baseline.is_a?(Core::Directory) ? baseline.contents : nil
 
-        @filesystem.each_child(path) do |name|
+        listed = @filesystem.each_child(path) do |name|
           child = Core::Paths.join(path, name)
           look(survey, child, baseline_contents.try(&.[name]?))
           names << name if survey.nodes.has_key?(child) || survey.carried.has_key?(child)
         end
 
-        survey.children[path] = names
+        case listed
+        in Nil
+          survey.children[path] = names
+        in Missing
+          survey.nodes.delete(path)
+        in Problem
+          survey.nodes[path] = SurveyedProblem.new(listed.reason)
+        end
       in .file?
         survey.nodes[path] = SurveyedFile.new(observed)
         @tally.saw_file
@@ -191,7 +199,7 @@ module Pylon::Scan
       end
 
       node = survey.nodes[path]?
-      return nil if node.nil?
+      return if node.nil?
 
       case node
       in SurveyedDirectory
@@ -207,7 +215,7 @@ module Pylon::Scan
       in SurveyedFile
         case digest = digests[path]?
         in Nil
-          Core::Problematic.new("the file vanished during the scan")
+          raise "the scan surveyed #{path.inspect} as a file but computed no digest for it"
         in Problem
           Core::Problematic.new(digest.reason)
         in Bytes

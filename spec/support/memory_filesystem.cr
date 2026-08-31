@@ -1,6 +1,7 @@
 require "digest/sha256"
 require "../../src/pylon/scan/metadata"
 require "../../src/pylon/problem"
+require "../../src/pylon/filesystem"
 
 struct MemoryFilesystem
   record Node,
@@ -52,7 +53,7 @@ struct MemoryFilesystem
 
   def metadata(relative_path : String) : Pylon::Scan::Metadata | Pylon::Problem | Nil
     node = @nodes[relative_path]?
-    return nil if node.nil?
+    return if node.nil?
     return Pylon::Problem.new("could not be examined (EACCES)") unless node.statable
 
     mode =
@@ -71,7 +72,7 @@ struct MemoryFilesystem
     )
   end
 
-  def each_child(relative_path : String, & : String ->) : Nil
+  def each_child(relative_path : String, & : String ->) : Pylon::Missing | Pylon::Problem | Nil
     prefix = relative_path.empty? ? "" : "#{relative_path}/"
 
     @nodes.each_key do |path|
@@ -82,6 +83,8 @@ struct MemoryFilesystem
 
       yield remainder
     end
+
+    nil
   end
 
   def digest(relative_path : String, buffer : Bytes = Bytes.empty) : Bytes | Pylon::Problem
