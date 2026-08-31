@@ -154,6 +154,17 @@ describe Pylon::Wire::Binary do
     fails_to_decode(io.to_slice) { |reader| reader.string? }.should be_true
   end
 
+  it "accepts a field of exactly the frame limit" do
+    content = Bytes.new(Pylon::Wire::MAX_FIELD_BYTES) { 'x'.ord.to_u8 }
+    io = IO::Memory.new
+    Binary.write_bytes(io, content)
+    io.rewind
+
+    reader = Reader.new(io)
+    reader.bytes?.should eq(content)
+    reader.failed?.should be_false
+  end
+
   it "refuses a byte that is neither 0 nor 1 where a bool was promised" do
     fails_to_decode(Bytes[2_u8]) { |reader| reader.bool }.should be_true
   end
