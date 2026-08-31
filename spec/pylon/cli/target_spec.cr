@@ -28,4 +28,11 @@ describe Pylon::CLI::Target do
     Pylon::CLI::Target.parse(":/srv/app").as(Pylon::CLI::Target::Invalid).message.should contain("missing a host")
     Pylon::CLI::Target.parse("host:").as(Pylon::CLI::Target::Invalid).message.should contain("missing a path")
   end
+
+  it "refuses a host ssh would read as an option" do
+    result = Pylon::CLI::Target.parse("-oProxyCommand=touch /tmp/x:/srv/app")
+
+    result.should be_a(Pylon::CLI::Target::Invalid)
+    result.as(Pylon::CLI::Target::Invalid).message.should contain("ssh would read as an option")
+  end
 end

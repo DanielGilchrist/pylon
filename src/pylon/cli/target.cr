@@ -20,6 +20,10 @@ struct Pylon::CLI
       return Invalid.new("remote target #{specification.inspect} is missing a host") if host.empty?
       return Invalid.new("remote target #{specification.inspect} is missing a path") if path.empty?
 
+      if host.starts_with?('-')
+        return Invalid.new("remote target #{specification.inspect} has a host starting with '-', which ssh would read as an option")
+      end
+
       new(host, path)
     end
 
