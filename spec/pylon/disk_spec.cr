@@ -123,4 +123,16 @@ describe Pylon::Disk do
       File.exists?(File.join(root, "link")).should be_false
     end
   end
+
+  it "removes a symlink to a directory without touching what it points at" do
+    in_sandbox do |root, target|
+      Dir.mkdir_p(File.join(root, "real"))
+      File.write(File.join(root, "real", "keep.txt"), "keep me")
+      target.create_symlink("link", "real")
+
+      target.remove("link").should be_nil
+      File.symlink?(File.join(root, "link")).should be_false
+      File.read(File.join(root, "real", "keep.txt")).should eq("keep me")
+    end
+  end
 end
