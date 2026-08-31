@@ -47,4 +47,14 @@ describe Pylon::Core::Preferences do
   it "refuses a malformed glob as a value" do
     Preferences.build(["[oops"], [] of String).should be_a(Preferences::Invalid)
   end
+
+  it "refuses a malformed glob when the bad segment is not the first" do
+    Preferences.build(["src/[abc"], [] of String).should be_a(Preferences::Invalid)
+  end
+
+  it "never raises while matching a rule it accepted" do
+    preferences = build(local: ["src/deep/nested/thing"])
+
+    preferences.winner("src/deep/nested/thing/file.rb").should eq(Preferences::Side::Local)
+  end
 end

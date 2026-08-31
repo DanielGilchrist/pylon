@@ -1,3 +1,5 @@
+require "../filesystem/pattern"
+
 module Pylon::Core
   struct Preferences
     enum Side
@@ -5,7 +7,10 @@ module Pylon::Core
       Remote
     end
 
-    record Rule, side : Side, pattern : String
+    record GlobRule, side : Side, pattern : Filesystem::Pattern
+    record FallbackRule, side : Side
+
+    alias Rule = GlobRule | FallbackRule
 
     record Invalid, message : String
 
@@ -17,32 +22,39 @@ module Pylon::Core
 
     def self.build(local : Array(String), remote : Array(String)) : Preferences | Invalid
       rules = [] of Rule
-      local.each { |pattern| rules << Rule.new(:local, pattern) }
-      remote.each { |pattern| rules << Rule.new(:remote, pattern) }
 
-      rules.each do |rule|
-        if (problem = malformed(rule.pattern))
-          return Invalid.new("#{rule.pattern.inspect} is not a valid glob: #{problem}")
+      collect(rules, :local, local) || collect(rules, :remote, remote) || new(rules)
+    end
+
+    private def self.collect(rules : Array(Rule), side : Side, texts : Array(String)) : Invalid?
+      texts.each do |text|
+        if text == FALLBACK
+          rules << FallbackRule.new(side)
+          next
         end
+
+        pattern = Filesystem::Pattern.parse(text)
+        return Invalid.new("#{text.inspect} is not a valid glob: #{pattern.reason}") if pattern.is_a?(Problem)
+
+        rules << GlobRule.new(side, pattern)
       end
 
-      new(rules)
-    end
-
-    private def self.malformed(pattern : String) : String?
-      ::File.match?(pattern, "probe")
-      ::File.match?("#{pattern}/**", "probe")
       nil
-    rescue error : ::File::BadPatternError
-      error.message || "bad pattern"
     end
 
-    @explicit : Array(Rule)
+    @explicit : Array(GlobRule)
     @fallback : Side?
 
     def initialize(rules : Array(Rule))
-      @explicit = rules.reject { |rule| rule.pattern == FALLBACK }
-      fallbacks = rules.select { |rule| rule.pattern == FALLBACK }
+      @explicit = [] of GlobRule
+      fallbacks = [] of FallbackRule
+
+      rules.each do |rule|
+        case rule
+        in GlobRule     then @explicit << rule
+        in FallbackRule then fallbacks << rule
+        end
+      end
 
       @fallback =
         if fallbacks.empty?
@@ -58,17 +70,13 @@ module Pylon::Core
       preferred : Side? = nil
 
       @explicit.each do |rule|
-        next unless matches?(rule.pattern, path)
+        next unless rule.pattern.matches?(path)
         return Side::Local if rule.side.local?
 
         preferred = Side::Remote
       end
 
       preferred || @fallback
-    end
-
-    private def matches?(pattern : String, path : String) : Bool
-      ::File.match?(pattern, path) || ::File.match?("#{pattern}/**", path)
     end
   end
 end
