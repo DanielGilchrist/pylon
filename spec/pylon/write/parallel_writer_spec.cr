@@ -6,6 +6,10 @@ require "../../../src/pylon/disk"
 
 private FILES = 120
 
+private def build_writer(disk, contents, parallelism = Pylon::Write::Writer::DEFAULT_PARALLELISM)
+  Pylon::Write::Writer.new(disk, Pylon::Session::Staging.new(contents), Pylon::Scan::Cache.new, parallelism: parallelism)
+end
+
 private def bulk_changes : Array(Pylon::Core::Change)
   changes = [] of Pylon::Core::Change
 
@@ -46,18 +50,8 @@ describe "Writer running independent file writes in parallel" do
     Dir.mkdir_p(sequential_root)
 
     begin
-      parallel = Pylon::Write::Writer.new(
-        Pylon::Disk.new(parallel_root),
-        Pylon::Session::Staging.new(contents),
-        Pylon::Scan::Cache.new,
-      ).write(changes)
-
-      sequential = Pylon::Write::Writer.new(
-        Pylon::Disk.new(sequential_root),
-        Pylon::Session::Staging.new(contents),
-        Pylon::Scan::Cache.new,
-        parallelism: 1,
-      ).write(changes)
+      parallel = build_writer(Pylon::Disk.new(parallel_root), contents).write(changes)
+      sequential = build_writer(Pylon::Disk.new(sequential_root), contents, 1).write(changes)
 
       parallel.size.should eq(changes.size)
       parallel.map(&.path).should eq(changes.map(&.path))
@@ -88,12 +82,7 @@ describe "Writer running independent file writes in parallel" do
     Dir.mkdir_p(root)
 
     begin
-      outcomes = Pylon::Write::Writer.new(
-        Pylon::Disk.new(root),
-        Pylon::Session::Staging.new(contents),
-        Pylon::Scan::Cache.new,
-        parallelism: 24,
-      ).write(changes)
+      outcomes = build_writer(Pylon::Disk.new(root), contents, 24).write(changes)
 
       outcomes.size.should eq(changes.size)
       outcomes.count(&.applied?).should eq(changes.size)
@@ -112,11 +101,7 @@ describe "Writer running independent file writes in parallel" do
     Dir.mkdir_p(root)
 
     begin
-      outcomes = Pylon::Write::Writer.new(
-        Pylon::Disk.new(root),
-        Pylon::Session::Staging.new(contents),
-        Pylon::Scan::Cache.new,
-      ).write(changes)
+      outcomes = build_writer(Pylon::Disk.new(root), contents).write(changes)
 
       outcomes.count { |outcome| outcome.skipped.is_a?(Pylon::Write::StagedContentMissing) }.should eq(missing.size)
       outcomes.count(&.applied?).should eq(changes.size - missing.size)

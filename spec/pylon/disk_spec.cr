@@ -80,6 +80,23 @@ describe Pylon::Disk do
     end
   end
 
+  it "reports why a directory could not be removed instead of pretending it was" do
+    in_sandbox do |root, target|
+      stuck = File.join(root, "stuck")
+      Dir.mkdir_p(stuck)
+      File.write(File.join(stuck, "kept.txt"), "still here")
+      File.chmod(stuck, 0o555)
+
+      begin
+        problem = target.remove("stuck")
+        problem.should be_a(Pylon::Problem)
+        File.exists?(File.join(stuck, "kept.txt")).should be_true
+      ensure
+        File.chmod(stuck, 0o755)
+      end
+    end
+  end
+
   it "removes files and whole directories" do
     in_sandbox do |root, target|
       Dir.mkdir_p(File.join(root, "app", "models"))

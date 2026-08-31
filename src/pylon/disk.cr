@@ -1,8 +1,9 @@
 require "digest/sha256"
-require "file_utils"
+require "./filesystem"
 require "./wire/chunks"
 require "./wire/binary"
 require "./scan/metadata"
+require "./scan/observed"
 require "./write/problem"
 
 module Pylon
@@ -17,76 +18,97 @@ module Pylon
       Scan::Metadata.of(absolute(relative_path))
     end
 
-    def each_child(relative_path : String, & : String ->) : Nil
-      Dir.each_child(absolute(relative_path)) { |name| yield name }
+    def observe(relative_path : String) : Scan::Observed | Problem | Nil
+      case found = Scan::Metadata.of(absolute(relative_path))
+      in Nil     then nil
+      in Problem then found
+      in Scan::Metadata
+        case found.kind
+        in .directory? then Scan::ObservedDirectory.new
+        in .file?      then Scan::ObservedFile.new(found)
+        in .untracked? then Scan::ObservedUntracked.new
+        in .symbolic_link?
+          case target = Filesystem.readlink(absolute(relative_path))
+          in Problem then target
+          in String  then Scan::ObservedLink.new(target)
+          end
+        end
+      end
+    end
+
+    def each_child(relative_path : String, & : String ->) : Missing | Problem | Nil
+      Filesystem.each_child(absolute(relative_path)) { |name| yield name }
     end
 
     def digest(relative_path : String, buffer : Bytes = Bytes.new(READ_BUFFER_BYTES)) : Bytes | Problem
       digest = Digest::SHA256.new
 
-      File.open(absolute(relative_path)) do |file|
+      opened = Filesystem.open(absolute(relative_path)) do |file|
         while (read = file.read(buffer)) > 0
           digest.update(buffer[0, read])
         end
+
+        digest.final
       end
 
-      digest.final
-    rescue error : File::Error
-      problem(error)
+      case opened
+      in Missing        then Problem.new("the file vanished after the scan saw it")
+      in Bytes, Problem then opened
+      end
     end
 
     def read(relative_path : String) : Bytes | Problem
-      File.open(absolute(relative_path)) do |file|
+      opened = Filesystem.open(absolute(relative_path)) do |file|
         buffer = Bytes.new(file.size)
         file.read_fully(buffer)
         buffer
       end
-    rescue error : File::Error | IO::EOFError
-      Problem.new(error.message || error.class.name)
+
+      case opened
+      in Missing        then Problem.new("the file vanished after the scan saw it")
+      in Bytes, Problem then opened
+      end
     end
 
     def stream(relative_path : String, digest : Bytes, io : IO, buffer : Bytes, codec, scratch : Bytes) : Nil
       Wire::Binary.write_bytes(io, digest)
       streamed = Digest::SHA256.new
 
-      File.open(absolute(relative_path)) do |file|
+      opened = Filesystem.open(absolute(relative_path)) do |file|
         while (read = file.read(buffer)) > 0
           streamed.update(buffer[0, read])
           Wire::Chunks.write_chunk(io, buffer[0, read], codec, scratch)
         end
+
+        streamed.final == digest
       end
 
-      Wire::Chunks.write_end(io, valid: streamed.final == digest)
-    rescue File::Error
-      Wire::Chunks.write_end(io, valid: false)
+      case opened
+      in Bool             then Wire::Chunks.write_end(io, valid: opened)
+      in Missing, Problem then Wire::Chunks.write_end(io, valid: false)
+      end
     end
 
     def link_target(relative_path : String) : String | Problem
-      File.readlink(absolute(relative_path))
-    rescue error : File::Error
-      problem(error)
+      Filesystem.readlink(absolute(relative_path))
     end
 
     def create_directory(relative_path : String) : Write::Problem?
       path = absolute(relative_path)
-      return nil if Dir.exists?(path)
+      return if Dir.exists?(path)
 
-      Dir.mkdir_p(path)
-      nil
-    rescue error : File::Error
-      problem(error)
+      Filesystem.ensure_directory(path)
     end
 
     def write_file(relative_path : String, content : Bytes, executable : Bool) : Write::Problem?
       staged(absolute(relative_path)) do |temporary|
-        File.write(temporary, content)
-        File.chmod(temporary, executable ? 0o755 : 0o644)
+        Filesystem.write(temporary, content) || Filesystem.chmod(temporary, executable ? 0o755 : 0o644)
       end
     end
 
     def create_symlink(relative_path : String, target : String) : Write::Problem?
       staged(absolute(relative_path)) do |temporary|
-        File.symlink(target, temporary)
+        Filesystem.symlink(target, temporary)
       end
     end
 
@@ -109,38 +131,32 @@ module Pylon
           permissions & ~0o111_u32
         end
 
-      File.chmod(path, permissions.to_i32)
-      nil
-    rescue error : File::Error
-      problem(error)
+      Filesystem.chmod(path, permissions.to_i32)
     end
 
     def remove(relative_path : String) : Write::Problem?
-      path = absolute(relative_path)
-      info = File.info?(path, follow_symlinks: false)
-      return nil if info.nil?
-
-      info.directory? ? FileUtils.rm_rf(path) : File.delete(path)
-      nil
-    rescue error : File::Error
-      problem(error)
-    end
-
-    private def staged(path : String, & : String ->) : Write::Problem?
-      temporary = File.join(File.dirname(path), "#{TEMPORARY_PREFIX}#{Random::Secure.hex(8)}")
-
-      begin
-        yield temporary
-        File.rename(temporary, path)
+      case info = Filesystem.info(absolute(relative_path))
+      in Missing
         nil
-      rescue error : File::Error
-        File.delete?(temporary)
-        problem(error)
+      in Problem
+        info
+      in ::File::Info
+        path = absolute(relative_path)
+        info.directory? ? Filesystem.delete_tree(path) : Filesystem.delete(path)
       end
     end
 
-    private def problem(error : File::Error) : Write::Problem
-      Write::Problem.new(error.message || error.class.name)
+    private def staged(path : String, & : String -> Problem?) : Write::Problem?
+      temporary = File.join(File.dirname(path), "#{TEMPORARY_PREFIX}#{Random::Secure.hex(8)}")
+
+      failed = yield temporary
+      failed ||= Filesystem.rename(temporary, path)
+      return if failed.nil?
+
+      case discarded = Filesystem.delete(temporary)
+      in Nil     then failed
+      in Problem then Problem.new("#{failed.reason} (and the temporary file #{temporary} could not be removed: #{discarded.reason})")
+      end
     end
 
     private def absolute(relative_path : String) : String

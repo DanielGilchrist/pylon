@@ -1,5 +1,6 @@
 require "digest/sha256"
 require "../../src/pylon/scan/metadata"
+require "../../src/pylon/scan/observed"
 require "../../src/pylon/write/problem"
 
 class MemoryTarget
@@ -21,7 +22,7 @@ class MemoryTarget
 
   def metadata(path : String) : Pylon::Scan::Metadata?
     node = @nodes[path]?
-    return nil if node.nil?
+    return if node.nil?
 
     mode =
       case node.kind
@@ -37,6 +38,18 @@ class MemoryTarget
       mtime_ns: node.mtime_ns,
       inode: node.inode,
     )
+  end
+
+  def observe(path : String) : Pylon::Scan::Observed | Pylon::Write::Problem | Nil
+    node = @nodes[path]?
+    return if node.nil?
+
+    case node.kind
+    in Pylon::Scan::Metadata::Kind::Directory    then Pylon::Scan::ObservedDirectory.new
+    in Pylon::Scan::Metadata::Kind::File         then Pylon::Scan::ObservedFile.new(metadata(path).not_nil!)
+    in Pylon::Scan::Metadata::Kind::SymbolicLink then Pylon::Scan::ObservedLink.new(node.target)
+    in Pylon::Scan::Metadata::Kind::Untracked    then Pylon::Scan::ObservedUntracked.new
+    end
   end
 
   def create_directory(path : String) : Pylon::Write::Problem?

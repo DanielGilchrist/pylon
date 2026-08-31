@@ -14,7 +14,7 @@ module Pylon::Write
     {% else %}
       DEFAULT_PARALLELISM = System.cpu_count.to_i * 2
     {% end %}
-    PARALLEL_THRESHOLD  = 16
+    PARALLEL_THRESHOLD = 16
 
     def initialize(@filesystem : F, @staging : S, @cache : Scan::Cache, @parallelism : Int32 = DEFAULT_PARALLELISM)
     end
@@ -109,7 +109,7 @@ module Pylon::Write
       verdict = Guard.check(
         change.old,
         @cache[change.path]?,
-        @filesystem.metadata(change.path),
+        @filesystem.observe(change.path),
       )
 
       case verdict
@@ -153,11 +153,11 @@ module Pylon::Write
       old = change.old
       new = change.new
 
-      return nil unless old.is_a?(Core::File) && new.is_a?(Core::File)
-      return nil unless old.digest == new.digest
-      return nil if old.executable? == new.executable?
+      return unless old.is_a?(Core::File) && new.is_a?(Core::File)
+      return unless old.digest == new.digest
+      return if old.executable? == new.executable?
 
-      return nil if @filesystem.set_executable(change.path, new.executable?)
+      return if @filesystem.set_executable(change.path, new.executable?)
 
       Outcome.new(change.path, new)
     end
@@ -183,7 +183,7 @@ module Pylon::Write
         Core::Directory.new(contents)
       in Core::File
         content = @staging.content(entry.digest)
-        return nil if content.nil?
+        return if content.nil?
 
         @filesystem.write_file(path, content, entry.executable?) || entry
       in Core::SymbolicLink

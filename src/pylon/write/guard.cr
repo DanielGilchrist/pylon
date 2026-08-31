@@ -1,26 +1,33 @@
 require "../core/entry"
 require "../scan/cache_entry"
+require "../scan/observed"
 require "./verdict"
 
 module Pylon::Write
   module Guard
     extend self
 
-    def check(expected : Core::Entry?, cached : Scan::CacheEntry?, observed : Scan::Metadata | Problem | Nil) : Verdict
+    def check(expected : Core::Entry?, cached : Scan::CacheEntry?, observed : Scan::Observed | Problem | Nil) : Verdict
       return Verdict::UnknownState if observed.is_a?(Problem)
       return observed.nil? ? Verdict::Proceed : Verdict::ModificationDetected if expected.nil?
       return Verdict::ModificationDetected if observed.nil?
 
       case expected
       in Core::Directory
-        observed.kind.directory? ? Verdict::Proceed : Verdict::ModificationDetected
+        observed.is_a?(Scan::ObservedDirectory) ? Verdict::Proceed : Verdict::ModificationDetected
       in Core::SymbolicLink
-        observed.kind.symbolic_link? ? Verdict::Proceed : Verdict::ModificationDetected
+        link(expected, observed)
       in Core::File
-        file(expected, cached, observed)
+        observed.is_a?(Scan::ObservedFile) ? file(expected, cached, observed.metadata) : Verdict::ModificationDetected
       in Core::Untracked, Core::Problematic
         Verdict::UnknownState
       end
+    end
+
+    private def link(expected : Core::SymbolicLink, observed : Scan::Observed) : Verdict
+      return Verdict::ModificationDetected unless observed.is_a?(Scan::ObservedLink)
+
+      observed.target == expected.target ? Verdict::Proceed : Verdict::ModificationDetected
     end
 
     private def file(expected : Core::File, cached : Scan::CacheEntry?, observed : Scan::Metadata) : Verdict
