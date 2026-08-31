@@ -52,6 +52,10 @@ describe Pylon::Core::Preferences do
     Preferences.build(["src/[abc"], [] of String).should be_a(Preferences::Invalid)
   end
 
+  it "refuses a malformed glob on the remote side too" do
+    Preferences.build([] of String, ["[oops"]).should be_a(Preferences::Invalid)
+  end
+
   it "never raises while matching a rule it accepted" do
     preferences = build(local: ["src/deep/nested/thing"])
 
