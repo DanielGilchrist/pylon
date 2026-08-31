@@ -12,14 +12,13 @@ module Pylon::Wire
       io.write_byte(value ? 1_u8 : 0_u8)
     end
 
-    def write_bytes(io : IO, value : Bytes?) : Nil
-      if value.nil?
-        io.write_bytes(0_u32, FORMAT)
-        return
-      end
+    def write_framed_size(io : IO, size : Int32?) : Nil
+      io.write_bytes(size.nil? ? 0_u32 : size.to_u32 + 1, FORMAT)
+    end
 
-      io.write_bytes(value.size.to_u32 + 1, FORMAT)
-      io.write(value)
+    def write_bytes(io : IO, value : Bytes?) : Nil
+      write_framed_size(io, value.try(&.size))
+      io.write(value) if value
     end
 
     def write_string(io : IO, value : String?) : Nil

@@ -14,13 +14,13 @@ module Pylon::Wire
     def write_chunk(io : IO, source : Bytes, codec, scratch : Bytes) : Nil
       packed = pack(codec, source, scratch)
 
-      io.write_bytes(packed.size.to_u32 + 1, FORMAT)
+      Binary.write_framed_size(io, packed.size)
       io.write_bytes(source.size.to_u32, FORMAT)
       io.write(packed)
     end
 
     def write_end(io : IO, valid : Bool = true) : Nil
-      io.write_bytes(0_u32, FORMAT)
+      Binary.write_framed_size(io, nil)
       Binary.write_bool(io, valid)
     end
 
@@ -61,12 +61,13 @@ module Pylon::Wire
       collected = IO::Memory.new
 
       loop do
-        packed_size = reader.u32
-        break if reader.failed? || packed_size == 0
-
-        if packed_size - 1 > scratch.size
-          reader.fail("a chunk claims #{packed_size - 1} packed bytes, over the #{scratch.size} limit")
+        case packed_size = reader.framed_size(scratch.size)
+        in Nil
           break
+        in Reader::Oversized
+          reader.fail("a chunk claims #{packed_size.claimed} packed bytes, over the #{scratch.size} limit")
+          break
+        in Int32
         end
 
         raw_size = reader.u32
@@ -76,7 +77,7 @@ module Pylon::Wire
           break
         end
 
-        packed = scratch[0, packed_size - 1]
+        packed = scratch[0, packed_size]
         reader.fill(packed)
         break if reader.failed?
 

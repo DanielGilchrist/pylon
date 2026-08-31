@@ -6,7 +6,11 @@ module Pylon::Wire
   DIGEST_BYTES    = 32
   MAX_FIELD_BYTES = 1 << 20
 
+  # Reads the stream until complete or first failure. When a failure occurs reading essentially
+  # becomes a no-op and doesn't touch the stream again.
   class Reader
+    record Oversized, claimed : UInt32
+
     getter? failed = false
     getter reason = ""
 
@@ -67,16 +71,29 @@ module Pylon::Wire
       end
     end
 
-    def bytes? : Bytes?
+    def framed_size(limit : Int32) : Int32 | Oversized | Nil
       size = u32
+
+      # Frame sizes are stored off by one so that 0 can mean absent (or the end of a stream).
       return if @failed || size == 0
 
-      if size - 1 > MAX_FIELD_BYTES
-        fail("a field claims #{size - 1} bytes, over the #{MAX_FIELD_BYTES} limit")
+      claimed = size - 1
+      return Oversized.new(claimed) if claimed > limit
+
+      claimed.to_i32
+    end
+
+    def bytes? : Bytes?
+      case size = framed_size(MAX_FIELD_BYTES)
+      in Nil
         return
+      in Oversized
+        fail("a field claims #{size.claimed} bytes, over the #{MAX_FIELD_BYTES} limit")
+        return
+      in Int32
       end
 
-      buffer = Bytes.new(size - 1)
+      buffer = Bytes.new(size)
       fill(buffer)
       @failed ? nil : buffer
     end
