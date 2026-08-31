@@ -1,4 +1,5 @@
 require "../core/applier"
+require "../fibers"
 require "../wire/message"
 require "./fault"
 require "./pending_write"
@@ -20,7 +21,7 @@ module Pylon::Session
       @known = false
       @sequence = 0_u32
 
-      spawn { listen }
+      Fibers.detach(:endpoint_listen) { listen }
     end
 
     def scan(now_ns : Int64) : Scan::Snapshot | Fault

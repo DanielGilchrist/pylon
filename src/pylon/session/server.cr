@@ -1,4 +1,5 @@
 require "sync"
+require "../fibers"
 require "../watch/watcher"
 require "../core/applier"
 require "../core/differ"
@@ -54,7 +55,7 @@ module Pylon::Session
     private def receive_ahead : Channel(Wire::Message)
       requests = Channel(Wire::Message).new(READ_AHEAD)
 
-      spawn do
+      Fibers.detach(:server_requests) do
         begin
           loop do
             message = Wire.read_message(@input)
@@ -83,7 +84,7 @@ module Pylon::Session
       pushed = Channel(Nil).new
       @pushed = pushed
 
-      spawn do
+      Fibers.detach(:server_announce) do
         begin
           until @stopping
             subscriber.signals.receive?

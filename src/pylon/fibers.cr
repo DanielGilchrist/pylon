@@ -1,16 +1,23 @@
 require "wait_group"
 
 module Pylon
-  # Crystal swallows an exception left unhandled in a fiber: the fiber prints to stderr and
-  # dies, the program keeps running, and any waiter proceeds as if the work completed, with
-  # partial and potentially corrupt data. Every raise in this codebase is an assertion (a bug),
-  # so it must halt the whole program, not one fiber. Here we effectively wrap fiber spawning
-  # to explicitly capture the exception as it happens and convert it into a value inside the
-  # worker, then the waiters (`await`, `parallel`) re-raise it on their own fiber to restore
-  # the crash. Those re-raises are never rescued; they end the process. Always spawn worker
-  # fibers through this module, never hand-roll the capture.
+  # Crystal swallows an exception left unhandled in a fiber and any waiter continues on
+  # partial data. Every fiber should be spawned through here, which re-raises the exception in
+  # the waiter or, with no waiter, ends the process.
   module Fibers
     extend self
+
+    enum Name
+      Spinner
+      EndpointListen
+      ServerRequests
+      ServerAnnounce
+      StderrRelay
+      Write
+      ScanDigest
+      Inotify
+      FSEvents
+    end
 
     def future(&block : -> T) : Channel(T | Exception) forall T
       results = Channel(T | Exception).new(1)
@@ -29,8 +36,16 @@ module Pylon
       outcome
     end
 
-    def parallel(name : String, workers : Int32, &block : Int32 ->) : Nil
-      context = Fiber::ExecutionContext::Parallel.new(name, workers)
+    def detach(name : Name, &block : ->) : Nil
+      spawn(name: name.to_s) { exit_on_exception(block) }
+    end
+
+    def isolated(name : Name, &block : ->) : Fiber::ExecutionContext::Isolated
+      Fiber::ExecutionContext::Isolated.new(name.to_s) { exit_on_exception(block) }
+    end
+
+    def parallel(name : Name, workers : Int32, &block : Int32 ->) : Nil
+      context = Fiber::ExecutionContext::Parallel.new(name.to_s, workers)
       waiting = WaitGroup.new(workers)
       failures = Channel(Exception).new(workers)
 
@@ -61,6 +76,18 @@ module Pylon
         ensure
           waiting.done
         end
+      end
+    end
+
+    # If an unexpected exception occurs the fiber would print to stderr but the program
+    # wouldn't stop. This catches the exception and force stops the program so we don't
+    # continue running with partial state.
+    private def exit_on_exception(block : ->) : Nil
+      outcome = contain { block.call }
+
+      if outcome.is_a?(Exception)
+        outcome.inspect_with_backtrace(STDERR)
+        exit 1
       end
     end
 

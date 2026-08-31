@@ -69,7 +69,7 @@ module Pylon::Write
       groups = independent.each_slice(stripe).to_a
       slices = Array(Array(Outcome)).new(groups.size) { [] of Outcome }
 
-      Fibers.parallel("write", groups.size) do |worker|
+      Fibers.parallel(:write, groups.size) do |worker|
         write_group(changes, groups[worker], slices[worker])
       end
 

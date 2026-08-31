@@ -2,6 +2,7 @@
 
 require "sync"
 require "../core/paths"
+require "../fibers"
 require "../filesystem"
 require "../scan/ignores"
 require "./dirty"
@@ -52,7 +53,7 @@ module Pylon::Watch
       @stopping = false
       @ready = Channel(Bool).new
       @done = Channel(Nil).new
-      @context = Fiber::ExecutionContext::Isolated.new("fsevents") { watch }
+      @context = Fibers.isolated(:fs_events) { watch }
     end
 
     def watching? : Bool

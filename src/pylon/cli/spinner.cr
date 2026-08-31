@@ -1,5 +1,7 @@
 require "colorize"
 
+require "../fibers"
+
 struct Pylon::CLI
   class Spinner
     FRAMES   = {"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
@@ -50,7 +52,7 @@ struct Pylon::CLI
     end
 
     private def animate(stop : Channel(Nil)) : Nil
-      spawn do
+      Fibers.detach(:spinner) do
         @io.print HIDE_CURSOR
         frame = 0
 

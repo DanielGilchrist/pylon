@@ -167,7 +167,7 @@ module Pylon::Scan
 
       partials = Array.new(workers) { {} of String => Bytes | Problem }
 
-      Pylon::Fibers.parallel("scan-digest", workers) do |worker|
+      Pylon::Fibers.parallel(:scan_digest, workers) do |worker|
         hash_slice(survey, pending, partials[worker], worker, workers)
       end
 

@@ -2,6 +2,7 @@
 
 require "sync"
 require "../core/paths"
+require "../fibers"
 require "../filesystem"
 require "../scan/ignores"
 require "./dirty"
@@ -68,7 +69,7 @@ module Pylon::Watch
 
       # the read blocks its thread, which is precisely what an isolated
       # context is for; an inotify fd cannot be driven by the event loop
-      @context = Fiber::ExecutionContext::Isolated.new("inotify") { listen }
+      @context = Fibers.isolated(:inotify) { listen }
     end
 
     def drain : Dirty

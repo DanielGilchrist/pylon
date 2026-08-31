@@ -1,3 +1,4 @@
+require "../fibers"
 require "../problem"
 
 module Pylon::Session
@@ -25,7 +26,7 @@ module Pylon::Session
       in Process
         errors = process.error
 
-        spawn do
+        Fibers.detach(:stderr_relay) do
           while (line = errors.gets)
             relay.call(line)
           end
