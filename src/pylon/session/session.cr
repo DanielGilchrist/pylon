@@ -127,7 +127,10 @@ module Pylon::Session
 
         batch, pending = split(pending, provided.digests)
 
-        break if batch.empty?
+        if batch.empty?
+          pending.each { |change| outcomes << Write::Outcome.new(change.path, change.old, Write::StagedContentMissing.new) }
+          break
+        end
 
         inflight.push(target.write_begin(batch, provided))
 
