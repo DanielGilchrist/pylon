@@ -1,3 +1,4 @@
+require "./unavailable"
 require "./inotify"
 require "./fsevents"
 
@@ -13,7 +14,7 @@ module Pylon::Watch
   module Watcher
     extend self
 
-    def open(root : String, ignores : Array(String), signals : Channel(Nil)) : Any?
+    def open(root : String, ignores : Array(String), signals : Channel(Nil)) : Any | Unavailable
       {% if flag?(:linux) %}
         Inotify.open(root, ignores, signals)
       {% elsif flag?(:darwin) %}

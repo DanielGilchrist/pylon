@@ -2,12 +2,17 @@
 
 require "sync"
 require "../core/paths"
+require "../filesystem"
 require "../scan/ignores"
 require "./dirty"
+require "./unavailable"
+require "./walk"
 require "./lib_inotify"
 
 module Pylon::Watch
   class Inotify
+    include Walk
+
     WATCH_MASK = LibInotify::IN_MODIFY | LibInotify::IN_ATTRIB | LibInotify::IN_CLOSE_WRITE |
                  LibInotify::IN_MOVED_FROM | LibInotify::IN_MOVED_TO | LibInotify::IN_CREATE |
                  LibInotify::IN_DELETE | LibInotify::IN_DELETE_SELF | LibInotify::IN_MOVE_SELF |
@@ -21,22 +26,23 @@ module Pylon::Watch
       root : String,
       ignores : Array(String),
       signals : Channel(Nil) = Channel(Nil).new(1),
-    ) : Inotify?
+    ) : Inotify | Unavailable
       descriptor = LibInotify.inotify_init1(LibInotify::IN_CLOEXEC)
-      return nil if descriptor < 0
+      return Unavailable.new("inotify could not be initialised: #{Errno.value}") if descriptor < 0
 
       wake = StaticArray(LibC::Int, 2).new(0)
 
       if LibC.pipe(wake) < 0
+        failed = Errno.value
         LibC.close(descriptor)
-        return nil
+        return Unavailable.new("the wake pipe could not be created: #{failed}")
       end
 
       watcher = new(descriptor, wake[0], wake[1], root, Scan::Ignores.new(ignores), signals)
       return watcher if watcher.watching?
 
       watcher.close
-      nil
+      Unavailable.new("the sync root could not be watched (inotify watch limit?)")
     end
 
     def initialize(
@@ -91,14 +97,12 @@ module Pylon::Watch
 
       add_watch(relative)
 
-      Dir.each_child(absolute(relative)) do |name|
+      walk(absolute(relative)) do |name|
         child = Core::Paths.join(relative, name)
         next unless Dir.exists?(absolute(child))
 
         watch_tree(child)
       end
-    rescue File::Error
-      nil
     end
 
     def watching? : Bool
@@ -201,15 +205,13 @@ module Pylon::Watch
     end
 
     private def mark_contents(relative : String) : Nil
-      Dir.each_child(absolute(relative)) do |name|
+      walk(absolute(relative)) do |name|
         child = Core::Paths.join(relative, name)
         next if @ignores.ignore?(child)
 
         @lock.synchronize { @dirty << child }
         mark_contents(child) if Dir.exists?(absolute(child))
       end
-    rescue File::Error
-      nil
     end
 
     private def signal : Nil

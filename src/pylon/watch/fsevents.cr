@@ -2,12 +2,17 @@
 
 require "sync"
 require "../core/paths"
+require "../filesystem"
 require "../scan/ignores"
 require "./dirty"
+require "./unavailable"
+require "./walk"
 require "./lib_fsevents"
 
 module Pylon::Watch
   class FSEvents
+    include Walk
+
     LATENCY_SECONDS   = 0.05
     STOP_POLL_SECONDS =  0.5
 
@@ -27,18 +32,14 @@ module Pylon::Watch
       root : String,
       ignores : Array(String),
       signals : Channel(Nil) = Channel(Nil).new(1),
-    ) : FSEvents?
-      resolved = canonical(root)
-      return nil if resolved.nil?
-
-      watcher = new(resolved, Scan::Ignores.new(ignores), signals)
-      watcher.watching? ? watcher : nil
-    end
-
-    private def self.canonical(root : String) : String?
-      File.realpath(root)
-    rescue File::Error
-      nil
+    ) : FSEvents | Unavailable
+      case resolved = Filesystem.realpath(root)
+      in Problem
+        Unavailable.new("the sync root could not be resolved: #{resolved.reason}")
+      in String
+        watcher = new(resolved, Scan::Ignores.new(ignores), signals)
+        watcher.watching? ? watcher : Unavailable.new("the FSEvents stream could not be started")
+      end
     end
 
     @watching : Bool? = nil
@@ -107,21 +108,19 @@ module Pylon::Watch
 
     private def relativise(path : String) : String?
       return "" if path == @root
-      return nil unless path.starts_with?(@prefix)
+      return unless path.starts_with?(@prefix)
 
       path[@prefix.size..]
     end
 
     private def mark_contents(relative : String) : Nil
-      Dir.each_child(absolute(relative)) do |name|
+      walk(absolute(relative)) do |name|
         child = Core::Paths.join(relative, name)
         next if @ignores.ignore?(child)
 
         @lock.synchronize { @paths << child }
         mark_contents(child) if Dir.exists?(absolute(child))
       end
-    rescue File::Error
-      nil
     end
 
     private def watch : Nil

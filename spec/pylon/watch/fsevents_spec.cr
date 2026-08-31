@@ -24,8 +24,8 @@ describe Pylon::Watch::FSEvents do
     Dir.mkdir_p(File.join(root, "log"))
 
     watcher = FSEvents.open(root, ["log"])
-    watcher.should_not be_nil
-    next if watcher.nil?
+    watcher.should be_a(FSEvents)
+    next unless watcher.is_a?(FSEvents)
 
     begin
       sleep(200.milliseconds)
