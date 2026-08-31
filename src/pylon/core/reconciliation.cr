@@ -15,11 +15,5 @@ module Pylon::Core
     )
     end
 
-    def empty? : Bool
-      base_changes.empty? &&
-        local_changes.empty? &&
-        remote_changes.empty? &&
-        conflicts.empty?
-    end
   end
 end

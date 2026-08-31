@@ -22,13 +22,5 @@ module Pylon::Core
 
     protected def initialize(@value : String)
     end
-
-    def root? : Bool
-      @value.empty?
-    end
-
-    def join(name : Name) : RelativePath
-      new(Paths.join(@value, name.value))
-    end
   end
 end

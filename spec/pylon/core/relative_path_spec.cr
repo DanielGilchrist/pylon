@@ -6,7 +6,7 @@ describe Pylon::Core::RelativePath do
     parsed = RelativePath.parse("")
 
     parsed.should be_a(RelativePath)
-    parsed.root?.should be_true if parsed.is_a?(RelativePath)
+    parsed.value.should eq("") if parsed.is_a?(RelativePath)
   end
 
   it "parses an ordinary nested path" do

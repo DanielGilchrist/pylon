@@ -47,9 +47,5 @@ module Pylon::Write
     def applied? : Bool
       skipped.nil?
     end
-
-    def skipped? : Bool
-      !skipped.nil?
-    end
   end
 end
