@@ -46,6 +46,16 @@ describe Pylon::Core::Safety do
       .should eq(Safety::Reason::RootTypeChange)
   end
 
+  it "allows creating the root where there was nothing" do
+    Safety.check(nil, nil, populated, [Change.new("", nil, populated)]).should be_nil
+  end
+
+  it "allows a root change that keeps its type" do
+    bigger = Pylon::Core::Directory.new({"a" => Fixtures.f1, "b" => Fixtures.f2, "c" => Fixtures.f1})
+
+    Safety.check(populated, populated, populated, [Change.new("", populated, bigger)]).should be_nil
+  end
+
   it "allows deleting something that is not the root" do
     Safety.check(populated, populated, populated, [Change.new("a", Fixtures.f1, nil)]).should be_nil
   end
