@@ -168,4 +168,22 @@ describe Pylon::Wire::Binary do
   it "refuses a byte that is neither 0 nor 1 where a bool was promised" do
     fails_to_decode(Bytes[2_u8]) { |reader| reader.bool }.should be_true
   end
+
+  it "refuses an entry kind it does not know" do
+    fails_to_decode(Bytes[9_u8]) { |reader| Binary.read_entry(reader) }.should be_true
+  end
+
+  it "refuses a skip reason it does not know" do
+    fails_to_decode(Bytes[9_u8]) { |reader| Binary.read_skipped(reader) }.should be_true
+  end
+
+  it "refuses a directory whose child entry is missing" do
+    io = IO::Memory.new
+    io.write_byte(1_u8)
+    io.write_bytes(1_u32, Pylon::Wire::FORMAT)
+    Binary.write_string(io, "a")
+    io.write_byte(0_u8)
+
+    fails_to_decode(io.to_slice) { |reader| Binary.read_entry(reader) }.should be_true
+  end
 end
