@@ -24,9 +24,9 @@ private def in_watched_pair(& : String, String, Session(LocalEndpoint, RemoteEnd
   signals = ::Channel(Nil).new(16)
   watcher = Pylon::Watch::Watcher.open(remote, [] of String, signals)
 
-  if watcher.nil?
+  if watcher.is_a?(Pylon::Watch::Unavailable)
     FileUtils.rm_rf(base)
-    pending! "no filesystem watcher available"
+    pending! "no filesystem watcher available (#{watcher.reason})"
   end
 
   endpoint = LocalEndpoint.new(remote)

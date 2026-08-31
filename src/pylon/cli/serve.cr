@@ -34,9 +34,14 @@ struct Pylon::CLI
         end
       end
 
-      subscriber = Watch::Watcher.open(root, ignore, Channel(Nil).new(1))
-      endpoint.accelerate! if subscriber
-      STDERR.puts("pylon: watching is unavailable on this side, every cycle will rescan") if subscriber.nil?
+      case opened = Watch::Watcher.open(root, ignore, Channel(Nil).new(1))
+      in Watch::Any
+        subscriber = opened
+        endpoint.accelerate!
+      in Watch::Unavailable
+        subscriber = nil
+        STDERR.puts("pylon: watching is unavailable on this side (#{opened.reason}), every cycle will rescan")
+      end
 
       checkpoints = state.try do |path|
         Session::Checkpoint::Schedule.new(

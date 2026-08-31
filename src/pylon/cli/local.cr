@@ -89,15 +89,17 @@ struct Pylon::CLI
       end
 
       signals = Channel(Nil).new(16)
-      watchers = [{left, local}, {right, remote}].compact_map do |endpoint, root|
-        subscriber = Watch::Watcher.open(root, ignore, signals)
-        subscriber.nil? ? nil : {endpoint, subscriber}
-      end
+      watchers = [] of {Session::LocalEndpoint, Watch::Any}
 
-      if watchers.size < 2
-        watchers.each { |_, subscriber| subscriber.close }
-        reporter.failed("watching is unavailable for this directory")
-        exit(1)
+      [{left, local}, {right, remote}].each do |endpoint, root|
+        case subscriber = Watch::Watcher.open(root, ignore, signals)
+        in Watch::Any
+          watchers << {endpoint, subscriber}
+        in Watch::Unavailable
+          watchers.each { |_, opened| opened.close }
+          reporter.failed("watching is unavailable for #{root}: #{subscriber.reason}")
+          exit(1)
+        end
       end
 
       watchers.each { |endpoint, _| endpoint.accelerate! }

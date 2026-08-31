@@ -84,6 +84,10 @@ struct Pylon::CLI
         ),
       ) { |line| reporter.relay(line) }
 
+      if transport.is_a?(Problem)
+        fail_with(reporter, transport.reason)
+      end
+
       begin
         left = Session::LocalEndpoint.new(local, ignores, compression: compression)
         left.cache = restored.local_cache
@@ -130,8 +134,8 @@ struct Pylon::CLI
 
       subscriber = Watch::Watcher.open(local, ignore, signals)
 
-      if subscriber.nil?
-        fail_with(reporter, "watching is unavailable for this directory")
+      if subscriber.is_a?(Watch::Unavailable)
+        fail_with(reporter, "watching is unavailable for #{local}: #{subscriber.reason}")
       end
 
       local_endpoint.accelerate!
