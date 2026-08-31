@@ -6,8 +6,9 @@ private def report_of(
   local = [] of Pylon::Write::Outcome,
   remote = [] of Pylon::Write::Outcome,
   halt = nil,
+  troubles = [] of Trouble,
 ) : Pylon::Session::Report
-  Pylon::Session::Report.new(conflicts, local, remote, halt)
+  Pylon::Session::Report.new(conflicts, local, remote, halt, troubles)
 end
 
 private def rendered(report, verbose = false, dry_run = false) : String
@@ -107,6 +108,51 @@ describe Pylon::CLI::Reporter do
     reporter.report(report_of)
     first.should contain("conflict")
     io.to_s.should contain("conflict resolved")
+  end
+
+  it "says which side an unreadable path is on and why it matters" do
+    output = rendered(report_of(troubles: [Trouble.new("locked.rb", :remote, "permission denied")]))
+
+    output.should contain("unreadable on the remote")
+    output.should contain("locked.rb")
+    output.should contain("permission denied")
+    output.should contain("will not sync")
+
+    rendered(report_of(troubles: [Trouble.new("locked.rb", :local, "permission denied")]))
+      .should_not contain("on the remote")
+  end
+
+  it "mentions an unreadable path once, not on every cycle" do
+    Colorize.enabled = false
+    io = IO::Memory.new
+    reporter = Pylon::CLI::Reporter.new(io)
+    troubled = report_of(troubles: [Trouble.new("locked.rb", :local, "permission denied")])
+
+    reporter.report(troubled)
+    io.to_s.should contain("unreadable")
+    io.clear
+
+    reporter.report(troubled)
+    io.to_s.should be_empty
+  end
+
+  it "counts the directories it does not name in a summary" do
+    outcomes = (1..40).flat_map do |index|
+      [applied("app/f#{index}.rb"), applied("lib/f#{index}.rb"), applied("db/f#{index}.rb"), applied("bin/f#{index}.rb")]
+    end
+
+    output = rendered(report_of(remote: outcomes.to_a))
+
+    output.should contain("160 files")
+    output.should contain("and 1 more")
+  end
+
+  it "does not claim more directories when it named them all" do
+    outcomes = (1..20).flat_map { |index| [applied("app/f#{index}.rb"), applied("lib/f#{index}.rb")] }
+
+    output = rendered(report_of(remote: outcomes.to_a))
+
+    output.should_not contain("more")
   end
 
   it "says when an uploaded path was actually a deletion" do
