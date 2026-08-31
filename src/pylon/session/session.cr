@@ -192,7 +192,7 @@ module Pylon::Session
         end
       end
 
-      @base = Core::Applier.apply(@base, changes).try(&.synchronizable)
+      @base = Core::Applier.apply(@base, changes).try(&.syncable)
     end
   end
 end

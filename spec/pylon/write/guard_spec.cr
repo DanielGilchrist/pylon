@@ -80,7 +80,7 @@ describe Pylon::Write::Guard do
     check(Pylon::Core::SymbolicLink.new("intended"), nil, Pylon::Scan::ObservedLink.new("retargeted")).should eq(Verdict::ModificationDetected)
   end
 
-  it "never proceeds against unsynchronizable expectations" do
+  it "never proceeds against unsyncable expectations" do
     check(Pylon::Core::Untracked.new, nil, observed_file).should eq(Verdict::UnknownState)
     check(Pylon::Core::Problematic.new("x"), nil, observed_file).should eq(Verdict::UnknownState)
   end

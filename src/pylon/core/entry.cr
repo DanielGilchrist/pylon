@@ -12,17 +12,13 @@ module Pylon::Core
       end
     end
 
-    def synchronizable? : Bool
-      true
-    end
-
-    def synchronizable : Entry?
+    def syncable : Directory
       return self if contents.empty?
 
       retained = nil
 
       contents.each do |name, child|
-        kept = child.synchronizable
+        kept = child.syncable
 
         if kept.nil? || kept != child
           retained ||= carry_forward(name)
@@ -59,11 +55,7 @@ module Pylon::Core
       @executable
     end
 
-    def synchronizable? : Bool
-      true
-    end
-
-    def synchronizable : Entry?
+    def syncable : File
       self
     end
   end
@@ -74,21 +66,13 @@ module Pylon::Core
     def initialize(@target : String)
     end
 
-    def synchronizable? : Bool
-      true
-    end
-
-    def synchronizable : Entry?
+    def syncable : SymbolicLink
       self
     end
   end
 
   struct Untracked
-    def synchronizable? : Bool
-      false
-    end
-
-    def synchronizable : Entry?
+    def syncable : Nil
       nil
     end
   end
@@ -99,14 +83,11 @@ module Pylon::Core
     def initialize(@problem : String)
     end
 
-    def synchronizable? : Bool
-      false
-    end
-
-    def synchronizable : Entry?
+    def syncable : Nil
       nil
     end
   end
 
-  alias Entry = Directory | File | SymbolicLink | Untracked | Problematic
+  alias Syncable = Directory | File | SymbolicLink
+  alias Entry = Syncable | Untracked | Problematic
 end

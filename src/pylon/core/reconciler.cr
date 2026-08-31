@@ -36,7 +36,7 @@ module Pylon::Core
         end
 
         if local == remote
-          adopt(path, base, local.try(&.synchronizable))
+          adopt(path, base, local.try(&.syncable))
           return
         end
 
@@ -45,15 +45,15 @@ module Pylon::Core
           return
         end
 
-        local_synchronizable = local.try(&.synchronizable)
-        remote_synchronizable = remote.try(&.synchronizable)
+        local_syncable = local.try(&.syncable)
+        remote_syncable = remote.try(&.syncable)
 
-        if local_synchronizable.is_a?(Directory) && remote_synchronizable.is_a?(Directory)
-          descend(path, base, local_synchronizable, remote_synchronizable)
+        if local_syncable.is_a?(Directory) && remote_syncable.is_a?(Directory)
+          descend(path, base, local_syncable, remote_syncable)
           return
         end
 
-        merge(path, base, local_synchronizable, remote_synchronizable)
+        merge(path, base, local_syncable, remote_syncable)
       end
 
       private def merge(path : String, base : Entry?, local : Entry?, remote : Entry?) : Nil
@@ -175,7 +175,7 @@ module Pylon::Core
       end
 
       private def blocked?(entry : Entry?) : Bool
-        !entry.nil? && !entry.synchronizable?
+        !entry.nil? && !entry.is_a?(Syncable)
       end
     end
   end

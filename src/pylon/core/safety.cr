@@ -45,7 +45,7 @@ module Pylon::Core
 
     private def emptied_root?(base : Entry?, local : Entry?, remote : Entry?) : Bool
       return false unless base.is_a?(Directory)
-      return false if synchronizable_children(base) < 2
+      return false if syncable_children(base) < 2
 
       empty?(local) != empty?(remote)
     end
@@ -54,11 +54,11 @@ module Pylon::Core
       return true if entry.nil?
       return false unless entry.is_a?(Directory)
 
-      synchronizable_children(entry).zero?
+      syncable_children(entry).zero?
     end
 
-    private def synchronizable_children(entry : Directory) : Int32
-      entry.contents.each_value.count(&.synchronizable?)
+    private def syncable_children(entry : Directory) : Int32
+      entry.contents.each_value.count(&.is_a?(Syncable))
     end
   end
 end
