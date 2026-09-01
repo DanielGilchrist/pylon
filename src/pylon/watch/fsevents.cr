@@ -22,7 +22,7 @@ module Pylon::Watch
       StartFailed
     end
 
-    LATENCY_SECONDS   = 0.05
+    LATENCY_SECONDS   = 0.01
     STOP_POLL_SECONDS =  0.5
 
     FRESH_FLAGS = LibFSEvents::MUST_SCAN_SUBDIRS |

@@ -105,7 +105,7 @@ struct Pylon::CLI
 
       watchers.each { |endpoint, _| endpoint.accelerate! }
 
-      runner = Session::Runner.new(session, signals, before: -> { drain(watchers) })
+      runner = Session::Runner.new(session, signals, before: -> { drain(watchers) }, gauge: -> { register(watchers) })
       Signal::INT.trap { runner.stop }
 
       fault = runner.run do |report, elapsed|
@@ -138,6 +138,10 @@ struct Pylon::CLI
 
     private def drain(watchers) : Nil
       watchers.each { |endpoint, subscriber| endpoint.mark_dirty(subscriber.drain) }
+    end
+
+    private def register(watchers) : Int32
+      watchers.sum { |endpoint, subscriber| endpoint.register(subscriber.drain) }
     end
   end
 end

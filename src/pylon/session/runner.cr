@@ -2,15 +2,21 @@ require "./session"
 
 module Pylon::Session
   class Runner(A, B)
-    DEFAULT_DEBOUNCE = 20.milliseconds
-    DEFAULT_POLL     = 250.milliseconds
+    DEFAULT_DEBOUNCE     = 20.milliseconds
+    DEFAULT_POLL         = 250.milliseconds
+    DEFAULT_BURST_QUIET  = 300.milliseconds
+    DEFAULT_SETTLE_LIMIT = 10.seconds
+    BURST_PATHS          = 8
 
     def initialize(
       @session : Session(A, B),
       @signals : Channel(Nil),
       @debounce : Time::Span = DEFAULT_DEBOUNCE,
       @poll : Time::Span = DEFAULT_POLL,
+      @burst_quiet : Time::Span = DEFAULT_BURST_QUIET,
+      @settle_limit : Time::Span = DEFAULT_SETTLE_LIMIT,
       @before : Proc(Nil)? = nil,
+      @gauge : Proc(Int32)? = nil,
     )
       @stopping = false
     end
@@ -67,13 +73,38 @@ module Pylon::Session
 
     private def settle : Nil
       sleep(@debounce)
+      drain
 
+      wait_out_burst if dirtied >= BURST_PATHS
+    end
+
+    private def wait_out_burst : Nil
+      deadline = Time.instant + @settle_limit
+
+      until @stopping || Time.instant >= deadline
+        select
+        when @signals.receive?
+          drain
+          dirtied
+        when timeout(@burst_quiet)
+          return
+        end
+      end
+    end
+
+    private def dirtied : Int32
+      gauge = @gauge
+      return 0 if gauge.nil?
+
+      gauge.call
+    end
+
+    private def drain : Nil
       loop do
         select
         when @signals.receive?
-          # another change landed inside the debounce window
         else
-          break
+          return
         end
       end
     end

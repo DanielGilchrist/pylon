@@ -82,7 +82,7 @@ describe Pylon::Session::Runner do
   it "coalesces a burst of signals into a single cycle" do
     in_pair do |local, _, session|
       signals = Channel(Nil).new(16)
-      runner = Runner.new(session, signals, debounce: 30.milliseconds, poll: 1.second)
+      runner = Runner.new(session, signals, debounce: 30.milliseconds, poll: 1.second, burst_quiet: 20.milliseconds)
       reports = [] of Report
 
       spawn { runner.run { |report, _elapsed| reports << report } }
@@ -95,11 +95,71 @@ describe Pylon::Session::Runner do
         signals.send(nil)
       end
 
-      sleep 120.milliseconds
+      sleep 150.milliseconds
       runner.stop
 
       reports.size.should eq(2)
       reports.last.remote_outcomes.count(&.applied?).should eq(10)
+    end
+  end
+
+  it "keeps waiting while signals arrive in gaps longer than the debounce" do
+    in_pair do |local, _, session|
+      signals = Channel(Nil).new(16)
+      runner = Runner.new(session, signals, debounce: 2.milliseconds, poll: 1.second, burst_quiet: 120.milliseconds, gauge: -> { 100 })
+      reports = [] of Report
+
+      spawn { runner.run { |report, _elapsed| reports << report } }
+
+      Fiber.yield
+      sleep 20.milliseconds
+
+      5.times do |index|
+        File.write(File.join(local, "spread_#{index}.rb"), "s")
+        signals.send(nil)
+        signals.send(nil)
+        sleep 25.milliseconds
+      end
+
+      sleep 250.milliseconds
+      runner.stop
+
+      reports.size.should eq(2)
+      reports.last.remote_outcomes.count(&.applied?).should eq(5)
+    end
+  end
+
+  it "cycles anyway when a burst never goes quiet" do
+    in_pair do |local, _, session|
+      signals = Channel(Nil).new(16)
+      runner = Runner.new(session, signals, debounce: 2.milliseconds, poll: 1.second, burst_quiet: 60.milliseconds, settle_limit: 100.milliseconds, gauge: -> { 100 })
+      reports = [] of Report
+
+      spawn { runner.run { |report, _elapsed| reports << report } }
+
+      Fiber.yield
+      sleep 20.milliseconds
+
+      File.write(File.join(local, "endless.rb"), "e")
+      streaming = true
+
+      spawn do
+        while streaming
+          select
+          when signals.send(nil)
+          else
+          end
+
+          sleep 20.milliseconds
+        end
+      end
+
+      sleep 400.milliseconds
+      streaming = false
+      runner.stop
+
+      reports.size.should be >= 2
+      reports[1].remote_outcomes.count(&.applied?).should eq(1)
     end
   end
 end

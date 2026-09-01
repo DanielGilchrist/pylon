@@ -145,6 +145,7 @@ struct Pylon::CLI
         session,
         signals,
         before: -> { local_endpoint.mark_dirty(subscriber.drain) },
+        gauge: -> { local_endpoint.register(subscriber.drain) },
       )
 
       Signal::INT.trap { runner.stop }

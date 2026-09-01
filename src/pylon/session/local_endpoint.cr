@@ -51,6 +51,17 @@ module Pylon::Session
       end
     end
 
+    def register(dirty : Watch::Dirty) : Int32
+      mark_dirty(dirty)
+
+      case dirty
+      in Watch::Everything
+        Int32::MAX >> 2
+      in Watch::Touched
+        dirty.paths.size
+      end
+    end
+
     def scan(now_ns : Int64) : Scan::Snapshot
       @tally.reset
 
