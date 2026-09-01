@@ -28,7 +28,7 @@ describe Pylon::Session::Runner do
       reports = [] of Report
 
       spawn do
-        runner.run do |report|
+        runner.run do |report, _elapsed|
           reports << report
           runner.stop
         end
@@ -48,7 +48,7 @@ describe Pylon::Session::Runner do
       runner = Runner.new(session, signals, debounce: 1.millisecond, poll: 1.second)
       reports = [] of Report
 
-      spawn { runner.run { |report| reports << report } }
+      spawn { runner.run { |report, _elapsed| reports << report } }
 
       Fiber.yield
       sleep 30.milliseconds
@@ -69,7 +69,7 @@ describe Pylon::Session::Runner do
       runner = Runner.new(session, Channel(Nil).new(1), debounce: 1.millisecond, poll: 10.milliseconds)
       reports = [] of Report
 
-      spawn { runner.run { |report| reports << report } }
+      spawn { runner.run { |report, _elapsed| reports << report } }
 
       Fiber.yield
       sleep 80.milliseconds
@@ -85,7 +85,7 @@ describe Pylon::Session::Runner do
       runner = Runner.new(session, signals, debounce: 30.milliseconds, poll: 1.second)
       reports = [] of Report
 
-      spawn { runner.run { |report| reports << report } }
+      spawn { runner.run { |report, _elapsed| reports << report } }
 
       Fiber.yield
       sleep 20.milliseconds

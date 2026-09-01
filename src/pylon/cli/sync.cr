@@ -124,10 +124,11 @@ struct Pylon::CLI
 
     private def drive(session, reporter, checkpoints, remote_endpoint, local_endpoint, target, signals) : Nil
       unless watch?
+        cycle_started = Time.instant
         result = session.cycle(Time.utc.to_unix_ns.to_i64)
         report_fault(reporter, result, target) if result.is_a?(Session::Fault)
 
-        reporter.report(result)
+        reporter.report(result, Time.instant - cycle_started)
         checkpoints.try(&.save)
         return
       end
@@ -151,8 +152,8 @@ struct Pylon::CLI
       started = Time.instant
       first = true
 
-      fault = runner.run do |report|
-        reporter.report(report)
+      fault = runner.run do |report, elapsed|
+        reporter.report(report, first ? nil : elapsed)
 
         if first
           first = false

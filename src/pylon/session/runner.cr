@@ -19,11 +19,12 @@ module Pylon::Session
       @stopping = true
     end
 
-    def run(&block : Report ->) : Fault?
+    def run(&block : Report, Time::Span ->) : Fault?
+      started = Time.instant
       report = cycle
       return report if report.is_a?(Fault)
 
-      block.call(report)
+      block.call(report, Time.instant - started)
 
       until @stopping
         next unless wait_for_work
@@ -38,6 +39,7 @@ module Pylon::Session
           settled = Time.instant
         {% end %}
 
+        started = Time.instant
         report = cycle
         return report if report.is_a?(Fault)
 
@@ -48,7 +50,7 @@ module Pylon::Session
           ])
         {% end %}
 
-        block.call(report)
+        block.call(report, Time.instant - started)
       end
 
       nil

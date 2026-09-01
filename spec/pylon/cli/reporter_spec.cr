@@ -11,10 +11,10 @@ private def report_of(
   Pylon::Session::Report.new(conflicts, local, remote, halt, troubles)
 end
 
-private def rendered(report, verbose = false, dry_run = false) : String
+private def rendered(report, verbose = false, dry_run = false, elapsed : Time::Span? = nil) : String
   Colorize.enabled = false
   io = IO::Memory.new
-  Pylon::CLI::Reporter.new(io, verbose, dry_run).report(report)
+  Pylon::CLI::Reporter.new(io, verbose, dry_run).report(report, elapsed)
   io.to_s
 end
 
@@ -33,6 +33,22 @@ end
 describe Pylon::CLI::Reporter do
   it "says nothing when a cycle was quiet" do
     rendered(report_of).should be_empty
+  end
+
+  it "says how long a sync took when it moved anything" do
+    output = rendered(report_of(remote: [applied("went/up.rb")]), elapsed: 240.milliseconds)
+
+    output.should contain("synced in 240 ms")
+  end
+
+  it "keeps quiet cycles silent even when timed" do
+    rendered(report_of, elapsed: 240.milliseconds).should be_empty
+  end
+
+  it "leaves the timing off a halted cycle" do
+    output = rendered(report_of(halt: Safety::Reason::EndpointEmptiedRoot), elapsed: 240.milliseconds)
+
+    output.should_not contain("synced in")
   end
 
   it "names what moved and which way it went" do

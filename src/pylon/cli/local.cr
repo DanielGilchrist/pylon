@@ -76,6 +76,7 @@ struct Pylon::CLI
       end
 
       unless watch?
+        cycle_started = Time.instant
         result = session.cycle(Time.utc.to_unix_ns.to_i64)
 
         if result.is_a?(Session::Fault)
@@ -83,7 +84,7 @@ struct Pylon::CLI
           exit(1)
         end
 
-        reporter.report(result)
+        reporter.report(result, Time.instant - cycle_started)
         checkpoints.try(&.save)
         return
       end
@@ -107,8 +108,8 @@ struct Pylon::CLI
       runner = Session::Runner.new(session, signals, before: -> { drain(watchers) })
       Signal::INT.trap { runner.stop }
 
-      fault = runner.run do |report|
-        reporter.report(report)
+      fault = runner.run do |report, elapsed|
+        reporter.report(report, elapsed)
         checkpoints.try(&.save_if_due)
       end
 

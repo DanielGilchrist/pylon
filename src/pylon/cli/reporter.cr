@@ -122,7 +122,7 @@ struct Pylon::CLI
       @io.puts
     end
 
-    def report(report : Session::Report) : Nil
+    def report(report : Session::Report, elapsed : Time::Span? = nil) : Nil
       clear_progress
 
       if (halt = report.halt)
@@ -152,6 +152,10 @@ struct Pylon::CLI
           reason = outcome.skipped.try(&.explain)
           @io.puts "#{indent}  #{outcome.path} #{"(#{reason})".colorize.dark_gray}"
         end
+      end
+
+      if elapsed && !(outgoing.empty? && incoming.empty?)
+        @io.puts "#{indent}#{"synced in #{format(elapsed)}".colorize.dark_gray}"
       end
 
       @io.puts
