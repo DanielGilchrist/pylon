@@ -12,7 +12,8 @@ module Pylon::Wire
       getter contents : Contents
 
       def initialize(@contents : Contents)
-        @digests = @contents.keys.to_set
+        @digests = Set(Bytes).new(@contents.size)
+        @contents.each_key { |digest| @digests << digest }
       end
 
       def write(io : IO) : Nil

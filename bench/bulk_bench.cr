@@ -77,7 +77,7 @@ abort("the session faulted: #{report.explain}") if report.is_a?(Session::Fault)
 elapsed = Time.instant - started
 
 applied = report.remote_outcomes.count(&.applied?)
-skipped = report.remote_outcomes.count(&.skipped?)
+skipped = report.remote_outcomes.count { |outcome| !outcome.applied? }
 
 puts "bulk push: #{elapsed.total_seconds.round(2)}s (#{(total_bytes / (1024.0 * 1024.0) / elapsed.total_seconds).round(1)} MiB/s)"
 puts "outcomes:  #{applied} applied, #{skipped} skipped, #{report.conflicts.size} conflicts, halted=#{report.halted?}"

@@ -11,20 +11,11 @@ require "./tree_update"
 require "../problem"
 require "digest/sha256"
 
-# stdlibs `IO` reports failures on the peer stream by throwing exceptions, and the peer
-# vanishing (it exited, the connection dropped, a reset) is expected. We want to avoid
-# exceptions as they can leave the application in undesirable states but also make potential
-# failures invisible to the type system. Here we effectively wrap the session's stream IO
-# to explicitly handle the exceptions as they happen and convert them into values. This allows
-# us to encode the potential failures into the return type and force callers to handle them as
-# needed. Each wrap is one method: `transmit` converts a failed write into a `Problem` so the
-# caller decides whether it stops the session; `read_greeting` converts a stream that dies
-# before the greeting completes into `Unreachable` carrying the reason, distinct from a
-# non-pylon peer; `first_byte` maps the boundary between frames, where `IO#read_byte` reports
-# a clean end-of-stream as nil and our own side closing the stream throws while `io.closed?`
-# is true (both an orderly `Closed`), and anything else throwing is the stream breaking, which
-# becomes `Invalid` carrying the reason so an abnormal death is not misreported as a clean
-# close. Structural failures inside a frame are latched as values by `Reader` instead.
+# stdlibs `IO` reports failures by throwing exceptions. We want to avoid exceptions as they
+# can leave the application in undesirable states but also make potential failures invisible
+# to the type system. Here we effectively wrap the session's stream IO to explicitly handle
+# the exceptions as they happen and convert them into values. This allows us to encode the
+# potential failures into the return type and force callers to handle them as needed.
 module Pylon::Wire
   PROTOCOL = 2_u32
   IDENTITY = "PYLON"
@@ -116,22 +107,30 @@ module Pylon::Wire
   end
 
   def self.read_digests(reader : Reader) : Array(Bytes)
-    digests = Array(Bytes).new
-    reader.repeat(reader.count) { digests << reader.digest }
+    count = reader.count
+    digests = Array(Bytes).new(capacity_hint(count))
+    reader.repeat(count) { digests << reader.digest }
     digests
   end
 
   def self.read_contents(reader : Reader) : Contents
-    contents = Contents.new
+    count = reader.count
+    contents = Contents.new(initial_capacity: capacity_hint(count))
     codec = Compress::Zstd.new
     scratch = Chunks.scratch
+    hasher = Digest::SHA256.new
+    sum = Bytes.new(DIGEST_BYTES)
 
-    reader.repeat(reader.count) do
+    reader.repeat(count) do
       digest = reader.digest
       content = Chunks.read_all(reader, codec, scratch)
       next if content.nil?
 
-      contents[digest] = content if Digest::SHA256.digest(content) == digest
+      hasher.reset
+      hasher.update(content)
+      hasher.final(sum)
+
+      contents[digest] = content if sum == digest
     end
 
     contents

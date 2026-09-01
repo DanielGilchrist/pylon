@@ -39,6 +39,7 @@ puts "identical:    #{cold.root == warm.root}"
 puts
 
 started = Time.instant
-base = cold.root.try(&.synchronizable)
+base = cold.root.try(&.syncable)
 reconciliation = Reconciler.reconcile(base, cold.root, warm.root)
-puts "reconcile:    #{(Time.instant - started).total_milliseconds.round(2)} ms (#{reconciliation.empty? ? "no changes" : "changes"})"
+quiet = reconciliation.local_changes.empty? && reconciliation.remote_changes.empty? && reconciliation.conflicts.empty?
+puts "reconcile:    #{(Time.instant - started).total_milliseconds.round(2)} ms (#{quiet ? "no changes" : "changes"})"

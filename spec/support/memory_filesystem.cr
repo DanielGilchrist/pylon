@@ -87,7 +87,7 @@ struct MemoryFilesystem
     nil
   end
 
-  def digest(relative_path : String, buffer : Bytes = Bytes.empty) : Bytes | Pylon::Problem
+  def digest(relative_path : String, buffer : Bytes = Bytes.empty, hasher : Digest::SHA256 = Digest::SHA256.new) : Bytes | Pylon::Problem
     node = @nodes[relative_path]
     return Pylon::Problem.new("could not be read (EACCES)") unless node.readable
 

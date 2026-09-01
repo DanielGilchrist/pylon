@@ -14,6 +14,7 @@ module Pylon::Session
 
     @fault : Fault? = nil
     @tree : Core::Entry? = nil
+    @unapplied = [] of Core::Change
 
     def initialize(@input : IO, @output : IO, @signals : Channel(Nil)? = nil)
       @responses = Channel(Wire::Message).new(RESPONSE_BUFFER)
@@ -25,12 +26,13 @@ module Pylon::Session
     end
 
     def scan(now_ns : Int64) : Scan::Snapshot | Fault
-      return Scan::Snapshot.new(@tree, Scan::Cache.new) if @known
+      return Scan::Snapshot.new(settled_tree, Scan::Cache.new) if @known
 
       reply = exchange(Wire::ScanRequest.new(now_ns))
       return reply if reply.is_a?(Fault)
       return unexpected("a scan response", reply) unless reply.is_a?(Wire::ScanResponse)
 
+      @unapplied.clear
       @tree = reply.root
 
       Scan::Snapshot.new(reply.root, Scan::Cache.new)
@@ -60,8 +62,17 @@ module Pylon::Session
       return reply if reply.is_a?(Fault)
       return unexpected("a write response", reply) unless reply.is_a?(Wire::WriteResponse)
 
-      @tree = Core::Applier.apply(@tree, Write::Outcome.changes(reply.outcomes))
+      reply.outcomes.each { |outcome| @unapplied << Core::Change.new(outcome.path, nil, outcome.entry) }
       reply.outcomes
+    end
+
+    private def settled_tree : Core::Entry?
+      unless @unapplied.empty?
+        @tree = Core::Applier.apply(@tree, @unapplied)
+        @unapplied.clear
+      end
+
+      @tree
     end
 
     private def unexpected(wanted : String, reply : Wire::Message) : Misbehaved
@@ -98,13 +109,14 @@ module Pylon::Session
           @responses.close
           return
         in Wire::TreeUpdate
+          @unapplied.clear
           @tree = message.root
           @sequence = message.sequence
           @known = true
           signal
         in Wire::TreeDelta
           if message.sequence == @sequence + 1
-            @tree = Core::Applier.apply(@tree, message.changes)
+            @tree = Core::Applier.apply(settled_tree, message.changes)
             @sequence = message.sequence
           else
             @known = false

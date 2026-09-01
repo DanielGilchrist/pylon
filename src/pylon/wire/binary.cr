@@ -58,7 +58,7 @@ module Pylon::Wire
         nil
       when 1
         count = reader.count
-        contents = Hash(String, Core::Entry).new
+        contents = Hash(String, Core::Entry).new(initial_capacity: Wire.capacity_hint(count))
 
         reader.repeat(count) do
           name = reader.name
@@ -98,9 +98,10 @@ module Pylon::Wire
     end
 
     def read_changes(reader : Reader) : Array(Core::Change)
-      changes = Array(Core::Change).new
+      count = reader.count
+      changes = Array(Core::Change).new(Wire.capacity_hint(count))
 
-      reader.repeat(reader.count) do
+      reader.repeat(count) do
         path = reader.path
         changes << Core::Change.new(path, read_entry(reader), read_entry(reader))
       end
@@ -119,9 +120,10 @@ module Pylon::Wire
     end
 
     def read_outcomes(reader : Reader) : Array(Write::Outcome)
-      outcomes = Array(Write::Outcome).new
+      count = reader.count
+      outcomes = Array(Write::Outcome).new(Wire.capacity_hint(count))
 
-      reader.repeat(reader.count) do
+      reader.repeat(count) do
         outcomes << Write::Outcome.new(reader.path, read_entry(reader), read_skipped(reader))
       end
 
@@ -171,9 +173,10 @@ module Pylon::Wire
     end
 
     def read_cache(reader : Reader) : Scan::Cache
-      cache = Scan::Cache.new
+      count = reader.count
+      cache = Scan::Cache.new(initial_capacity: Wire.capacity_hint(count))
 
-      reader.repeat(reader.count) do
+      reader.repeat(count) do
         path = reader.path
 
         metadata = Scan::Metadata.new(

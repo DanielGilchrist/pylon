@@ -63,8 +63,10 @@ module Pylon::Session
 
       @tally.finish
 
-      @cache = snapshot.cache
-      @by_digest = index(snapshot.cache)
+      unless @cache.same?(snapshot.cache)
+        @cache = snapshot.cache
+        @by_digest = index(snapshot.cache)
+      end
       @baseline = @accelerated ? snapshot.root : nil
       @recheck = Set(String).new
       snapshot
@@ -79,9 +81,10 @@ module Pylon::Session
           buffer = Bytes.new(Wire::Chunks::CHUNK_BYTES)
           scratch = Wire::Chunks.scratch
           codec = Compress::Zstd.new(@compression)
+          hasher = Digest::SHA256.new
 
           wanted.each do |want|
-            @disk.stream(want.path, want.digest, io, buffer, codec, scratch)
+            @disk.stream(want.path, want.digest, io, buffer, codec, scratch, hasher)
             @on_stream.try(&.call(want.size))
           end
         end,
@@ -91,12 +94,18 @@ module Pylon::Session
 
     private def materialise(wanted : Array(Wanted)) : Wire::Contents
       contents = Wire::Contents.new(initial_capacity: wanted.size)
+      hasher = Digest::SHA256.new
+      sum = Bytes.new(Wire::DIGEST_BYTES)
 
       wanted.each do |want|
         content = @disk.read(want.path)
         next unless content.is_a?(Bytes)
 
-        contents[want.digest] = content if Digest::SHA256.digest(content).to_slice == want.digest
+        hasher.reset
+        hasher.update(content)
+        hasher.final(sum)
+
+        contents[want.digest] = content if sum == want.digest
       end
 
       contents

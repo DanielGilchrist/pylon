@@ -40,15 +40,15 @@ module Pylon
       Filesystem.each_child(absolute(relative_path)) { |name| yield name }
     end
 
-    def digest(relative_path : String, buffer : Bytes = Bytes.new(READ_BUFFER_BYTES)) : Bytes | Problem
-      digest = Digest::SHA256.new
+    def digest(relative_path : String, buffer : Bytes = Bytes.new(READ_BUFFER_BYTES), hasher : Digest::SHA256 = Digest::SHA256.new) : Bytes | Problem
+      hasher.reset
 
       opened = Filesystem.open(absolute(relative_path)) do |file|
         while (read = file.read(buffer)) > 0
-          digest.update(buffer[0, read])
+          hasher.update(buffer[0, read])
         end
 
-        digest.final
+        hasher.final
       end
 
       case opened
@@ -70,17 +70,17 @@ module Pylon
       end
     end
 
-    def stream(relative_path : String, digest : Bytes, io : IO, buffer : Bytes, codec, scratch : Bytes) : Nil
+    def stream(relative_path : String, digest : Bytes, io : IO, buffer : Bytes, codec, scratch : Bytes, hasher : Digest::SHA256 = Digest::SHA256.new) : Nil
       Wire::Binary.write_bytes(io, digest)
-      streamed = Digest::SHA256.new
+      hasher.reset
 
       opened = Filesystem.open(absolute(relative_path)) do |file|
         while (read = file.read(buffer)) > 0
-          streamed.update(buffer[0, read])
+          hasher.update(buffer[0, read])
           Wire::Chunks.write_chunk(io, buffer[0, read], codec, scratch)
         end
 
-        streamed.final == digest
+        hasher.final == digest
       end
 
       case opened

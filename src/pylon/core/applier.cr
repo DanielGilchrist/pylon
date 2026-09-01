@@ -6,9 +6,20 @@ module Pylon::Core
     extend self
 
     private class Pending
-      property value : Entry?
-      property? assigned = false
-      getter children = {} of String => Pending
+      getter value : Entry?
+      getter? assigned = false
+      getter children : Hash(String, Pending)? = nil
+
+      def child(name : String) : Pending
+        children = (@children ||= {} of String => Pending)
+        children[name] ||= Pending.new
+      end
+
+      def assign(entry : Entry?) : Nil
+        @value = entry
+        @assigned = true
+        @children.try(&.clear)
+      end
     end
 
     def apply(base : Entry?, changes : Array(Change)) : Entry?
@@ -19,13 +30,13 @@ module Pylon::Core
       changes.each do |change|
         node = root
 
-        segments(change.path).each do |name|
-          node = node.children[name] ||= Pending.new
+        unless change.path.empty?
+          change.path.split('/') do |name|
+            node = node.child(name)
+          end
         end
 
-        node.value = change.new
-        node.assigned = true
-        node.children.clear
+        node.assign(change.new)
       end
 
       merge(base, root)
@@ -33,12 +44,14 @@ module Pylon::Core
 
     private def merge(base : Entry?, node : Pending) : Entry?
       current = node.assigned? ? node.value : base
-      return current if node.children.empty?
+
+      children = node.children
+      return current if children.nil? || children.empty?
 
       directory = current.is_a?(Directory) ? current : Directory.new
       contents = directory.contents.dup
 
-      node.children.each do |name, child|
+      children.each do |name, child|
         merged = merge(contents[name]?, child)
 
         if merged.nil?
@@ -49,10 +62,6 @@ module Pylon::Core
       end
 
       Directory.new(contents)
-    end
-
-    private def segments(path : String) : Array(String)
-      path.empty? ? [] of String : path.split('/')
     end
   end
 end

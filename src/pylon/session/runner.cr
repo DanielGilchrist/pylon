@@ -28,20 +28,25 @@ module Pylon::Session
       until @stopping
         next unless wait_for_work
 
-        woke = Time.instant
-        settle
-        settled = Time.instant
-        report = cycle
-        done = Time.instant
+        {% if flag?(:timing) %}
+          woke = Time.instant
+        {% end %}
 
+        settle
+
+        {% if flag?(:timing) %}
+          settled = Time.instant
+        {% end %}
+
+        report = cycle
         return report if report.is_a?(Fault)
 
-        if ENV["PYLON_TIMING"]?
+        {% if flag?(:timing) %}
           STDERR.puts("settle=%.1fms cycle=%.1fms" % [
             (settled - woke).total_milliseconds,
-            (done - settled).total_milliseconds,
+            (Time.instant - settled).total_milliseconds,
           ])
-        end
+        {% end %}
 
         block.call(report)
       end

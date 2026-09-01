@@ -4,7 +4,7 @@ require "./paths"
 module Pylon::Core
   struct Change
     def self.expand(changes : Array(Change)) : Array(Change)
-      expanded = [] of Change
+      expanded = Array(Change).new(changes.size)
       changes.each { |change| widen(change.path, change.old, change.new, expanded) }
       expanded
     end

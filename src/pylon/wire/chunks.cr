@@ -58,7 +58,8 @@ module Pylon::Wire
     end
 
     def read_all(reader : Reader, codec, scratch : Bytes) : Bytes?
-      collected = IO::Memory.new
+      content = Bytes.empty
+      filled = 0
 
       loop do
         case packed_size = reader.framed_size(scratch.size)
@@ -81,19 +82,26 @@ module Pylon::Wire
         reader.fill(packed)
         break if reader.failed?
 
-        unpacked = codec.decompress(packed, Bytes.new(raw_size))
+        if content.size - filled < raw_size
+          grown = Bytes.new(Math.max(content.size * 2, filled + raw_size.to_i32))
+          content[0, filled].copy_to(grown)
+          content = grown
+        end
+
+        unpacked = codec.decompress(packed, content[filled, raw_size])
 
         if unpacked.is_a?(Compress::Error)
           reader.fail("decompression failed: #{unpacked.message}")
           break
         end
 
-        collected.write(unpacked)
+        filled += unpacked.size
       end
 
       return if reader.failed?
+      return unless reader.bool
 
-      reader.bool ? collected.to_slice : nil
+      content[0, filled]
     end
 
     private def pack(codec, source : Bytes, scratch : Bytes) : Bytes

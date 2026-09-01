@@ -1,11 +1,8 @@
 require "../core/relative_path"
+require "../wire"
 require "./invalid"
 
 module Pylon::Wire
-  FORMAT          = IO::ByteFormat::LittleEndian
-  DIGEST_BYTES    = 32
-  MAX_FIELD_BYTES = 1 << 20
-
   # Reads the stream until complete or first failure. When a failure occurs reading essentially
   # becomes a no-op and doesn't touch the stream again.
   class Reader
@@ -116,7 +113,21 @@ module Pylon::Wire
     end
 
     def string? : String?
-      bytes?.try { |value| String.new(value) }
+      case size = framed_size(MAX_FIELD_BYTES)
+      in Nil
+        return
+      in Oversized
+        fail("a field claims #{size.claimed} bytes, over the #{MAX_FIELD_BYTES} limit")
+        return
+      in Int32
+      end
+
+      read do |io|
+        String.new(size) do |buffer|
+          io.read_fully(Slice.new(buffer, size))
+          {size, 0}
+        end
+      end
     end
 
     def required_string : String

@@ -27,7 +27,10 @@ module Pylon::Session
     end
 
     def cycle(now_ns : Int64) : Report | Fault
-      started = Time.instant
+      {% if flag?(:timing) %}
+        started = Time.instant
+        alloc_started = GC.stats.total_bytes
+      {% end %}
 
       local_pending = Fibers.future { @local.scan(now_ns) }
       remote_pending = Fibers.future { @remote.scan(now_ns) }
@@ -37,7 +40,10 @@ module Pylon::Session
       return local_snapshot if local_snapshot.is_a?(Fault)
       return remote_snapshot if remote_snapshot.is_a?(Fault)
 
-      scanned = Time.instant
+      {% if flag?(:timing) %}
+        scanned = Time.instant
+        alloc_scanned = GC.stats.total_bytes
+      {% end %}
 
       # With no saved state the local side is the source of truth: adopting
       # the remote tree as the base makes this first cycle push only.
@@ -53,7 +59,10 @@ module Pylon::Session
         @preferences,
       )
 
-      reconciled = Time.instant
+      {% if flag?(:timing) %}
+        reconciled = Time.instant
+        alloc_reconciled = GC.stats.total_bytes
+      {% end %}
 
       halt = Core::Safety.check(
         @base,
@@ -84,7 +93,9 @@ module Pylon::Session
         )
       end
 
-      fetched = Time.instant
+      {% if flag?(:timing) %}
+        fetched = Time.instant
+      {% end %}
 
       local_outcomes = ship(local_changes, @remote, @local, :to_local)
       return local_outcomes if local_outcomes.is_a?(Fault)
@@ -92,10 +103,14 @@ module Pylon::Session
       remote_outcomes = ship(remote_changes, @local, @remote, :to_remote)
       return remote_outcomes if remote_outcomes.is_a?(Fault)
 
-      written = Time.instant
-      commit(Core::Change.expand(reconciliation.base_changes), local_outcomes, remote_outcomes)
+      {% if flag?(:timing) %}
+        written = Time.instant
+        alloc_written = GC.stats.total_bytes
+      {% end %}
 
-      if ENV["PYLON_TIMING"]?
+      commit!(Core::Change.expand(reconciliation.base_changes), local_outcomes, remote_outcomes)
+
+      {% if flag?(:timing) %}
         STDERR.puts("  client scans=%.1f reconcile=%.1f contents=%.1f write=%.1f commit=%.1f" % [
           (scanned - started).total_milliseconds,
           (reconciled - scanned).total_milliseconds,
@@ -103,34 +118,44 @@ module Pylon::Session
           (written - fetched).total_milliseconds,
           (Time.instant - written).total_milliseconds,
         ])
+        STDERR.puts("  client alloc scans=%.1f reconcile=%.1f ship=%.1f commit=%.1f MiB" % [
+          (alloc_scanned - alloc_started) / 1048576.0,
+          (alloc_reconciled - alloc_scanned) / 1048576.0,
+          (alloc_written - alloc_reconciled) / 1048576.0,
+          (GC.stats.total_bytes - alloc_written) / 1048576.0,
+        ])
         {% if B.has_method?(:exchanges) %}
           STDERR.puts("  round trips so far=#{@remote.exchanges}")
         {% end %}
-      end
+      {% end %}
 
       Report.new(reconciliation.conflicts, local_outcomes, remote_outcomes, troubles: reconciliation.troubles)
     end
 
     private def ship(changes : Array(Core::Change), source, target, direction : Direction) : Array(Write::Outcome) | Fault
-      outcomes = [] of Write::Outcome
       total = changes.size
-      pending = changes
+      outcomes = Array(Write::Outcome).new(total)
+      offset = 0
       inflight = Deque(PendingWrite).new(WRITE_WINDOW)
       total_bytes = source.payload_size(changes)
+      collector = Core::Digests::Collector.new
 
       notify(direction, outcomes, total, total_bytes)
 
-      until pending.empty?
-        wanted = Core::Digests.required(pending)
+      while offset < changes.size
+        wanted = collector.required(changes, offset)
         provided = source.content_source(wanted, TRANSFER_BUDGET)
         return provided if provided.is_a?(Fault)
 
-        batch, pending = split(pending, provided.digests)
+        taken = split(changes, offset, provided.digests)
 
-        if batch.empty?
-          pending.each { |change| outcomes << Write::Outcome.new(change.path, change.old, Write::StagedContentMissing.new) }
+        if taken.zero?
+          changes.each(within: offset...) { |change| outcomes << Write::Outcome.new(change.path, change.old, Write::StagedContentMissing.new) }
           break
         end
+
+        batch = changes[offset, taken]
+        offset += taken
 
         inflight.push(target.write_begin(batch, provided))
 
@@ -160,10 +185,10 @@ module Pylon::Session
       @on_progress.try(&.call(Progress.new(direction, outcomes.size, total, total_bytes)))
     end
 
-    private def split(changes : Array(Core::Change), available : Set(Bytes)) : {Array(Core::Change), Array(Core::Change)}
+    private def split(changes : Array(Core::Change), offset : Int32, available : Set(Bytes)) : Int32
       taken = 0
 
-      changes.each do |change|
+      changes.each(within: offset...) do |change|
         entry = change.new
         digest = entry.is_a?(Core::File) ? entry.digest : nil
 
@@ -172,19 +197,19 @@ module Pylon::Session
         taken += 1
       end
 
-      {changes[0, taken], changes[taken..]}
+      taken
     end
 
-    private def commit(
+    private def commit!(
       planned : Array(Core::Change),
       local_outcomes : Array(Write::Outcome),
       remote_outcomes : Array(Write::Outcome),
     ) : Nil
-      actual = {} of String => Core::Entry?
+      actual = Hash(String, Core::Entry?).new(initial_capacity: local_outcomes.size + remote_outcomes.size)
       local_outcomes.each { |outcome| actual[outcome.path] = outcome.entry }
       remote_outcomes.each { |outcome| actual[outcome.path] = outcome.entry }
 
-      changes = planned.map do |change|
+      planned.map! do |change|
         if actual.has_key?(change.path)
           Core::Change.new(change.path, change.old, actual[change.path])
         else
@@ -192,7 +217,7 @@ module Pylon::Session
         end
       end
 
-      @base = Core::Applier.apply(@base, changes).try(&.syncable)
+      @base = Core::Applier.apply(@base, planned).try(&.syncable)
     end
   end
 end

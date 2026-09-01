@@ -1,3 +1,4 @@
+require "digest/sha256"
 require "../fibers"
 require "../filesystem"
 require "../core/entry"
@@ -182,11 +183,12 @@ module Pylon::Scan
       stride : Int32,
     ) : Nil
       buffer = Bytes.new(READ_BUFFER_BYTES)
+      hasher = Digest::SHA256.new
       index = offset
 
       while index < pending.size
         file = pending[index]
-        digest = @filesystem.digest(file.path, buffer)
+        digest = @filesystem.digest(file.path, buffer, hasher)
         into[file.path] = digest
         @tally.hashed(file.size) if digest.is_a?(Bytes)
         index += stride
