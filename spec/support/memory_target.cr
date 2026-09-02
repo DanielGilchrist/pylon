@@ -1,4 +1,5 @@
 require "digest/sha256"
+require "sync"
 require "../../src/pylon/scan/metadata"
 require "../../src/pylon/scan/observed"
 require "../../src/pylon/write/problem"
@@ -18,10 +19,11 @@ class MemoryTarget
 
   def initialize(@nodes = {"" => Node.new(kind: Pylon::Scan::Metadata::Kind::Directory)}) : Nil
     @next_inode = 100_u64
+    @lock = Sync::Mutex.new
   end
 
   def metadata(path : String) : Pylon::Scan::Metadata?
-    node = @nodes[path]?
+    node = @lock.synchronize { @nodes[path]? }
     return if node.nil?
 
     metadata_for(node)
@@ -45,7 +47,7 @@ class MemoryTarget
   end
 
   def observe(path : String) : Pylon::Scan::Observed | Pylon::Write::Problem | Nil
-    node = @nodes[path]?
+    node = @lock.synchronize { @nodes[path]? }
     return if node.nil?
 
     case node.kind
@@ -57,17 +59,25 @@ class MemoryTarget
   end
 
   def digest(path : String) : Bytes | Pylon::Problem
-    node = @nodes[path]?
+    node = @lock.synchronize { @nodes[path]? }
     return Pylon::Problem.new("the file vanished after the scan saw it") if node.nil?
 
     Digest::SHA256.digest(node.content)
   end
 
   def each_child(path : String, & : String ->) : Pylon::Missing | Pylon::Problem | Nil
-    node = @nodes[path]?
-    return Pylon::Missing.new if node.nil?
+    names = @lock.synchronize { children_of(path) }
+    return Pylon::Missing.new if names.nil?
+
+    names.each { |name| yield name }
+    nil
+  end
+
+  private def children_of(path : String) : Array(String)?
+    return if @nodes[path]?.nil?
 
     prefix = path.empty? ? "" : "#{path}/"
+    names = Array(String).new
 
     @nodes.each_key do |key|
       next if key == path || !key.starts_with?(prefix)
@@ -75,58 +85,73 @@ class MemoryTarget
       name = key[prefix.size..]
       next if name.empty? || name.includes?('/')
 
-      yield name
+      names << name
     end
 
-    nil
+    names
   end
 
   def create_directory(path : String) : Pylon::Write::Problem?
     return read_only unless writable?
 
-    operations << "mkdir #{path}"
-    @nodes[path] = Node.new(kind: Pylon::Scan::Metadata::Kind::Directory, inode: take_inode)
+    @lock.synchronize do
+      operations << "mkdir #{path}"
+      @nodes[path] = Node.new(kind: Pylon::Scan::Metadata::Kind::Directory, inode: take_inode)
+    end
+
     nil
   end
 
   def write_file(path : String, content : Bytes, executable : Bool) : Pylon::Write::Problem?
     return read_only unless writable?
 
-    operations << "write #{path}"
-    @nodes[path] = Node.new(
-      kind: Pylon::Scan::Metadata::Kind::File,
-      content: content,
-      executable: executable,
-      inode: take_inode,
-      mtime_ns: 5_000_i64,
-    )
+    @lock.synchronize do
+      operations << "write #{path}"
+      @nodes[path] = Node.new(
+        kind: Pylon::Scan::Metadata::Kind::File,
+        content: content,
+        executable: executable,
+        inode: take_inode,
+        mtime_ns: 5_000_i64,
+      )
+    end
+
     nil
   end
 
   def create_symlink(path : String, target : String) : Pylon::Write::Problem?
     return read_only unless writable?
 
-    operations << "symlink #{path}"
-    @nodes[path] = Node.new(kind: Pylon::Scan::Metadata::Kind::SymbolicLink, target: target, inode: take_inode)
+    @lock.synchronize do
+      operations << "symlink #{path}"
+      @nodes[path] = Node.new(kind: Pylon::Scan::Metadata::Kind::SymbolicLink, target: target, inode: take_inode)
+    end
+
     nil
   end
 
   def set_executable(path : String, executable : Bool) : Pylon::Write::Problem?
-    node = @nodes[path]?
-    return Pylon::Write::Problem.new("no such file") if node.nil?
-    return read_only unless writable?
+    @lock.synchronize do
+      node = @nodes[path]?
+      return Pylon::Write::Problem.new("no such file") if node.nil?
+      return read_only unless writable?
 
-    operations << "chmod #{path}"
-    @nodes[path] = node.copy_with(executable: executable)
+      operations << "chmod #{path}"
+      @nodes[path] = node.copy_with(executable: executable)
+    end
+
     nil
   end
 
   def remove(path : String) : Pylon::Write::Problem?
     return read_only unless writable?
 
-    operations << "remove #{path}"
-    prefix = "#{path}/"
-    @nodes.reject! { |key, _| key == path || key.starts_with?(prefix) }
+    @lock.synchronize do
+      operations << "remove #{path}"
+      prefix = "#{path}/"
+      @nodes.reject! { |key, _| key == path || key.starts_with?(prefix) }
+    end
+
     nil
   end
 
