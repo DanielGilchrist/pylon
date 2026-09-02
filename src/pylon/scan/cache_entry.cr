@@ -4,12 +4,9 @@ module Pylon::Scan
   struct CacheEntry
     getter metadata : Metadata
     getter digest : Bytes
+    getter? provisional : Bool
 
     def initialize(@metadata : Metadata, @digest : Bytes, @provisional : Bool = false)
-    end
-
-    def provisional? : Bool
-      @provisional
     end
 
     def reuse(observed : Metadata, now_ns : Int64, granularity_ns : Int64) : Bytes?

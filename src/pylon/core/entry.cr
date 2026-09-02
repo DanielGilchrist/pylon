@@ -1,6 +1,7 @@
 module Pylon::Core
   struct Directory
     getter contents : Hash(String, Entry)
+    getter? contains_problematic : Bool
 
     def initialize(contents : Hash(String, V) = Hash(String, Entry).new) forall V
       if contents.is_a?(Hash(String, Entry))
@@ -26,10 +27,6 @@ module Pylon::Core
       end
 
       false
-    end
-
-    def contains_problematic? : Bool
-      @contains_problematic
     end
 
     def syncable : Directory
