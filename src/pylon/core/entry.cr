@@ -10,6 +10,26 @@ module Pylon::Core
         contents.each { |name, child| widened[name] = child }
         @contents = widened
       end
+
+      @contains_problematic = Directory.contains_problematic?(@contents)
+    end
+
+    protected def self.contains_problematic?(contents : Hash(String, Entry)) : Bool
+      contents.each_value do |child|
+        case child
+        in Problematic
+          return true
+        in Directory
+          return true if child.contains_problematic?
+        in File, SymbolicLink, Untracked
+        end
+      end
+
+      false
+    end
+
+    def contains_problematic? : Bool
+      @contains_problematic
     end
 
     def syncable : Directory

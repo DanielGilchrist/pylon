@@ -35,7 +35,7 @@ module Pylon::Core
           return
         end
 
-        if local == remote
+        if local == remote && !(local.is_a?(Directory) && local.contains_problematic?)
           adopt(path, base, local.try(&.syncable))
           return
         end
@@ -45,15 +45,12 @@ module Pylon::Core
           return
         end
 
-        local_syncable = local.try(&.syncable)
-        remote_syncable = remote.try(&.syncable)
-
-        if local_syncable.is_a?(Directory) && remote_syncable.is_a?(Directory)
-          descend(path, base, local_syncable, remote_syncable)
+        if local.is_a?(Directory) && remote.is_a?(Directory)
+          descend(path, base, local, remote)
           return
         end
 
-        merge(path, base, local_syncable, remote_syncable)
+        merge(path, base, local.try(&.syncable), remote.try(&.syncable))
       end
 
       private def merge(path : String, base : Entry?, local : Entry?, remote : Entry?) : Nil

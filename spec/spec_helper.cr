@@ -20,7 +20,8 @@ record ReconcileCase,
   base_changes : Changes = Changes.new,
   local_changes : Changes = Changes.new,
   remote_changes : Changes = Changes.new,
-  conflicts : Array(Conflict) = [] of Conflict
+  conflicts : Array(Conflict) = [] of Conflict,
+  troubles : Array(Trouble) = [] of Trouble
 
 def assert_changes(actual : Changes, expected : Changes, label : String) : Nil
   actual.size.should eq(expected.size), "#{label}: expected #{expected.size} change(s), got #{actual.size}"
@@ -45,4 +46,6 @@ def assert_reconciliation(reconciliation : Reconciliation, expected : ReconcileC
   assert_changes(reconciliation.remote_changes, expected.remote_changes, "remote")
 
   reconciliation.conflicts.map(&.root).sort!.should eq(expected.conflicts.map(&.root).sort!)
+  reconciliation.troubles.sort_by! { |trouble| {trouble.path, trouble.side.value} }
+    .should eq(expected.troubles.sort_by { |trouble| {trouble.path, trouble.side.value} })
 end
