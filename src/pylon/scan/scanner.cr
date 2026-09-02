@@ -35,6 +35,18 @@ module Pylon::Scan
       getter pending = Array(PendingFile).new
       getter reused = Hash(String, Bytes | Problem).new
       getter carried = Hash(String, Core::Entry).new
+
+      @by_inode : Hash(UInt64, CacheEntry)? = nil
+
+      def by_inode(cache : Cache) : Hash(UInt64, CacheEntry)
+        @by_inode ||= index_inodes(cache)
+      end
+
+      private def index_inodes(cache : Cache) : Hash(UInt64, CacheEntry)
+        indexed = Hash(UInt64, CacheEntry).new(initial_capacity: cache.size)
+        cache.each_value { |entry| indexed[entry.metadata.inode] = entry }
+        indexed
+      end
     end
 
     def initialize(
@@ -141,7 +153,7 @@ module Pylon::Scan
         survey.nodes[path] = SurveyedFile.new(observed)
         @tally.saw_file
 
-        if (digest = @cache[path]?.try(&.reuse(observed, @now_ns, @granularity_ns)))
+        if (digest = reusable_digest(survey, path, observed))
           survey.reused[path] = digest
         else
           survey.pending << PendingFile.new(path, observed.size.to_i64)
@@ -151,6 +163,17 @@ module Pylon::Scan
       in .untracked?
         survey.nodes[path] = SurveyedUntracked.new
       end
+    end
+
+    private def reusable_digest(survey : Survey, path : String, observed : Metadata) : Bytes?
+      if (cached = @cache[path]?)
+        return cached.reuse(observed, @now_ns, @granularity_ns)
+      end
+
+      relocated = survey.by_inode(@cache)[observed.inode]?
+      return if relocated.nil?
+
+      relocated.reuse(observed, @now_ns, @granularity_ns)
     end
 
     private def carry_cache(path : String, entry : Core::Entry) : Nil

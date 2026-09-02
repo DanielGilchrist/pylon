@@ -59,6 +59,44 @@ describe Pylon::Scan::Scanner do
     changed.reads.should eq(["README.md"])
   end
 
+  it "reuses the digest of a file that moved to another path without rehashing it" do
+    filesystem = sample
+    warm = scan(filesystem).cache
+
+    moved = filesystem.moved("app/models/user.rb", "app/models/person.rb")
+    snapshot = Scanner.new(moved, warm, NOW, parallelism: 1).scan
+
+    moved.reads.should be_empty
+    Fixtures.file!(Fixtures.dig!(snapshot.root, "app", "models", "person.rb")).digest
+      .should eq(Digest::SHA256.digest("class User; end"))
+    snapshot.cache.has_key?("app/models/person.rb").should be_true
+    snapshot.cache.has_key?("app/models/user.rb").should be_false
+  end
+
+  it "rehashes a moved file whose content changed on the way" do
+    filesystem = sample
+    warm = scan(filesystem).cache
+
+    edited = filesystem.moved("app/models/user.rb", "app/models/person.rb")
+      .with("app/models/person.rb", content: "class Person; end", mtime_ns: 2_000_i64)
+    snapshot = Scanner.new(edited, warm, NOW, parallelism: 1).scan
+
+    edited.reads.should eq(["app/models/person.rb"])
+    Fixtures.file!(Fixtures.dig!(snapshot.root, "app", "models", "person.rb")).digest
+      .should eq(Digest::SHA256.digest("class Person; end"))
+  end
+
+  it "rehashes a new file that happens to reuse a recycled inode" do
+    filesystem = sample
+    warm = scan(filesystem).cache
+
+    recycled = filesystem.moved("app/models/user.rb", "app/models/person.rb")
+      .with("app/models/person.rb", content: "class Person; end")
+    Scanner.new(recycled, warm, NOW, parallelism: 1).scan
+
+    recycled.reads.should eq(["app/models/person.rb"])
+  end
+
   it "rehashes a file written inside the granularity window" do
     filesystem = sample
     warm = scan(filesystem).cache

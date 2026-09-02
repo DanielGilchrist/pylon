@@ -52,6 +52,12 @@ struct MemoryFilesystem
     MemoryFilesystem.new(nodes)
   end
 
+  def moved(from : String, to : String) : MemoryFilesystem
+    nodes = @nodes.dup
+    nodes[to] = nodes.delete(from) || raise("no node at #{from.inspect} to move")
+    MemoryFilesystem.new(nodes)
+  end
+
   def metadata(relative_path : String) : Pylon::Scan::Metadata | Pylon::Problem | Nil
     node = @nodes[relative_path]?
     return if node.nil?
