@@ -1,7 +1,7 @@
 require "../../spec_helper"
 
-private CONVERGING_CONTENTS = {nil, Fixtures.f1, Fixtures.f2, Fixtures.f1x, Fixtures.untracked, Fixtures.symlink_relative}
-private ALL_CONTENTS        = {nil, Fixtures.f1, Fixtures.f2, Fixtures.f1x, Fixtures.untracked, Fixtures.symlink_relative, Fixtures.problematic}
+private CONVERGING_CONTENTS = {nil, Fixtures.f1, Fixtures.f2, Fixtures.f1x, Fixtures.untracked, Fixtures.symlink_relative, Fixtures.symlink_absolute}
+private ALL_CONTENTS        = {nil, Fixtures.f1, Fixtures.f2, Fixtures.f1x, Fixtures.untracked, Fixtures.symlink_relative, Fixtures.symlink_absolute, Fixtures.problematic}
 private NAMES               = {"a", "b"}
 
 private def random_entry(random : Random, depth : Int32, pool : Tuple = ALL_CONTENTS) : Entry?

@@ -1,7 +1,7 @@
 require "../../spec_helper"
 require "../../../src/pylon/core/change"
 
-private CONTENTS = {nil, Fixtures.f1, Fixtures.f2, Fixtures.f1x}
+private CONTENTS = {nil, Fixtures.f1, Fixtures.f2, Fixtures.f1x, Fixtures.symlink_relative, Fixtures.symlink_absolute, Fixtures.untracked, Fixtures.problematic}
 private NAMES    = {"a", "b"}
 
 private def random_entry(random : Random, depth : Int32) : Entry?
