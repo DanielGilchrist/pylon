@@ -62,6 +62,8 @@ module Pylon::Core
         end
       end
 
+      return current if contents.empty? && !current.is_a?(Directory)
+
       Directory.new(contents)
     end
   end
