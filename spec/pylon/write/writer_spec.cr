@@ -155,6 +155,21 @@ describe Pylon::Write::Writer do
     target.nodes["script.sh"].executable.should be_true
   end
 
+  it "says why a permission change failed instead of pretending content is missing" do
+    target = MemoryTarget.new
+    digest = target.seed_file("script.sh", "#!/bin/sh")
+    cache = cache_for(target, ["script.sh"])
+    target.writable = false
+
+    outcome = writer(target, MemoryStaging.new, cache).write(Pylon::Core::Changes[
+      Change.new("script.sh", Pylon::Core::File.new(digest), Pylon::Core::File.new(digest, executable: true)),
+    ]).first
+
+    outcome.applied?.should be_false
+    outcome.skipped.should eq(WriteFailed.new("the target is read-only"))
+    outcome.entry.should eq(Pylon::Core::File.new(digest))
+  end
+
   it "replaces a file with a single write and never clears the path first" do
     target = MemoryTarget.new
     original = target.seed_file("notes.txt", "before")

@@ -215,7 +215,9 @@ module Pylon::Write
       return unless old.digest == new.digest
       return if old.executable? == new.executable?
 
-      return if @filesystem.set_executable(change.path, new.executable?)
+      if (blocked = @filesystem.set_executable(change.path, new.executable?))
+        return Outcome.new(change.path, old, WriteFailed.new(blocked.reason))
+      end
 
       Outcome.new(change.path, new)
     end
