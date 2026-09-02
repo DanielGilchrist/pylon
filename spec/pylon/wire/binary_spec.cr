@@ -59,6 +59,28 @@ describe Pylon::Wire::Binary do
     round_trip_entry(nil).should be_nil
   end
 
+  it "decodes a pathologically deep tree without exhausting the stack" do
+    depth = 200_000
+    io = IO::Memory.new
+
+    depth.times do
+      io.write_byte(1_u8)
+      io.write_bytes(1_u32, FORMAT)
+      Binary.write_string(io, "a")
+    end
+
+    io.write_byte(2_u8)
+    Binary.write_bytes(io, Fixtures::D1)
+    Binary.write_bool(io, false)
+    io.rewind
+
+    reader = Reader.new(io)
+    decoded = Binary.read_entry(reader)
+
+    reader.failed?.should be_false
+    decoded.is_a?(Pylon::Core::Directory).should be_true
+  end
+
   it "round trips arbitrary trees" do
     seed = 20260901_u64
     random = Random.new(seed)

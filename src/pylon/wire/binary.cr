@@ -53,38 +53,72 @@ module Pylon::Wire
       end
     end
 
+    private record OpenDirectory,
+      name : String,
+      contents : Hash(String, Core::Entry),
+      remaining : UInt32
+
     def read_entry(reader : Reader) : Core::Entry?
-      case reader.byte
-      when 0
-        nil
-      when 1
-        count = reader.count
-        contents = Hash(String, Core::Entry).new(initial_capacity: Wire.capacity_hint(count))
+      stack = nil
+      name = ""
 
-        reader.repeat(count) do
-          name = reader.name
-          child = read_entry(reader)
+      loop do
+        entry : Core::Entry? = nil
 
-          if child.nil?
-            reader.fail("missing child entry in message") unless reader.failed?
+        case reader.byte
+        when 0
+        when 1
+          count = reader.count
+          contents = Hash(String, Core::Entry).new(initial_capacity: Wire.capacity_hint(count))
+
+          if count.zero?
+            entry = Core::Directory.new(contents)
+          else
+            stack ||= [] of OpenDirectory
+            stack << OpenDirectory.new(name, contents, count)
+            name = reader.name
             next
           end
-
-          contents[name] = child
+        when 2
+          entry = Core::File.new(reader.digest, executable: reader.bool)
+        when 3
+          entry = Core::SymbolicLink.new(reader.required_string)
+        when 4
+          entry = Core::Untracked.new
+        when 5
+          entry = Core::Problematic.new(reader.required_string)
+        else
+          reader.fail("unknown entry kind in message, both sides must run the same pylon version") unless reader.failed?
+          return
         end
 
-        Core::Directory.new(contents)
-      when 2
-        Core::File.new(reader.digest, executable: reader.bool)
-      when 3
-        Core::SymbolicLink.new(reader.required_string)
-      when 4
-        Core::Untracked.new
-      when 5
-        Core::Problematic.new(reader.required_string)
-      else
-        reader.fail("unknown entry kind in message, both sides must run the same pylon version") unless reader.failed?
-        nil
+        return if reader.failed?
+
+        loop do
+          if stack.nil? || stack.empty?
+            return entry
+          end
+
+          if entry.nil?
+            reader.fail("missing child entry in message") unless reader.failed?
+            return
+          end
+
+          open = stack.last
+          open.contents[name] = entry
+
+          if open.remaining > 1
+            stack[stack.size - 1] = open.copy_with(remaining: open.remaining - 1)
+            name = reader.name
+            break
+          end
+
+          stack.pop
+          entry = Core::Directory.new(open.contents)
+          name = open.name
+        end
+
+        return if reader.failed?
       end
     end
 
