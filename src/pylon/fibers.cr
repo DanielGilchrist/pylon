@@ -44,8 +44,10 @@ module Pylon
       Fiber::ExecutionContext::Isolated.new(name.to_s) { exit_on_exception(block) }
     end
 
+    @@parallel_contexts = Hash(Name, Fiber::ExecutionContext::Parallel).new
+
     def parallel(name : Name, workers : Int32, &block : Int32 ->) : Nil
-      context = Fiber::ExecutionContext::Parallel.new(name.to_s, workers)
+      context = parallel_context(name, workers)
       waiting = WaitGroup.new(workers)
       failures = Channel(Exception).new(workers)
 
@@ -60,6 +62,19 @@ module Pylon
         raise error
       else
       end
+    end
+
+    private def parallel_context(name : Name, workers : Int32) : Fiber::ExecutionContext::Parallel
+      context = @@parallel_contexts[name]?
+
+      if context.nil?
+        context = Fiber::ExecutionContext::Parallel.new(name.to_s, workers)
+        @@parallel_contexts[name] = context
+      elsif context.capacity < workers
+        context.resize(workers)
+      end
+
+      context
     end
 
     private def launch(
