@@ -1,3 +1,4 @@
+require "../core/relocation"
 require "../core/safety"
 require "../write/writer"
 
@@ -8,6 +9,8 @@ module Pylon::Session
     getter remote_outcomes : Array(Write::Outcome)
     getter halt : Core::Safety::Reason?
     getter troubles : Array(Core::Trouble)
+    getter local_relocations : Array(Core::Relocation)
+    getter remote_relocations : Array(Core::Relocation)
 
     def initialize(
       @conflicts : Array(Core::Conflict),
@@ -15,6 +18,8 @@ module Pylon::Session
       @remote_outcomes : Array(Write::Outcome),
       @halt : Core::Safety::Reason? = nil,
       @troubles : Array(Core::Trouble) = Array(Core::Trouble).new,
+      @local_relocations : Array(Core::Relocation) = Array(Core::Relocation).new,
+      @remote_relocations : Array(Core::Relocation) = Array(Core::Relocation).new,
     ) : Nil
     end
 
@@ -30,6 +35,8 @@ module Pylon::Session
       conflicts.empty? &&
         local_outcomes.empty? &&
         remote_outcomes.empty? &&
+        local_relocations.empty? &&
+        remote_relocations.empty? &&
         !halted?
     end
   end

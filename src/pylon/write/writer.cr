@@ -1,4 +1,5 @@
 require "../core/change"
+require "../core/relocation"
 require "../fibers"
 require "../core/paths"
 require "../core/entry"
@@ -34,7 +35,13 @@ module Pylon::Write
     ) : Nil
     end
 
-    def write(changes : Core::Changes) : Array(Outcome)
+    def write(changes : Core::Changes, relocations : Array(Core::Relocation) = Array(Core::Relocation).new) : Array(Outcome)
+      outcomes = write_changes(changes)
+      relocations.each { |relocation| relocate(relocation, outcomes) }
+      outcomes
+    end
+
+    private def write_changes(changes : Core::Changes) : Array(Outcome)
       grouping = Grouping.partition(changes) { |change| independent?(change) }
 
       if @parallelism <= 1 || grouping.independent.size < PARALLEL_THRESHOLD
@@ -51,6 +58,83 @@ module Pylon::Write
         IndexedOutcomes.new(grouping.independent, concurrent),
         IndexedOutcomes.new(grouping.removals, removed),
       )
+    end
+
+    private def relocate(relocation : Core::Relocation, into : Array(Outcome)) : Nil
+      verdict = guard_intact(relocation.from, relocation.entry)
+      verdict = guard_absent(relocation.to) if verdict.proceed?
+
+      case verdict
+      in .modification_detected?
+        skip_relocation(relocation, ModificationDetected.new, into)
+        return
+      in .unknown_state?, .inconclusive?
+        skip_relocation(relocation, UnknownState.new, into)
+        return
+      in .proceed?
+      end
+
+      if @filesystem.rename(relocation.from, relocation.to)
+        into.concat(write_changes(Core::Changes.expand(Core::Changes[Core::Change.new(relocation.to, nil, relocation.entry)])))
+        into << write_one(Core::Change.new(relocation.from, relocation.entry, nil))
+        return
+      end
+
+      into << Outcome.new(relocation.from, nil) << Outcome.new(relocation.to, relocation.entry)
+    end
+
+    private def skip_relocation(relocation : Core::Relocation, skipped : Skipped, into : Array(Outcome)) : Nil
+      into << Outcome.new(relocation.from, relocation.entry, skipped) << Outcome.new(relocation.to, nil, skipped)
+    end
+
+    private def guard_absent(path : String) : Verdict
+      case @filesystem.observe(path)
+      in Nil            then Verdict::Proceed
+      in Problem        then Verdict::UnknownState
+      in Scan::Observed then Verdict::ModificationDetected
+      end
+    end
+
+    private def guard_intact(path : String, expected : Core::Syncable) : Verdict
+      verdict = Guard.check(expected, @cache[path]?, @filesystem.observe(path), @now_ns, @granularity_ns)
+      verdict = verify_content(path, expected) if verdict.inconclusive? && expected.is_a?(Core::File)
+      return verdict unless verdict.proceed? && expected.is_a?(Core::Directory)
+
+      intact_children(path, expected)
+    end
+
+    private def intact_children(path : String, expected : Core::Directory) : Verdict
+      contents = expected.contents
+      matched = 0
+
+      listed = @filesystem.each_child(path) do |name|
+        child_path = Core::Paths.join(path, name)
+        child = contents[name]?
+
+        if child.nil?
+          return Verdict::ModificationDetected unless expendable?(child_path)
+
+          next
+        end
+
+        case child
+        in Core::Syncable
+          verdict = guard_intact(child_path, child)
+          return verdict unless verdict.proceed?
+
+          matched += 1
+        in Core::Untracked, Core::Problematic
+          return Verdict::UnknownState
+        end
+      end
+
+      case listed
+      in Problem then return Verdict::UnknownState
+      in Missing then return Verdict::ModificationDetected
+      in Nil
+      end
+
+      matched == contents.size ? Verdict::Proceed : Verdict::ModificationDetected
     end
 
     private def independent?(change : Core::Change) : Bool

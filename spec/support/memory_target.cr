@@ -16,6 +16,7 @@ class MemoryTarget
   getter operations = Array(String).new
   getter nodes : Hash(String, Node)
   property? writable = true
+  property? renamable = true
 
   def initialize(@nodes = {"" => Node.new(kind: Pylon::Scan::Metadata::Kind::Directory)}) : Nil
     @next_inode = 100_u64
@@ -138,6 +139,21 @@ class MemoryTarget
 
       operations << "chmod #{path}"
       @nodes[path] = node.copy_with(executable: executable)
+    end
+
+    nil
+  end
+
+  def rename(from : String, to : String) : Pylon::Write::Problem?
+    return read_only unless writable?
+    return Pylon::Write::Problem.new("Cross-device link") unless renamable?
+
+    @lock.synchronize do
+      operations << "rename #{from} #{to}"
+      prefix = "#{from}/"
+      moved = @nodes.select { |key, _| key == from || key.starts_with?(prefix) }
+      moved.each_key { |key| @nodes.delete(key) }
+      moved.each { |key, node| @nodes[key == from ? to : "#{to}#{key[from.size..]}"] = node }
     end
 
     nil

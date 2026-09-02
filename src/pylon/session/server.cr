@@ -151,7 +151,7 @@ module Pylon::Session
           end
         in Wire::Message::WriteRequest
           @lock.synchronize do
-            outcomes = @endpoint.write(request.changes, Wire::ContentSource::Materialised.new(request.contents))
+            outcomes = @endpoint.write(request.changes, Wire::ContentSource::Materialised.new(request.contents), request.relocations)
             @sent = Core::Applier.apply(@sent, Write::Outcome.changes(outcomes)) unless @sent.nil?
             failed = Wire::Message.write(@output, Wire::Message::WriteResponse.new(outcomes))
             @checkpoints.try(&.save_if_due) if failed.nil?

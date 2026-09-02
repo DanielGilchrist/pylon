@@ -144,6 +144,35 @@ module Pylon::Wire
       changes
     end
 
+    def write_relocations(io : IO, relocations : Array(Core::Relocation)) : Nil
+      io.write_bytes(relocations.size.to_u32, FORMAT)
+
+      relocations.each do |relocation|
+        write_string(io, relocation.from)
+        write_string(io, relocation.to)
+        write_entry(io, relocation.entry)
+      end
+    end
+
+    def read_relocations(reader : Reader) : Array(Core::Relocation)
+      count = reader.count
+      relocations = Array(Core::Relocation).new(Wire.capacity_hint(count))
+
+      reader.repeat(count) do
+        from = reader.path
+        to = reader.path
+        entry = read_entry(reader)
+        next if reader.failed?
+
+        case (relocation = Core::Relocation.parse(from, to, entry))
+        in Core::Relocation then relocations << relocation
+        in Core::Malformed  then reader.fail("a relocation names #{relocation.raw.inspect}, which #{relocation.reason}")
+        end
+      end
+
+      relocations
+    end
+
     def write_outcomes(io : IO, outcomes : Array(Write::Outcome)) : Nil
       io.write_bytes(outcomes.size.to_u32, FORMAT)
 

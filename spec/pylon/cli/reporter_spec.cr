@@ -30,6 +30,14 @@ private def skipped(path : String, reason : Pylon::Write::Skipped = Pylon::Write
   Pylon::Write::Outcome.new(path, nil, reason)
 end
 
+private def moved(from : String, to : String) : Pylon::Core::Relocation
+  Pylon::Core::Relocation.new(from, to, Fixtures.directory!(Fixtures.d1))
+end
+
+private def report_with_moves(remote : Array(Pylon::Write::Outcome), moves : Array(Pylon::Core::Relocation)) : Pylon::Session::Report
+  Pylon::Session::Report.new(Array(Conflict).new, Array(Pylon::Write::Outcome).new, remote, remote_relocations: moves)
+end
+
 describe Pylon::CLI::Reporter do
   it "says nothing when a cycle was quiet" do
     rendered(report_of).should be_empty
@@ -169,6 +177,34 @@ describe Pylon::CLI::Reporter do
     output = rendered(report_of(remote: outcomes.to_a))
 
     output.should_not contain("more")
+  end
+
+  it "names a move once rather than as a removal and a write" do
+    report = report_with_moves([removed("lib"), Pylon::Write::Outcome.new("moved", Fixtures.d1)], [moved("lib", "moved")])
+
+    output = rendered(report)
+
+    output.should contain("↑ lib → moved")
+    output.should_not contain("removed")
+  end
+
+  it "counts moves in a summarised batch" do
+    outcomes = (1..20).map { |index| applied("app/file_#{index}.rb") }
+    outcomes << removed("lib") << Pylon::Write::Outcome.new("moved", Fixtures.d1)
+
+    output = rendered(report_with_moves(outcomes, [moved("lib", "moved")]))
+
+    output.should contain("20 files")
+    output.should contain("1 moved")
+    output.should_not contain("removed")
+  end
+
+  it "previews a move as a move" do
+    output = rendered(report_with_moves(Array(Pylon::Write::Outcome).new, [moved("lib", "moved")]), dry_run: true)
+
+    output.should contain("move")
+    output.should contain("lib → moved")
+    output.should_not contain("nothing to do")
   end
 
   it "says when an uploaded path was actually a deletion" do

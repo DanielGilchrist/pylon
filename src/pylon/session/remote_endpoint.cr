@@ -61,8 +61,8 @@ module Pylon::Session
       nil
     end
 
-    def write_begin(changes : Core::Changes, source : Wire::ContentSource) : PendingWrite
-      transmit(Wire::Message::WriteRequest.new(changes, source))
+    def write_begin(changes : Core::Changes, source : Wire::ContentSource, relocations : Array(Core::Relocation)) : PendingWrite
+      transmit(Wire::Message::WriteRequest.new(changes, relocations, source))
       PendingWrite.new(Proc(Array(Write::Outcome) | Fault).new { receive_written })
     end
 

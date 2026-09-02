@@ -152,6 +152,75 @@ describe Pylon::Session::Session do
   end
 end
 
+describe "moves" do
+  it "moves a directory on the other side with one rename instead of copying its files" do
+    in_pair do |local, remote, session|
+      Dir.mkdir_p(File.join(local, "lib", "deep"))
+      File.write(File.join(local, "lib", "a.rb"), "a")
+      File.write(File.join(local, "lib", "deep", "b.rb"), "b")
+      cycle!(session, tick)
+      before = File.info(File.join(remote, "lib", "deep", "b.rb"))
+
+      File.rename(File.join(local, "lib"), File.join(local, "moved"))
+      report = cycle!(session, tick)
+
+      report.remote_relocations.map { |relocation| {relocation.from, relocation.to} }.should eq([{"lib", "moved"}])
+      File.read(File.join(remote, "moved", "deep", "b.rb")).should eq("b")
+      Dir.exists?(File.join(remote, "lib")).should be_false
+      before.same_file?(File.info(File.join(remote, "moved", "deep", "b.rb"))).should be_true
+      cycle!(session, tick).quiet?.should be_true
+    end
+  end
+
+  it "moves a file renamed on the remote side back to the local side" do
+    in_pair do |local, remote, session|
+      File.write(File.join(local, "one.rb"), "same")
+      cycle!(session, tick)
+
+      File.rename(File.join(remote, "one.rb"), File.join(remote, "two.rb"))
+      report = cycle!(session, tick)
+
+      report.local_relocations.map { |relocation| {relocation.from, relocation.to} }.should eq([{"one.rb", "two.rb"}])
+      File.read(File.join(local, "two.rb")).should eq("same")
+      File.exists?(File.join(local, "one.rb")).should be_false
+      cycle!(session, tick).quiet?.should be_true
+    end
+  end
+
+  it "falls back to copying when the moved directory also changed" do
+    in_pair do |local, remote, session|
+      Dir.mkdir_p(File.join(local, "lib"))
+      File.write(File.join(local, "lib", "a.rb"), "a")
+      cycle!(session, tick)
+
+      File.rename(File.join(local, "lib"), File.join(local, "moved"))
+      File.write(File.join(local, "moved", "extra.rb"), "extra")
+      report = cycle!(session, tick)
+
+      report.remote_relocations.should be_empty
+      tree(remote).should eq(tree(local))
+      cycle!(session, tick).quiet?.should be_true
+    end
+  end
+
+  it "previews a move in a dry run without touching either side" do
+    in_pair do |local, remote, session|
+      Dir.mkdir_p(File.join(local, "lib"))
+      File.write(File.join(local, "lib", "a.rb"), "a")
+      cycle!(session, tick)
+
+      File.rename(File.join(local, "lib"), File.join(local, "moved"))
+      preview = Session.new(LocalEndpoint.new(local), LocalEndpoint.new(remote), base: session.base, dry_run: true)
+      report = cycle!(preview, tick)
+
+      report.remote_relocations.map { |relocation| {relocation.from, relocation.to} }.should eq([{"lib", "moved"}])
+      report.quiet?.should be_false
+      Dir.exists?(File.join(remote, "lib")).should be_true
+      Dir.exists?(File.join(remote, "moved")).should be_false
+    end
+  end
+end
+
 describe "case-only renames" do
   it "lands a rename that changed only the letter case in a single cycle" do
     in_pair do |local, remote, session|

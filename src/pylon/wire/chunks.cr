@@ -59,6 +59,14 @@ module Pylon::Wire
       write_packed(io) { |packed| Binary.write_outcomes(packed, outcomes) }
     end
 
+    def write_relocations(io : IO, relocations : Array(Core::Relocation)) : Nil
+      write_packed(io) { |packed| Binary.write_relocations(packed, relocations) }
+    end
+
+    def read_relocations(reader : Reader) : Array(Core::Relocation)
+      read_packed(reader, "the relocations payload") { |inner| Binary.read_relocations(inner) } || Array(Core::Relocation).new
+    end
+
     def read_contents(reader : Reader) : Contents
       count = reader.count
       contents = Contents.new(initial_capacity: Wire.capacity_hint(count))

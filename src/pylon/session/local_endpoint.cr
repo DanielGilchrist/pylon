@@ -225,8 +225,8 @@ module Pylon::Session
       by_digest
     end
 
-    def write(changes : Core::Changes, source : Wire::ContentSource) : Array(Write::Outcome)
-      Write::Writer.new(@disk, Staging.new(source.contents, self), @cache, Time.utc.to_unix_ns.to_i64, @ignores).write(changes)
+    def write(changes : Core::Changes, source : Wire::ContentSource, relocations : Array(Core::Relocation) = Array(Core::Relocation).new) : Array(Write::Outcome)
+      Write::Writer.new(@disk, Staging.new(source.contents, self), @cache, Time.utc.to_unix_ns.to_i64, @ignores).write(changes, relocations)
     end
 
     def recovered_content(digest : Bytes) : Bytes?
@@ -245,8 +245,8 @@ module Pylon::Session
       end
     end
 
-    def write_begin(changes : Core::Changes, source : Wire::ContentSource) : PendingWrite
-      outcomes = write(changes, source)
+    def write_begin(changes : Core::Changes, source : Wire::ContentSource, relocations : Array(Core::Relocation)) : PendingWrite
+      outcomes = write(changes, source, relocations)
       PendingWrite.new(Proc(Array(Write::Outcome) | Fault).new { outcomes })
     end
   end

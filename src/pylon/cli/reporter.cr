@@ -142,8 +142,8 @@ struct Pylon::CLI
 
       return if !spoke && outgoing.empty? && incoming.empty? && skipped.empty?
 
-      show("↑", Colorize::ColorANSI::Green, outgoing)
-      show("↓", Colorize::ColorANSI::Blue, incoming)
+      show("↑", Colorize::ColorANSI::Green, outgoing, report.remote_relocations)
+      show("↓", Colorize::ColorANSI::Blue, incoming, report.local_relocations)
 
       unless skipped.empty?
         @io.puts "#{indent}#{"·".colorize.dark_gray} #{skipped.size} skipped".colorize.dark_gray
@@ -211,11 +211,14 @@ struct Pylon::CLI
       spoke
     end
 
-    private def show(arrow : String, colour : Colorize::ColorANSI, outcomes : Array(Write::Outcome)) : Nil
-      return if outcomes.empty?
+    private def show(arrow : String, colour : Colorize::ColorANSI, outcomes : Array(Write::Outcome), relocations : Array(Core::Relocation)) : Nil
+      return if outcomes.empty? && relocations.empty?
 
-      written = outcomes.select { |outcome| outcome.entry.is_a?(Core::File) }
-      deleted = outcomes.select { |outcome| outcome.entry.nil? }
+      relocated = Set(String).new(initial_capacity: relocations.size * 2)
+      relocations.each { |relocation| relocated << relocation.from << relocation.to }
+
+      written = outcomes.select { |outcome| outcome.entry.is_a?(Core::File) && !relocated.includes?(outcome.path) }
+      deleted = outcomes.select { |outcome| outcome.entry.nil? && !relocated.includes?(outcome.path) }
 
       if outcomes.size > SUMMARISE_OVER && !@verbose
         unless written.empty?
@@ -226,7 +229,15 @@ struct Pylon::CLI
           @io.puts "#{indent}#{arrow.colorize(colour)} #{"#{deleted.size} removed".colorize.dark_gray}"
         end
 
+        unless relocations.empty?
+          @io.puts "#{indent}#{arrow.colorize(colour)} #{"#{relocations.size} moved".colorize.dark_gray}"
+        end
+
         return
+      end
+
+      relocations.each do |relocation|
+        @io.puts "#{indent}#{arrow.colorize(colour)} #{relocation.from} #{"→".colorize.dark_gray} #{relocation.to}"
       end
 
       listed = (written + deleted).sort_by!(&.path)
@@ -267,23 +278,27 @@ struct Pylon::CLI
       outgoing = report.remote_outcomes
       incoming = report.local_outcomes
 
-      if outgoing.empty? && incoming.empty? && report.conflicts.empty?
+      if report.quiet?
         @io.puts "#{indent}#{"nothing to do".colorize.dark_gray}"
         return
       end
 
       @io.puts "#{indent}#{"dry run".colorize.yellow.bold} #{"nothing will be changed".colorize.dark_gray}"
 
-      listing("↑", Colorize::ColorANSI::Green, outgoing)
-      listing("↓", Colorize::ColorANSI::Blue, incoming)
+      listing("↑", Colorize::ColorANSI::Green, outgoing, report.remote_relocations)
+      listing("↓", Colorize::ColorANSI::Blue, incoming, report.local_relocations)
 
       report.conflicts.each do |conflict|
         @io.puts "#{indent}#{"!".colorize.yellow} conflict #{conflict.root}"
       end
     end
 
-    private def listing(arrow : String, colour : Colorize::ColorANSI, outcomes : Array(Write::Outcome)) : Nil
-      return if outcomes.empty?
+    private def listing(arrow : String, colour : Colorize::ColorANSI, outcomes : Array(Write::Outcome), relocations : Array(Core::Relocation)) : Nil
+      return if outcomes.empty? && relocations.empty?
+
+      relocations.each do |relocation|
+        @io.puts "#{indent}#{arrow.colorize(colour)} #{"move  ".colorize.dark_gray} #{relocation.from} #{"→".colorize.dark_gray} #{relocation.to}"
+      end
 
       outcomes.first(PREVIEW_PATHS).each do |outcome|
         @io.puts "#{indent}#{arrow.colorize(colour)} #{verb(outcome)} #{outcome.path}"

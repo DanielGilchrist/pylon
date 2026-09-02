@@ -77,8 +77,10 @@ module Pylon::Session
         )
       end
 
-      local_changes = Core::Changes.expand(reconciliation.local_changes)
-      remote_changes = Core::Changes.expand(reconciliation.remote_changes)
+      local_extraction = Core::Relocation.extract(reconciliation.local_changes)
+      remote_extraction = Core::Relocation.extract(reconciliation.remote_changes)
+      local_changes = Core::Changes.expand(local_extraction.changes)
+      remote_changes = Core::Changes.expand(remote_extraction.changes)
 
       if @dry_run
         return Report.new(
@@ -86,6 +88,8 @@ module Pylon::Session
           local_changes.map { |change| Write::Outcome.new(change.path, change.new, Write::DryRun.new) },
           remote_changes.map { |change| Write::Outcome.new(change.path, change.new, Write::DryRun.new) },
           troubles: reconciliation.troubles,
+          local_relocations: local_extraction.relocations,
+          remote_relocations: remote_extraction.relocations,
         )
       end
 
@@ -94,11 +98,11 @@ module Pylon::Session
       {% end %}
 
       local_holds = digests_present_in(local_root, local_changes)
-      local_outcomes = transfer(local_changes, @remote, @local, :to_local, local_holds)
+      local_outcomes = transfer(local_changes, local_extraction.relocations, @remote, @local, :to_local, local_holds)
       return local_outcomes if local_outcomes.is_a?(Fault)
 
       remote_holds = digests_present_in(remote_root, remote_changes)
-      remote_outcomes = transfer(remote_changes, @local, @remote, :to_remote, remote_holds)
+      remote_outcomes = transfer(remote_changes, remote_extraction.relocations, @local, @remote, :to_remote, remote_holds)
       return remote_outcomes if remote_outcomes.is_a?(Fault)
 
       {% if flag?(:timing) %}
@@ -106,7 +110,7 @@ module Pylon::Session
         alloc_written = GC.stats.total_bytes
       {% end %}
 
-      commit!(Core::Changes.expand(reconciliation.base_changes), local_outcomes, remote_outcomes)
+      commit!(reconciliation.base_changes, local_outcomes, remote_outcomes)
 
       {% if flag?(:timing) %}
         STDERR.puts("  client scans=%.1f reconcile=%.1f contents=%.1f write=%.1f commit=%.1f" % [
@@ -127,7 +131,23 @@ module Pylon::Session
         {% end %}
       {% end %}
 
-      Report.new(reconciliation.conflicts, local_outcomes, remote_outcomes, troubles: reconciliation.troubles)
+      Report.new(
+        reconciliation.conflicts,
+        local_outcomes,
+        remote_outcomes,
+        troubles: reconciliation.troubles,
+        local_relocations: landed(local_extraction.relocations, local_outcomes),
+        remote_relocations: landed(remote_extraction.relocations, remote_outcomes),
+      )
+    end
+
+    private def landed(relocations : Array(Core::Relocation), outcomes : Array(Write::Outcome)) : Array(Core::Relocation)
+      return relocations if relocations.empty?
+
+      arrived = Set(String).new(initial_capacity: outcomes.size)
+      outcomes.each { |outcome| arrived << outcome.path if outcome.applied? }
+
+      relocations.select { |relocation| arrived.includes?(relocation.to) }
     end
 
     private def digests_present_in(root : Core::Entry?, changes : Core::Changes) : Set(Bytes)
@@ -138,9 +158,18 @@ module Pylon::Session
       holds
     end
 
-    private def transfer(changes : Core::Changes, source : A | B, target : A | B, direction : Direction, target_holds : Set(Bytes)) : Array(Write::Outcome) | Fault
-      total = changes.size
+    private def transfer(
+      changes : Core::Changes,
+      relocations : Array(Core::Relocation),
+      source : A | B,
+      target : A | B,
+      direction : Direction,
+      target_holds : Set(Bytes),
+    ) : Array(Write::Outcome) | Fault
+      total = changes.size + relocations.size * 2
       outcomes = Array(Write::Outcome).new(total)
+      relocations_pending = !relocations.empty?
+      none = Array(Core::Relocation).new
       offset = 0
       inflight = Deque(PendingWrite).new(WRITE_WINDOW)
       total_bytes = source.payload_size(changes)
@@ -197,7 +226,12 @@ module Pylon::Session
           return fault
         end
 
-        inflight.push(target.write_begin(batch, provided))
+        if relocations_pending && offset == changes.size
+          relocations_pending = false
+          inflight.push(target.write_begin(batch, provided, relocations))
+        else
+          inflight.push(target.write_begin(batch, provided, none))
+        end
 
         if inflight.size == WRITE_WINDOW && (oldest = inflight.shift?)
           written = oldest.await
@@ -210,6 +244,10 @@ module Pylon::Session
 
       if pending_signatures && (fault = pending_signatures.settle_into(signatures))
         return fault
+      end
+
+      if relocations_pending
+        inflight.push(target.write_begin(Core::Changes.new, Wire::ContentSource::Materialised.new(Wire::Contents.new), relocations))
       end
 
       while (oldest = inflight.shift?)
@@ -301,19 +339,7 @@ module Pylon::Session
       local_outcomes : Array(Write::Outcome),
       remote_outcomes : Array(Write::Outcome),
     ) : Nil
-      actual = Hash(String, Core::Entry?).new(initial_capacity: local_outcomes.size + remote_outcomes.size)
-      local_outcomes.each { |outcome| actual[outcome.path] = outcome.entry }
-      remote_outcomes.each { |outcome| actual[outcome.path] = outcome.entry }
-
-      landed = Core::Changes.new(initial_capacity: planned.size)
-
-      planned.each do |change|
-        landed << if actual.has_key?(change.path)
-          Core::Change.new(change.path, change.old, actual[change.path])
-        else
-          change
-        end
-      end
+      landed = planned + Write::Outcome.changes(local_outcomes) + Write::Outcome.changes(remote_outcomes)
 
       @base = Core::Applier.apply(@base, landed).try(&.syncable)
     end

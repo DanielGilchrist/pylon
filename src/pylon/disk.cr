@@ -137,6 +137,10 @@ module Pylon
       Filesystem.chmod(path, permissions.to_i32)
     end
 
+    def rename(from : String, to : String) : Write::Problem?
+      Filesystem.rename(absolute(from), absolute(to))
+    end
+
     def remove(relative_path : String) : Write::Problem?
       case (info = Filesystem.info(absolute(relative_path)))
       in Missing

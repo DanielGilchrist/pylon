@@ -392,3 +392,137 @@ describe Pylon::Write::Writer do
     entry.contents.keys.should eq(["kept.rb"])
   end
 end
+
+private def seeded_tree(target : MemoryTarget) : {Pylon::Core::Directory, Pylon::Scan::Cache}
+  target.seed_directory("lib")
+  target.seed_directory("lib/deep")
+  a = target.seed_file("lib/a.rb", "a", inode: 11_u64)
+  b = target.seed_file("lib/deep/b.rb", "b", inode: 12_u64)
+  cache = cache_for(target, ["lib/a.rb", "lib/deep/b.rb"])
+
+  tree = Pylon::Core::Directory.new({
+    "a.rb" => Pylon::Core::File.new(a),
+    "deep" => Pylon::Core::Directory.new({"b.rb" => Pylon::Core::File.new(b)}),
+  })
+
+  {tree, cache}
+end
+
+private def relocate(target : MemoryTarget, cache : Pylon::Scan::Cache, tree : Pylon::Core::Directory, staging = MemoryStaging.new) : Array(Outcome)
+  writer(target, staging, cache).write(Pylon::Core::Changes.new, [Pylon::Core::Relocation.new("lib", "moved", tree)])
+end
+
+describe "relocations" do
+  it "moves a directory with a single rename and reports both ends" do
+    target = MemoryTarget.new
+    tree, cache = seeded_tree(target)
+
+    outcomes = relocate(target, cache, tree)
+
+    target.operations.should eq(["rename lib moved"])
+    outcomes.map(&.path).should eq(["lib", "moved"])
+    outcomes.all?(&.applied?).should be_true
+    outcomes[0].entry.should be_nil
+    (outcomes[1].entry == tree).should be_true
+    target.nodes.has_key?("moved/deep/b.rb").should be_true
+    target.nodes.has_key?("lib").should be_false
+  end
+
+  it "moves a single file" do
+    target = MemoryTarget.new
+    digest = target.seed_file("old.rb", "content", inode: 7_u64)
+    cache = cache_for(target, ["old.rb"])
+
+    outcomes = writer(target, MemoryStaging.new, cache)
+      .write(Pylon::Core::Changes.new, [Pylon::Core::Relocation.new("old.rb", "new.rb", Pylon::Core::File.new(digest))])
+
+    target.operations.should eq(["rename old.rb new.rb"])
+    outcomes.all?(&.applied?).should be_true
+    String.new(target.nodes["new.rb"].content).should eq("content")
+  end
+
+  it "refuses to move a directory that lost a file since the scan" do
+    target = MemoryTarget.new
+    tree, cache = seeded_tree(target)
+    target.nodes.delete("lib/deep/b.rb")
+
+    outcomes = relocate(target, cache, tree)
+
+    target.operations.should be_empty
+    outcomes.map(&.skipped).should eq([ModificationDetected.new, ModificationDetected.new])
+    (outcomes[0].entry == tree).should be_true
+    outcomes[1].entry.should be_nil
+  end
+
+  it "refuses to move a directory that gained a file since the scan" do
+    target = MemoryTarget.new
+    tree, cache = seeded_tree(target)
+    target.seed_file("lib/fresh.rb", "created after the scan")
+
+    outcomes = relocate(target, cache, tree)
+
+    target.operations.should be_empty
+    outcomes.map(&.skipped).should eq([ModificationDetected.new, ModificationDetected.new])
+  end
+
+  it "refuses to move a directory holding a file edited since the scan" do
+    target = MemoryTarget.new
+    tree, cache = seeded_tree(target)
+    target.seed_file("lib/a.rb", "edited by hand", inode: 99_u64, mtime_ns: 9_000_i64)
+
+    outcomes = relocate(target, cache, tree)
+
+    target.operations.should be_empty
+    outcomes.map(&.skipped).should eq([ModificationDetected.new, ModificationDetected.new])
+  end
+
+  it "refuses to move onto a path something else now occupies" do
+    target = MemoryTarget.new
+    tree, cache = seeded_tree(target)
+    target.seed_file("moved", "squatter")
+
+    outcomes = relocate(target, cache, tree)
+
+    target.operations.should be_empty
+    outcomes.map(&.skipped).should eq([ModificationDetected.new, ModificationDetected.new])
+  end
+
+  it "refuses to act without cache evidence for the moved files" do
+    target = MemoryTarget.new
+    tree, _ = seeded_tree(target)
+
+    outcomes = relocate(target, Pylon::Scan::Cache.new, tree)
+
+    target.operations.should be_empty
+    outcomes.map(&.skipped).should eq([UnknownState.new, UnknownState.new])
+  end
+
+  it "copies and deletes when the filesystem refuses the rename" do
+    target = MemoryTarget.new
+    tree, cache = seeded_tree(target)
+    target.renamable = false
+    staging = MemoryStaging.new
+    staging.add("a")
+    staging.add("b")
+
+    outcomes = relocate(target, cache, tree, staging)
+
+    target.operations.should eq(["mkdir moved", "write moved/a.rb", "mkdir moved/deep", "write moved/deep/b.rb", "remove lib"])
+    outcomes.map(&.path).should eq(["moved", "moved/a.rb", "moved/deep", "moved/deep/b.rb", "lib"])
+    outcomes.all?(&.applied?).should be_true
+  end
+
+  it "moves only after every other change in the batch has been written" do
+    target = MemoryTarget.new
+    tree, cache = seeded_tree(target)
+    staging = MemoryStaging.new
+    digest = staging.add("fresh")
+
+    writer(target, staging, cache).write(
+      Pylon::Core::Changes[Change.new("fresh.rb", nil, Pylon::Core::File.new(digest))],
+      [Pylon::Core::Relocation.new("lib", "moved", tree)],
+    )
+
+    target.operations.should eq(["write fresh.rb", "rename lib moved"])
+  end
+end

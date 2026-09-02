@@ -75,7 +75,7 @@ module Pylon::Wire
       in .contents_response?   then ContentsResponse.new(Chunks.read_contents(reader))
       in .signatures_request?  then read_signatures_request(reader)
       in .signatures_response? then SignaturesResponse.new(Binary.read_signatures(reader))
-      in .write_request?       then WriteRequest.new(Chunks.read_changes(reader), Chunks.read_contents(reader))
+      in .write_request?       then WriteRequest.new(Chunks.read_changes(reader), Chunks.read_relocations(reader), Chunks.read_contents(reader))
       in .write_response?      then WriteResponse.new(Chunks.read_outcomes(reader))
       in .tree_update?         then TreeUpdate.new(reader.u32, Chunks.read_entry(reader))
       in .tree_delta?          then TreeDelta.new(reader.u32, Chunks.read_changes(reader))

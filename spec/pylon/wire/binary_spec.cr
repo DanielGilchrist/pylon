@@ -109,6 +109,43 @@ describe Pylon::Wire::Binary do
     decoded.zip(changes) { |actual, expected| (actual == expected).should be_true }
   end
 
+  it "round trips relocations" do
+    relocations = [
+      Pylon::Core::Relocation.new("old.rb", "new.rb", Fixtures.file!(Fixtures.f1x)),
+      Pylon::Core::Relocation.new("lib", "moved/lib", Fixtures.directory!(Fixtures.d1)),
+    ]
+
+    io = IO::Memory.new
+    Binary.write_relocations(io, relocations)
+    io.rewind
+
+    decoded = Binary.read_relocations(Reader.new(io))
+    decoded.map { |relocation| {relocation.from, relocation.to} }.should eq([{"old.rb", "new.rb"}, {"lib", "moved/lib"}])
+    (decoded[0].entry == Fixtures.f1x).should be_true
+    (decoded[1].entry == Fixtures.d1).should be_true
+  end
+
+  it "refuses a relocation of the sync root, onto itself, or into itself" do
+    file = Fixtures.file!(Fixtures.f1)
+
+    { {"", "x"}, {"x", ""}, {"x", "x"}, {"x", "x/y"}, {"x/y", "x"} }.each do |source, destination|
+      io = IO::Memory.new
+      Binary.write_relocations(io, [Pylon::Core::Relocation.new(source, destination, file)])
+
+      fails_to_decode(io.to_slice) { |reader| Binary.read_relocations(reader) }.should be_true, "#{source.inspect} to #{destination.inspect}"
+    end
+  end
+
+  it "refuses a relocation carrying an entry that cannot be moved" do
+    io = IO::Memory.new
+    io.write_bytes(1_u32, FORMAT)
+    Binary.write_string(io, "a")
+    Binary.write_string(io, "b")
+    Binary.write_entry(io, Fixtures.untracked)
+
+    fails_to_decode(io.to_slice) { |reader| Binary.read_relocations(reader) }.should be_true
+  end
+
   it "round trips outcomes including the skip reason" do
     outcomes = [
       Pylon::Write::Outcome.new("ok.rb", Fixtures.f1),
