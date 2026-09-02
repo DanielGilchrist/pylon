@@ -11,7 +11,7 @@ module Pylon::Wire
       getter digests : Set(Bytes)
       getter contents : Contents
 
-      def initialize(@contents : Contents)
+      def initialize(@contents : Contents) : Nil
         @digests = Set(Bytes).new(@contents.size)
         @contents.each_key { |digest| @digests << digest }
       end
@@ -24,7 +24,7 @@ module Pylon::Wire
     struct Streaming < ContentSource
       getter digests : Set(Bytes)
 
-      def initialize(@digests : Set(Bytes), @emit : Proc(IO, Nil), @materialise : Proc(Contents))
+      def initialize(@digests : Set(Bytes), @emit : Proc(IO, Nil), @materialise : Proc(Contents)) : Nil
       end
 
       def contents : Contents

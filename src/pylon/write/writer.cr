@@ -31,7 +31,7 @@ module Pylon::Write
       @ignores : Scan::Ignores = Scan::Ignores::NONE,
       @granularity_ns : Int64 = Scan::Metadata::DEFAULT_GRANULARITY_NS,
       @parallelism : Int32 = DEFAULT_PARALLELISM,
-    )
+    ) : Nil
     end
 
     def write(changes : Core::Changes) : Array(Outcome)
@@ -69,7 +69,7 @@ module Pylon::Write
     private def write_concurrently(changes : Core::Changes, independent : Array(Int32)) : Array(Outcome)
       stripe = (independent.size + @parallelism - 1) // @parallelism
       groups = independent.each_slice(stripe).to_a
-      slices = Array(Array(Outcome)).new(groups.size) { [] of Outcome }
+      slices = Array(Array(Outcome)).new(groups.size) { Array(Outcome).new }
 
       Fibers.parallel(:write, groups.size) do |worker|
         groups[worker].each { |index| slices[worker] << write_one(changes[index]) }
@@ -193,7 +193,7 @@ module Pylon::Write
     end
 
     private def verify_content(path : String, expected : Core::File) : Verdict
-      case digest = @filesystem.digest(path)
+      case (digest = @filesystem.digest(path))
       in Problem
         Verdict::UnknownState
       in Bytes
@@ -231,7 +231,7 @@ module Pylon::Write
           return blocked
         end
 
-        contents = {} of String => Core::Entry
+        contents = Hash(String, Core::Entry).new
 
         entry.contents.each do |name, child|
           created = create(Core::Paths.join(path, name), child)

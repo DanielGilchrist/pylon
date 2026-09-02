@@ -4,11 +4,11 @@ module Pylon::Scan
 
     @patterns : Set(String)
 
-    def initialize(patterns : Enumerable(String))
+    def initialize(patterns : Enumerable(String)) : Nil
       @patterns = patterns.map(&.strip('/')).reject(&.empty?).to_set
     end
 
-    NONE = new([] of String)
+    NONE = new(Array(String).new)
 
     def ignore?(relative_path : String) : Bool
       return false if relative_path.empty?

@@ -6,7 +6,7 @@ require "../../../src/pylon/disk"
 
 private FILES = 120
 
-private def build_writer(disk, contents, parallelism = Pylon::Write::Writer::DEFAULT_PARALLELISM)
+private def build_writer(disk : Pylon::Disk, contents : Pylon::Wire::Contents, parallelism = Pylon::Write::Writer::DEFAULT_PARALLELISM) : Pylon::Write::Writer(Pylon::Disk, Pylon::Session::Staging(Pylon::Session::Staging::Unrecoverable))
   Pylon::Write::Writer.new(disk, Pylon::Session::Staging.new(contents, Pylon::Session::Staging::Unrecoverable.new), Pylon::Scan::Cache.new, Time.utc.to_unix_ns.to_i64, parallelism: parallelism)
 end
 
@@ -16,7 +16,6 @@ private def bulk_changes : Pylon::Core::Changes
   changes << Pylon::Core::Change.new("nested", nil, Pylon::Core::Directory.new)
 
   FILES.times do |index|
-    content = "content #{index}\n" * (index + 1)
     digest = Digest::SHA256.digest("file#{index}").to_slice
     entry = Pylon::Core::File.new(digest, executable: index.even?)
     path = index < FILES // 2 ? "file#{index}.cr" : "nested/file#{index}.cr"
@@ -29,7 +28,7 @@ end
 private def staged_contents(changes : Pylon::Core::Changes) : Pylon::Wire::Contents
   contents = Pylon::Wire::Contents.new
 
-  changes.each_with_index do |change, index|
+  changes.each do |change|
     entry = change.new
     next unless entry.is_a?(Pylon::Core::File)
 

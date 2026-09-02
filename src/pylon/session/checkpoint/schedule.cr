@@ -9,7 +9,7 @@ module Pylon::Session
       @build : Proc(Checkpoint),
       @interval : Time::Span = DEFAULT_INTERVAL,
       @on_problem : Proc(String, Nil)? = nil,
-    )
+    ) : Nil
       @last = Time.instant - @interval
       @complained = false
     end

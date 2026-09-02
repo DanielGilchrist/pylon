@@ -7,7 +7,7 @@ require "../../../src/pylon/session/session"
 
 include Pylon::Session
 
-private def in_remote_pair(& : String, String, Session(LocalEndpoint, RemoteEndpoint) ->)
+private def in_remote_pair(& : String, String, Session(LocalEndpoint, RemoteEndpoint) ->) : Nil
   base = File.join(Dir.tempdir, "pylon-remote-#{Random::Secure.hex(8)}")
   local_root = File.join(base, "local")
   remote_root = File.join(base, "remote")

@@ -12,7 +12,7 @@ module Pylon::Core
       getter children : Hash(String, Pending)? = nil
 
       def child(name : String) : Pending
-        children = (@children ||= {} of String => Pending)
+        children = (@children ||= Hash(String, Pending).new)
         children[name] ||= Pending.new
       end
 

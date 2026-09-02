@@ -9,7 +9,7 @@ module Pylon::Core
     getter side : Side
     getter reason : String
 
-    def initialize(@path : String, @side : Side, @reason : String)
+    def initialize(@path : String, @side : Side, @reason : String) : Nil
     end
   end
 end

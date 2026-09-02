@@ -4,7 +4,7 @@ require "../../../src/pylon/session/checkpoint"
 
 include Pylon::Session
 
-private def in_sandbox(& : String ->)
+private def in_sandbox(& : String ->) : Nil
   root = File.join(Dir.tempdir, "pylon-store-#{Random::Secure.hex(8)}")
   Dir.mkdir_p(root)
 

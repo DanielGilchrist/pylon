@@ -17,7 +17,7 @@ module Pylon::Session
       @settle_limit : Time::Span = DEFAULT_SETTLE_LIMIT,
       @before : Proc(Nil)? = nil,
       @gauge : Proc(Int32)? = nil,
-    )
+    ) : Nil
       @stopping = false
     end
 

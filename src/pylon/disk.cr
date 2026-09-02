@@ -13,7 +13,7 @@ module Pylon
     READ_BUFFER_BYTES = 64 * 1024
     TEMPORARY_PREFIX  = Scan::Ignores::TEMPORARY_PREFIX
 
-    def initialize(@root : String)
+    def initialize(@root : String) : Nil
     end
 
     def metadata(relative_path : String) : Scan::Metadata | Problem | Nil
@@ -21,7 +21,7 @@ module Pylon
     end
 
     def observe(relative_path : String) : Scan::Observed | Problem | Nil
-      case found = Scan::Metadata.of(absolute(relative_path))
+      case (found = Scan::Metadata.of(absolute(relative_path)))
       in Nil     then nil
       in Problem then found
       in Scan::Metadata
@@ -30,7 +30,7 @@ module Pylon
         in .file?      then Scan::ObservedFile.new(found)
         in .untracked? then Scan::ObservedUntracked.new
         in .symbolic_link?
-          case target = Filesystem.readlink(absolute(relative_path))
+          case (target = Filesystem.readlink(absolute(relative_path)))
           in Problem then target
           in String  then Scan::ObservedLink.new(target)
           end
@@ -72,7 +72,7 @@ module Pylon
       end
     end
 
-    def stream(relative_path : String, digest : Bytes, io : IO, buffer : Bytes, codec, scratch : Bytes, hasher : Digest::SHA256 = Digest::SHA256.new) : Nil
+    def stream(relative_path : String, digest : Bytes, io : IO, buffer : Bytes, codec : Compress::Codec, scratch : Bytes, hasher : Digest::SHA256 = Digest::SHA256.new) : Nil
       Wire::Binary.write_bytes(io, digest)
       Wire::ContentKind::Full.write(io)
       hasher.reset
@@ -118,7 +118,7 @@ module Pylon
     def set_executable(relative_path : String, executable : Bool) : Write::Problem?
       path = absolute(relative_path)
 
-      case observed = Scan::Metadata.of(path)
+      case (observed = Scan::Metadata.of(path))
       in Nil
         return Write::Problem.new("the permissions could not be read: the file is missing")
       in Problem
@@ -138,7 +138,7 @@ module Pylon
     end
 
     def remove(relative_path : String) : Write::Problem?
-      case info = Filesystem.info(absolute(relative_path))
+      case (info = Filesystem.info(absolute(relative_path)))
       in Missing
         nil
       in Problem
@@ -156,7 +156,7 @@ module Pylon
       failed ||= Filesystem.rename(temporary, path)
       return if failed.nil?
 
-      case discarded = Filesystem.delete(temporary)
+      case (discarded = Filesystem.delete(temporary))
       in Nil     then failed
       in Problem then Problem.new("#{failed.reason} (and the temporary file #{temporary} could not be removed: #{discarded.reason})")
       end

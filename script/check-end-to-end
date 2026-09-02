@@ -9,7 +9,16 @@ PYLON="$PWD/bin/pylon"
 [[ -x "$PYLON" ]] || { echo "build first: crystal build --release -o bin/pylon src/pylon.cr"; exit 1; }
 
 WORK="$(mktemp -d)"
-trap 'kill "${PID:-0}" 2>/dev/null || true; rm -rf "$WORK"' EXIT
+cleanup() {
+  kill "${PID:-0}" 2>/dev/null || true
+  for _ in $(seq 1 50); do
+    kill -0 "${PID:-0}" 2>/dev/null || break
+    sleep 0.1
+  done
+  kill -9 "${PID:-0}" 2>/dev/null || true
+  rm -rf "$WORK"
+}
+trap cleanup EXIT
 
 mkdir -p "$WORK"/{a,b,stub}
 printf '#!/bin/sh\neval "$(eval echo \\${$#})"\n' > "$WORK/stub/ssh"

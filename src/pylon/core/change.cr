@@ -7,7 +7,7 @@ module Pylon::Core
     getter old : Entry?
     getter new : Entry?
 
-    def initialize(@path : String, @old : Entry?, @new : Entry?)
+    def initialize(@path : String, @old : Entry?, @new : Entry?) : Nil
     end
   end
 end

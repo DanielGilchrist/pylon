@@ -11,7 +11,7 @@ private class MeteredIO < IO
   getter written = 0_i64
   getter consumed = 0_i64
 
-  def initialize(@inner : IO)
+  def initialize(@inner : IO) : Nil
   end
 
   def read(slice : Bytes) : Int32
@@ -30,7 +30,7 @@ private class MeteredIO < IO
   end
 end
 
-private def in_metered_pair(& : String, String, Session(LocalEndpoint, RemoteEndpoint), MeteredIO ->)
+private def in_metered_pair(& : String, String, Session(LocalEndpoint, RemoteEndpoint), MeteredIO ->) : Nil
   base = File.join(Dir.tempdir, "pylon-delta-#{Random::Secure.hex(8)}")
   local_root = File.join(base, "local")
   remote_root = File.join(base, "remote")

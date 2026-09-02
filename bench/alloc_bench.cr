@@ -6,10 +6,10 @@ include Pylon
 
 IGNORES = Scan::Ignores.new(%w[.git node_modules tmp log vendor/bundle .ruby-lsp flow-typed .idea])
 
-def allocated(label, &)
+def allocated(label : String, & : -> T) : T forall T
   before = GC.stats.total_bytes
   result = yield
-  puts "  %-28s %8.1f MiB" % [label, (GC.stats.total_bytes - before) / 1048576.0]
+  puts "  %-28s %8.1f MiB" % [label, (GC.stats.total_bytes - before) / 1_048_576.0]
   result
 end
 

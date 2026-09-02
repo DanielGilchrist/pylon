@@ -3,7 +3,7 @@ require "./fault"
 
 module Pylon::Session
   struct PendingWrite
-    def initialize(@receive : Proc(Array(Write::Outcome) | Fault))
+    def initialize(@receive : Proc(Array(Write::Outcome) | Fault)) : Nil
     end
 
     def await : Array(Write::Outcome) | Fault

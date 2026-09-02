@@ -9,7 +9,7 @@ module Pylon::Wire::Message
     getter sequence : UInt32
     getter changes : Core::Changes
 
-    def initialize(@sequence : UInt32, @changes : Core::Changes)
+    def initialize(@sequence : UInt32, @changes : Core::Changes) : Nil
     end
 
     def tag : Tag

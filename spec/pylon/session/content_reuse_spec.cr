@@ -10,7 +10,7 @@ include Pylon::Session
 private class CountingIO < IO
   getter written = 0_i64
 
-  def initialize(@inner : IO)
+  def initialize(@inner : IO) : Nil
   end
 
   def read(slice : Bytes) : Int32
@@ -27,7 +27,7 @@ private class CountingIO < IO
   end
 end
 
-private def in_counted_pair(& : String, String, Session(LocalEndpoint, RemoteEndpoint), CountingIO ->)
+private def in_counted_pair(& : String, String, Session(LocalEndpoint, RemoteEndpoint), CountingIO ->) : Nil
   base = File.join(Dir.tempdir, "pylon-reuse-#{Random::Secure.hex(8)}")
   local_root = File.join(base, "local")
   remote_root = File.join(base, "remote")

@@ -9,10 +9,10 @@ DIGEST_ALPHA = "a".to_slice
 DIGEST_BETA  = "b".to_slice
 
 def build_tree : Directory
-  root = {} of String => Entry
+  root = Hash(String, Entry).new
 
   DIRECTORIES.times do |index|
-    contents = {} of String => Entry
+    contents = Hash(String, Entry).new
     FILES_PER.times { |file| contents["file_#{file}.rb"] = Pylon::Core::File.new(DIGEST_ALPHA) }
     root["dir_#{index}"] = Pylon::Core::Directory.new(contents)
   end

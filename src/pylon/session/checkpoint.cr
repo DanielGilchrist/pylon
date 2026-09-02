@@ -12,7 +12,7 @@ module Pylon::Session
     record Damaged, reason : String
 
     def self.load(path : String) : Checkpoint | Absent | Damaged
-      case loaded = Filesystem.open(path, "rb") { |io| read(io) }
+      case (loaded = Filesystem.open(path, "rb") { |io| read(io) })
       in Missing             then Absent.new
       in Problem             then Damaged.new(loaded.reason)
       in Checkpoint, Damaged then loaded
@@ -44,7 +44,7 @@ module Pylon::Session
       @base : Core::Entry? = nil,
       @local_cache : Scan::Cache = Scan::Cache.new,
       @remote_cache : Scan::Cache = Scan::Cache.new,
-    )
+    ) : Nil
     end
 
     def save(path : String) : Damaged?

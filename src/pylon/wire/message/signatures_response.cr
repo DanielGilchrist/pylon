@@ -8,7 +8,7 @@ module Pylon::Wire::Message
 
     getter signatures : Delta::Signatures
 
-    def initialize(@signatures : Delta::Signatures)
+    def initialize(@signatures : Delta::Signatures) : Nil
     end
 
     def tag : Tag

@@ -14,7 +14,7 @@ module Pylon::Wire
       Bytes.new(Compress::Zstd.new.bound(CHUNK_BYTES))
     end
 
-    def write_chunk(io : IO, source : Bytes, codec, scratch : Bytes) : Nil
+    def write_chunk(io : IO, source : Bytes, codec : Compress::Codec, scratch : Bytes) : Nil
       packed = pack(codec, source, scratch)
 
       Binary.write_framed_size(io, packed.size)
@@ -27,7 +27,7 @@ module Pylon::Wire
       Binary.write_bool(io, valid)
     end
 
-    def write_all(io : IO, content : Bytes, codec, scratch : Bytes) : Nil
+    def write_all(io : IO, content : Bytes, codec : Compress::Codec, scratch : Bytes) : Nil
       offset = 0
 
       while offset < content.size
@@ -115,7 +115,7 @@ module Pylon::Wire
     end
 
     def read_outcomes(reader : Reader) : Array(Write::Outcome)
-      read_packed(reader, "the outcomes payload") { |inner| Binary.read_outcomes(inner) } || [] of Write::Outcome
+      read_packed(reader, "the outcomes payload") { |inner| Binary.read_outcomes(inner) } || Array(Write::Outcome).new
     end
 
     private def write_packed(io : IO, & : IO ->) : Nil
@@ -140,12 +140,12 @@ module Pylon::Wire
       value
     end
 
-    def read_all(reader : Reader, codec, scratch : Bytes, limit : Int32 = Wire::MAX_CONTENT_BYTES) : Bytes?
+    def read_all(reader : Reader, codec : Compress::Codec, scratch : Bytes, limit : Int32 = Wire::MAX_CONTENT_BYTES) : Bytes?
       content = Bytes.empty
       filled = 0
 
       loop do
-        case packed_size = reader.framed_size(scratch.size)
+        case (packed_size = reader.framed_size(scratch.size))
         in Nil
           break
         in Reader::Oversized
@@ -193,7 +193,7 @@ module Pylon::Wire
       content[0, filled]
     end
 
-    private def pack(codec, source : Bytes, scratch : Bytes) : Bytes
+    private def pack(codec : Compress::Codec, source : Bytes, scratch : Bytes) : Bytes
       packed = codec.compress(source, scratch)
 
       # An error here is a bug where the caller built mismatched buffers so we want to blow up loudly.

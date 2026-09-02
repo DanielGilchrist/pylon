@@ -12,6 +12,11 @@ dependencies:
   kebab:
     github: DanielGilchrist/kebab
 
+development_dependencies:
+  ameba:
+    github: crystal-ameba/ameba
+    version: ~> 1.7.0
+
 targets:
   pylon:
     main: src/pylon.cr

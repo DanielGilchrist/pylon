@@ -26,7 +26,7 @@ end
 
 private NOW = MTIME + 1_000_000_000_i64 * 10
 
-private def check(expected, cached, observed) : Verdict
+private def check(expected : Pylon::Core::Entry?, cached : Pylon::Scan::CacheEntry?, observed : Pylon::Scan::Observed | Problem | Nil) : Verdict
   Guard.check(expected, cached, observed, NOW)
 end
 

@@ -4,7 +4,7 @@ require "../fault"
 module Pylon::Session
   class LocalEndpoint
     class SettledSignatures
-      def initialize(@found : Wire::Delta::Signatures)
+      def initialize(@found : Wire::Delta::Signatures) : Nil
         @settled = false
       end
 

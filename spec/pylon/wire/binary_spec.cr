@@ -24,7 +24,7 @@ private def random_entry(random : Random, depth : Int32) : Entry?
     return CONTENTS[random.rand(CONTENTS.size)]
   end
 
-  contents = {} of String => Entry
+  contents = Hash(String, Entry).new
   NAMES.each do |name|
     if (child = random_entry(random, depth - 1))
       contents[name] = child
@@ -82,7 +82,7 @@ describe Pylon::Wire::Binary do
   end
 
   it "round trips arbitrary trees" do
-    seed = 20260901_u64
+    seed = 20_260_901_u64
     random = Random.new(seed)
 
     500.times do |iteration|
@@ -173,7 +173,7 @@ describe Pylon::Wire::Binary do
     io = IO::Memory.new
     io.write_bytes((Pylon::Wire::MAX_FIELD_BYTES + 2).to_u32, Pylon::Wire::FORMAT)
 
-    fails_to_decode(io.to_slice) { |reader| reader.string? }.should be_true
+    fails_to_decode(io.to_slice, &.string?).should be_true
   end
 
   it "accepts a field of exactly the frame limit" do
@@ -188,7 +188,7 @@ describe Pylon::Wire::Binary do
   end
 
   it "refuses a byte that is neither 0 nor 1 where a bool was promised" do
-    fails_to_decode(Bytes[2_u8]) { |reader| reader.bool }.should be_true
+    fails_to_decode(Bytes[2_u8], &.bool).should be_true
   end
 
   it "refuses an entry kind it does not know" do

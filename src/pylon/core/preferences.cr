@@ -17,11 +17,11 @@ module Pylon::Core
     FALLBACK = "."
 
     def self.none : Preferences
-      new([] of Rule)
+      new(Array(Rule).new)
     end
 
     def self.build(local : Array(String), remote : Array(String)) : Preferences | Invalid
-      rules = [] of Rule
+      rules = Array(Rule).new
 
       collect(rules, :local, local) || collect(rules, :remote, remote) || new(rules)
     end
@@ -45,9 +45,9 @@ module Pylon::Core
     @explicit : Array(GlobRule)
     @fallback : Side?
 
-    def initialize(rules : Array(Rule))
-      @explicit = [] of GlobRule
-      fallbacks = [] of FallbackRule
+    def initialize(rules : Array(Rule)) : Nil
+      @explicit = Array(GlobRule).new
+      fallbacks = Array(FallbackRule).new
 
       rules.each do |rule|
         case rule
@@ -59,7 +59,7 @@ module Pylon::Core
       @fallback =
         if fallbacks.empty?
           nil
-        elsif fallbacks.any? { |rule| rule.side.local? }
+        elsif fallbacks.any?(&.side.local?)
           Side::Local
         else
           Side::Remote

@@ -20,13 +20,9 @@ module Pylon::Core
         separator = bytes.index(PATH_SEPARATOR_BYTE, start) || bytes.size
         length = separator - start
 
-        if length == 0
-          return Malformed.new(raw, "is empty")
-        elsif length == 1 && bytes[start] == '.'.ord
-          return Malformed.new(raw, "is a '.' path component")
-        elsif length == 2 && bytes[start] == '.'.ord && bytes[start + 1] == '.'.ord
-          return Malformed.new(raw, "is a '..' path component")
-        end
+        return Malformed.new(raw, "is empty") if length == 0
+        return Malformed.new(raw, "is a '.' path component") if length == 1 && bytes[start] == '.'.ord
+        return Malformed.new(raw, "is a '..' path component") if length == 2 && bytes[start] == '.'.ord && bytes[start + 1] == '.'.ord
 
         start = separator + 1
       end
@@ -34,7 +30,7 @@ module Pylon::Core
       new(raw)
     end
 
-    protected def initialize(@value : String)
+    protected def initialize(@value : String) : Nil
     end
   end
 end

@@ -5,8 +5,8 @@ require "../entry"
 module Pylon::Core
   module Digests
     struct Collector
-      def initialize
-        @wanted = [] of Bytes
+      def initialize : Nil
+        @wanted = Array(Bytes).new
         @seen = Set(Bytes).new
       end
 

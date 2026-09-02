@@ -70,12 +70,10 @@ module Pylon
       block : Int32 ->,
     ) : Nil
       context.spawn do
-        begin
-          outcome = contain { block.call(worker) }
-          failures.send(outcome) if outcome.is_a?(Exception)
-        ensure
-          waiting.done
-        end
+        outcome = contain { block.call(worker) }
+        failures.send(outcome) if outcome.is_a?(Exception)
+      ensure
+        waiting.done
       end
     end
 
@@ -85,10 +83,9 @@ module Pylon
     private def exit_on_exception(block : ->) : Nil
       outcome = contain { block.call }
 
-      if outcome.is_a?(Exception)
-        outcome.inspect_with_backtrace(STDERR)
-        exit 1
-      end
+      return unless outcome.is_a?(Exception)
+      outcome.inspect_with_backtrace(STDERR)
+      exit 1
     end
 
     private def contain(& : -> T) : T | Exception forall T

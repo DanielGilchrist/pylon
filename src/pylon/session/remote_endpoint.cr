@@ -17,7 +17,7 @@ module Pylon::Session
     @tree : Core::Entry? = nil
     @unapplied = Core::Changes.new
 
-    def initialize(@input : IO, @output : IO, @signals : Channel(Nil)? = nil)
+    def initialize(@input : IO, @output : IO, @signals : Channel(Nil)? = nil) : Nil
       @responses = Channel(Wire::Message::Any).new(RESPONSE_BUFFER)
       @greeting = Channel(Nil).new
       @known = false
@@ -101,7 +101,7 @@ module Pylon::Session
     end
 
     private def listen : Nil
-      case greeting = Wire::Greeting.read(@input)
+      case (greeting = Wire::Greeting.read(@input))
       in Wire::Greeting::Compatible
         @greeting.close
       in Wire::Greeting::Incompatible
@@ -120,7 +120,7 @@ module Pylon::Session
       end
 
       loop do
-        case message = Wire::Message.read(@input)
+        case (message = Wire::Message.read(@input))
         in Wire::Closed
           @fault ||= Stopped.new
           @responses.close

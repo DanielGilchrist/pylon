@@ -2,16 +2,16 @@ require "../../spec_helper"
 require "../../../src/pylon/cli/reporter"
 
 private def report_of(
-  conflicts = [] of Conflict,
-  local = [] of Pylon::Write::Outcome,
-  remote = [] of Pylon::Write::Outcome,
+  conflicts = Array(Conflict).new,
+  local = Array(Pylon::Write::Outcome).new,
+  remote = Array(Pylon::Write::Outcome).new,
   halt = nil,
-  troubles = [] of Trouble,
+  troubles = Array(Trouble).new,
 ) : Pylon::Session::Report
   Pylon::Session::Report.new(conflicts, local, remote, halt, troubles)
 end
 
-private def rendered(report, verbose = false, dry_run = false, elapsed : Time::Span? = nil) : String
+private def rendered(report : Pylon::Session::Report, verbose = false, dry_run = false, elapsed : Time::Span? = nil) : String
   Colorize.enabled = false
   io = IO::Memory.new
   Pylon::CLI::Reporter.new(io, verbose, dry_run).report(report, elapsed)

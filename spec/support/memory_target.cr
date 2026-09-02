@@ -12,11 +12,11 @@ class MemoryTarget
     inode : UInt64 = 0_u64,
     mtime_ns : Int64 = 0_i64
 
-  getter operations = [] of String
+  getter operations = Array(String).new
   getter nodes : Hash(String, Node)
   property? writable = true
 
-  def initialize(@nodes = {"" => Node.new(kind: Pylon::Scan::Metadata::Kind::Directory)})
+  def initialize(@nodes = {"" => Node.new(kind: Pylon::Scan::Metadata::Kind::Directory)}) : Nil
     @next_inode = 100_u64
   end
 
@@ -24,6 +24,10 @@ class MemoryTarget
     node = @nodes[path]?
     return if node.nil?
 
+    metadata_for(node)
+  end
+
+  private def metadata_for(node : Node) : Pylon::Scan::Metadata
     mode =
       case node.kind
       in Pylon::Scan::Metadata::Kind::Directory    then LibC::S_IFDIR | 0o755
@@ -46,7 +50,7 @@ class MemoryTarget
 
     case node.kind
     in Pylon::Scan::Metadata::Kind::Directory    then Pylon::Scan::ObservedDirectory.new
-    in Pylon::Scan::Metadata::Kind::File         then Pylon::Scan::ObservedFile.new(metadata(path).not_nil!)
+    in Pylon::Scan::Metadata::Kind::File         then Pylon::Scan::ObservedFile.new(metadata_for(node))
     in Pylon::Scan::Metadata::Kind::SymbolicLink then Pylon::Scan::ObservedLink.new(node.target)
     in Pylon::Scan::Metadata::Kind::Untracked    then Pylon::Scan::ObservedUntracked.new
     end
@@ -152,7 +156,7 @@ class MemoryTarget
 end
 
 class MemoryStaging
-  def initialize(@contents = {} of Bytes => Bytes)
+  def initialize(@contents = Hash(Bytes, Bytes).new) : Nil
   end
 
   def add(content : String) : Bytes

@@ -3,10 +3,10 @@ require "../../spec_helper"
 private FILES = 4_000
 
 private def wide_tree(files : Int32) : Entry
-  directories = {} of String => Entry
+  directories = Hash(String, Entry).new
 
   20.times do |directory|
-    contents = {} of String => Entry
+    contents = Hash(String, Entry).new
     (files // 20).times { |file| contents["file_#{file}.rb"] = Fixtures.f1 }
     directories["dir_#{directory}"] = Pylon::Core::Directory.new(contents)
   end

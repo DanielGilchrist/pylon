@@ -14,10 +14,10 @@ module Pylon::Core
       getter base_changes = Changes.new
       getter local_changes = Changes.new
       getter remote_changes = Changes.new
-      getter conflicts = [] of Conflict
-      getter troubles = [] of Trouble
+      getter conflicts = Array(Conflict).new
+      getter troubles = Array(Trouble).new
 
-      def initialize(@preferences : Preferences)
+      def initialize(@preferences : Preferences) : Nil
       end
 
       def result : Reconciliation

@@ -74,7 +74,7 @@ module Pylon::Wire
           if count.zero?
             entry = Core::Directory.new(contents)
           else
-            stack ||= [] of OpenDirectory
+            stack ||= Array(OpenDirectory).new
             stack << OpenDirectory.new(name, contents, count)
             name = reader.name
             next

@@ -24,8 +24,8 @@ module Pylon::Core
       end
     end
 
-    def initialize
-      @changes = [] of Change
+    def initialize : Nil
+      @changes = Array(Change).new
     end
 
     def self.[](*changes : Change) : Changes
@@ -34,7 +34,7 @@ module Pylon::Core
       collected
     end
 
-    def initialize(*, initial_capacity : Int32)
+    def initialize(*, initial_capacity : Int32) : Nil
       @changes = Array(Change).new(initial_capacity)
     end
 
@@ -107,7 +107,7 @@ module Pylon::Core
         survivors ||= surviving_folded_paths
         next unless survivors.includes?(change.path.downcase)
 
-        (colliding ||= [] of Int32) << index
+        (colliding ||= Array(Int32).new) << index
       end
 
       colliding

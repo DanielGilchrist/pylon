@@ -11,7 +11,7 @@ module Pylon::Wire
     getter? failed = false
     getter reason = ""
 
-    def initialize(@io : IO)
+    def initialize(@io : IO) : Nil
     end
 
     def fail(reason : String) : Nil
@@ -81,7 +81,7 @@ module Pylon::Wire
     end
 
     def bytes? : Bytes?
-      case size = framed_size(MAX_FIELD_BYTES)
+      case (size = framed_size(MAX_FIELD_BYTES))
       in Nil
         return
       in Oversized
@@ -113,7 +113,7 @@ module Pylon::Wire
     end
 
     def string? : String?
-      case size = framed_size(MAX_FIELD_BYTES)
+      case (size = framed_size(MAX_FIELD_BYTES))
       in Nil
         return
       in Oversized
@@ -143,7 +143,7 @@ module Pylon::Wire
       raw = required_string
       return "" if @failed
 
-      case parsed = Core::RelativePath.parse(raw)
+      case (parsed = Core::RelativePath.parse(raw))
       in Core::RelativePath then parsed.value
       in Core::Malformed
         fail("the path #{parsed.raw.inspect} #{parsed.reason}")
@@ -155,7 +155,7 @@ module Pylon::Wire
       raw = required_string
       return "" if @failed
 
-      case parsed = Core::Name.parse(raw)
+      case (parsed = Core::Name.parse(raw))
       in Core::Name then parsed.value
       in Core::Malformed
         fail("the name #{parsed.raw.inspect} #{parsed.reason}")
@@ -164,7 +164,7 @@ module Pylon::Wire
     end
 
     def fill(buffer : Bytes) : Nil
-      read { |io| io.read_fully(buffer) }
+      read(&.read_fully(buffer))
     end
 
     def take(size : Int32) : Bytes
@@ -174,7 +174,7 @@ module Pylon::Wire
     end
 
     private def number(type : T.class) : T forall T
-      value = read { |io| io.read_bytes(type, FORMAT) }
+      value = read(&.read_bytes(type, FORMAT))
       value.nil? ? T.zero : value
     end
 

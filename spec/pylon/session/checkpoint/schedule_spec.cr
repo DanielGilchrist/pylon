@@ -4,7 +4,7 @@ require "../../../../src/pylon/session/checkpoint/schedule"
 
 include Pylon::Session
 
-private def in_sandbox(& : String ->)
+private def in_sandbox(& : String ->) : Nil
   root = File.join(Dir.tempdir, "pylon-schedule-#{Random::Secure.hex(8)}")
   Dir.mkdir_p(root)
 
@@ -18,9 +18,9 @@ end
 private def schedule(path : String, interval : Time::Span, problems : Array(String)) : Checkpoint::Schedule
   Checkpoint::Schedule.new(
     path,
-    -> { Checkpoint.new },
+    -> : Checkpoint { Checkpoint.new },
     interval: interval,
-    on_problem: ->(problem : String) { problems << problem },
+    on_problem: ->(problem : String) : Nil { problems << problem },
   )
 end
 
@@ -29,7 +29,7 @@ describe Pylon::Session::Checkpoint::Schedule do
     in_sandbox do |root|
       path = File.join(root, "state")
 
-      schedule(path, 1.hour, [] of String).save_if_due
+      schedule(path, 1.hour, Array(String).new).save_if_due
 
       File.exists?(path).should be_true
     end
@@ -38,7 +38,7 @@ describe Pylon::Session::Checkpoint::Schedule do
   it "does not save again within the interval" do
     in_sandbox do |root|
       path = File.join(root, "state")
-      due = schedule(path, 1.hour, [] of String)
+      due = schedule(path, 1.hour, Array(String).new)
 
       due.save_if_due
       first_write = File.info(path).modification_time
@@ -51,7 +51,7 @@ describe Pylon::Session::Checkpoint::Schedule do
   it "saves again once the interval has passed" do
     in_sandbox do |root|
       path = File.join(root, "state")
-      due = schedule(path, 0.seconds, [] of String)
+      due = schedule(path, 0.seconds, Array(String).new)
 
       due.save_if_due
       File.write(path, "clobbered")
@@ -66,7 +66,7 @@ describe Pylon::Session::Checkpoint::Schedule do
       blocked = File.join(root, "occupied")
       File.write(blocked, "a file where the state directory should be")
 
-      problems = [] of String
+      problems = Array(String).new
       due = schedule(File.join(blocked, "state"), 0.seconds, problems)
 
       due.save
@@ -82,7 +82,7 @@ describe Pylon::Session::Checkpoint::Schedule do
       blocked = File.join(root, "occupied")
       File.write(blocked, "in the way")
 
-      problems = [] of String
+      problems = Array(String).new
       due = schedule(File.join(blocked, "state"), 0.seconds, problems)
 
       due.save

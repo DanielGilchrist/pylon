@@ -9,7 +9,7 @@ module Pylon::Wire::Message
 
     getter outcomes : Array(Write::Outcome)
 
-    def initialize(@outcomes : Array(Write::Outcome))
+    def initialize(@outcomes : Array(Write::Outcome)) : Nil
     end
 
     def tag : Tag

@@ -1,0 +1,39 @@
+Documentation/Admonition:
+  Enabled: true
+
+Lint/ComparisonToBoolean:
+  Enabled: true
+
+Lint/DuplicateBranch:
+  Enabled: true
+
+Style/ArrayLiteralSyntax:
+  Enabled: true
+
+Style/GuardClause:
+  Enabled: true
+
+Style/HashLiteralSyntax:
+  Enabled: true
+
+Style/LargeNumbers:
+  Enabled: true
+
+Style/ParenthesesAroundCondition:
+  AllowSafeAssignment: true
+
+Style/VerboseNilType:
+  OnlyTwoElementUnions: true
+
+Typing/MethodParameterTypeRestriction:
+  Enabled: true
+  PrivateMethods: true
+  ProtectedMethods: true
+
+Typing/MethodReturnTypeRestriction:
+  Enabled: true
+  PrivateMethods: true
+  ProtectedMethods: true
+
+Metrics/CyclomaticComplexity:
+  Enabled: false

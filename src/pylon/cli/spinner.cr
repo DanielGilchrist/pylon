@@ -12,8 +12,8 @@ struct Pylon::CLI
 
     @stop : Channel(Nil)? = nil
 
-    def initialize(@io : IO, @indent : String = "  ")
-      @supply = -> { "" }
+    def initialize(@io : IO, @indent : String = "  ") : Nil
+      @supply = -> : String { "" }
       @done = Channel(Nil).new
       @restores_cursor = false
     end

@@ -5,7 +5,7 @@ require "../../../src/pylon/session/runner"
 
 include Pylon::Session
 
-private def in_pair(& : String, String, Session(LocalEndpoint, LocalEndpoint) ->)
+private def in_pair(& : String, String, Session(LocalEndpoint, LocalEndpoint) ->) : Nil
   base = File.join(Dir.tempdir, "pylon-runner-#{Random::Secure.hex(8)}")
   local = File.join(base, "local")
   remote = File.join(base, "remote")
@@ -25,7 +25,7 @@ describe Pylon::Session::Runner do
       File.write(File.join(local, "first.rb"), "x")
 
       runner = Runner.new(session, Channel(Nil).new(1), debounce: 1.millisecond, poll: 10.milliseconds)
-      reports = [] of Report
+      reports = Array(Report).new
 
       spawn do
         runner.run do |report, _elapsed|
@@ -46,7 +46,7 @@ describe Pylon::Session::Runner do
     in_pair do |local, remote, session|
       signals = Channel(Nil).new(1)
       runner = Runner.new(session, signals, debounce: 1.millisecond, poll: 1.second)
-      reports = [] of Report
+      reports = Array(Report).new
 
       spawn { runner.run { |report, _elapsed| reports << report } }
 
@@ -67,7 +67,7 @@ describe Pylon::Session::Runner do
   it "does not cycle while nothing is happening" do
     in_pair do |_, _, session|
       runner = Runner.new(session, Channel(Nil).new(1), debounce: 1.millisecond, poll: 10.milliseconds)
-      reports = [] of Report
+      reports = Array(Report).new
 
       spawn { runner.run { |report, _elapsed| reports << report } }
 
@@ -83,7 +83,7 @@ describe Pylon::Session::Runner do
     in_pair do |local, _, session|
       signals = Channel(Nil).new(16)
       runner = Runner.new(session, signals, debounce: 30.milliseconds, poll: 1.second, burst_quiet: 20.milliseconds)
-      reports = [] of Report
+      reports = Array(Report).new
 
       spawn { runner.run { |report, _elapsed| reports << report } }
 
@@ -106,8 +106,8 @@ describe Pylon::Session::Runner do
   it "keeps waiting while signals arrive in gaps longer than the debounce" do
     in_pair do |local, _, session|
       signals = Channel(Nil).new(16)
-      runner = Runner.new(session, signals, debounce: 2.milliseconds, poll: 1.second, burst_quiet: 120.milliseconds, gauge: -> { 100 })
-      reports = [] of Report
+      runner = Runner.new(session, signals, debounce: 2.milliseconds, poll: 1.second, burst_quiet: 120.milliseconds, gauge: -> : Int32 { 100 })
+      reports = Array(Report).new
 
       spawn { runner.run { |report, _elapsed| reports << report } }
 
@@ -132,8 +132,8 @@ describe Pylon::Session::Runner do
   it "cycles anyway when a burst never goes quiet" do
     in_pair do |local, _, session|
       signals = Channel(Nil).new(16)
-      runner = Runner.new(session, signals, debounce: 2.milliseconds, poll: 1.second, burst_quiet: 60.milliseconds, settle_limit: 100.milliseconds, gauge: -> { 100 })
-      reports = [] of Report
+      runner = Runner.new(session, signals, debounce: 2.milliseconds, poll: 1.second, burst_quiet: 60.milliseconds, settle_limit: 100.milliseconds, gauge: -> : Int32 { 100 })
+      reports = Array(Report).new
 
       spawn { runner.run { |report, _elapsed| reports << report } }
 

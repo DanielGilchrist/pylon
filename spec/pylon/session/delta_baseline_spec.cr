@@ -14,7 +14,7 @@ end
 
 # The server only pushes tree deltas when it has a watcher, so this is the only
 # topology that exercises the shared delta baseline.
-private def in_watched_pair(& : String, String, Session(LocalEndpoint, RemoteEndpoint), ::Channel(Nil) ->)
+private def in_watched_pair(& : String, String, Session(LocalEndpoint, RemoteEndpoint), ::Channel(Nil) ->) : Nil
   base = File.join(Dir.tempdir, "pylon-delta-#{Random::Secure.hex(8)}")
   local = File.join(base, "local")
   remote = File.join(base, "remote")
@@ -22,7 +22,7 @@ private def in_watched_pair(& : String, String, Session(LocalEndpoint, RemoteEnd
   Dir.mkdir_p(remote)
 
   signals = ::Channel(Nil).new(16)
-  watcher = Pylon::Watch::Watcher.open(remote, [] of String, signals)
+  watcher = Pylon::Watch::Watcher.open(remote, Array(String).new, signals)
 
   if watcher.is_a?(Pylon::Watch::Unavailable)
     FileUtils.rm_rf(base)

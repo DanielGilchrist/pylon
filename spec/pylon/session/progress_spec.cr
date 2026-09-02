@@ -9,7 +9,7 @@ private def tick : Int64
   Time.utc.to_unix_ns.to_i64 + Random.rand(1_000_000_i64)
 end
 
-private def in_progress_pair(file_count : Int32, & : Array(Progress), Session(LocalEndpoint, LocalEndpoint) ->)
+private def in_progress_pair(file_count : Int32, & : Array(Progress), Session(LocalEndpoint, LocalEndpoint) ->) : Nil
   base = File.join(Dir.tempdir, "pylon-progress-#{Random::Secure.hex(8)}")
   local_root = File.join(base, "local")
   remote_root = File.join(base, "remote")
@@ -18,11 +18,11 @@ private def in_progress_pair(file_count : Int32, & : Array(Progress), Session(Lo
 
   file_count.times { |index| File.write(File.join(local_root, "file_#{index}.rb"), "body #{index}") }
 
-  updates = [] of Progress
+  updates = Array(Progress).new
   session = Session.new(
     LocalEndpoint.new(local_root),
     LocalEndpoint.new(remote_root),
-    on_progress: ->(update : Progress) { updates << update },
+    on_progress: ->(update : Progress) : Nil { updates << update },
   )
 
   begin

@@ -29,7 +29,7 @@ module Pylon::Session
       @dry_run : Bool = false,
       @push_first : Bool = false,
       @on_progress : Proc(Progress, Nil)? = nil,
-    )
+    ) : Nil
     end
 
     def cycle(now_ns : Int64) : Report | Fault
@@ -75,8 +75,8 @@ module Pylon::Session
       if halt
         return Report.new(
           reconciliation.conflicts,
-          [] of Write::Outcome,
-          [] of Write::Outcome,
+          Array(Write::Outcome).new,
+          Array(Write::Outcome).new,
           halt,
           reconciliation.troubles,
         )
@@ -122,10 +122,10 @@ module Pylon::Session
           (Time.instant - written).total_milliseconds,
         ])
         STDERR.puts("  client alloc scans=%.1f reconcile=%.1f transfer=%.1f commit=%.1f MiB" % [
-          (alloc_scanned - alloc_started) / 1048576.0,
-          (alloc_reconciled - alloc_scanned) / 1048576.0,
-          (alloc_written - alloc_reconciled) / 1048576.0,
-          (GC.stats.total_bytes - alloc_written) / 1048576.0,
+          (alloc_scanned - alloc_started) / 1_048_576.0,
+          (alloc_reconciled - alloc_scanned) / 1_048_576.0,
+          (alloc_written - alloc_reconciled) / 1_048_576.0,
+          (GC.stats.total_bytes - alloc_written) / 1_048_576.0,
         ])
         {% if B.has_method?(:exchanges) %}
           STDERR.puts("  round trips so far=#{@remote.exchanges}")
@@ -143,7 +143,7 @@ module Pylon::Session
       holds
     end
 
-    private def transfer(changes : Core::Changes, source, target, direction : Direction, target_holds : Set(Bytes)) : Array(Write::Outcome) | Fault
+    private def transfer(changes : Core::Changes, source : A | B, target : A | B, direction : Direction, target_holds : Set(Bytes)) : Array(Write::Outcome) | Fault
       total = changes.size
       outcomes = Array(Write::Outcome).new(total)
       offset = 0
@@ -231,14 +231,14 @@ module Pylon::Session
 
       {% if flag?(:timing) %}
         if total > 0
-          STDERR.puts("  transfer #{direction}: changes=#{total} reused=#{reused} candidates=#{candidates.size} signatures=#{signatures.size} deltas=#{Wire::Delta.deltas_sent} (#{(Wire::Delta.delta_bytes / 1048576.0).round(2)} MiB ops) fulls=#{Wire::Delta.fulls_sent} (#{(Wire::Delta.full_bytes / 1048576.0).round(2)} MiB raw)")
+          STDERR.puts("  transfer #{direction}: changes=#{total} reused=#{reused} candidates=#{candidates.size} signatures=#{signatures.size} deltas=#{Wire::Delta.deltas_sent} (#{(Wire::Delta.delta_bytes / 1_048_576.0).round(2)} MiB ops) fulls=#{Wire::Delta.fulls_sent} (#{(Wire::Delta.full_bytes / 1_048_576.0).round(2)} MiB raw)")
         end
       {% end %}
 
       outcomes
     end
 
-    private def worth_waiting_for_signature?(batch : Core::Changes, source, candidates : Set(Bytes)) : Bool
+    private def worth_waiting_for_signature?(batch : Core::Changes, source : A | B, candidates : Set(Bytes)) : Bool
       return false if candidates.empty?
 
       weight = 0_u64
@@ -265,11 +265,11 @@ module Pylon::Session
 
     private def delta_pairs(
       changes : Core::Changes,
-      source,
+      source : A | B,
       target_holds : Set(Bytes),
       candidates : Set(Bytes),
     ) : Array(Wire::Message::SignaturesRequest::Pair)
-      pairs = [] of Wire::Message::SignaturesRequest::Pair
+      pairs = Array(Wire::Message::SignaturesRequest::Pair).new
 
       changes.each do |change|
         new = change.new

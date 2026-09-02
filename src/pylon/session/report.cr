@@ -14,8 +14,8 @@ module Pylon::Session
       @local_outcomes : Array(Write::Outcome),
       @remote_outcomes : Array(Write::Outcome),
       @halt : Core::Safety::Reason? = nil,
-      @troubles : Array(Core::Trouble) = [] of Core::Trouble,
-    )
+      @troubles : Array(Core::Trouble) = Array(Core::Trouble).new,
+    ) : Nil
     end
 
     def halted? : Bool

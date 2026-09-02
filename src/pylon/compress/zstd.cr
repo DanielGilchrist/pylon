@@ -7,7 +7,7 @@ module Pylon::Compress
 
     DEFAULT_LEVEL = 1
 
-    def initialize(@level : Int32 = DEFAULT_LEVEL)
+    def initialize(@level : Int32 = DEFAULT_LEVEL) : Nil
     end
 
     def compress(source : Bytes, into : Bytes) : Bytes | Error

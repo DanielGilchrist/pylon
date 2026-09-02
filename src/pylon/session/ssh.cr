@@ -8,7 +8,7 @@ module Pylon::Session
       config : String? = nil,
       port : String? = nil,
     ) : Array(String)
-      arguments = [] of String
+      arguments = Array(String).new
 
       if (config_path = config)
         arguments << "-F" << config_path

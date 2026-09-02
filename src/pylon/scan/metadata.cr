@@ -25,7 +25,7 @@ module Pylon::Scan
       stat = uninitialized LibC::Stat
       return from(stat) if LibC.lstat(path.check_no_null_byte, pointerof(stat)) == 0
 
-      case errno = Errno.value
+      case (errno = Errno.value)
       when Errno::ENOENT, Errno::ENOTDIR
         nil
       else
@@ -61,7 +61,7 @@ module Pylon::Scan
     getter mtime_ns : Int64
     getter inode : UInt64
 
-    def initialize(@mode : UInt32, @size : UInt64, @mtime_ns : Int64, @inode : UInt64)
+    def initialize(@mode : UInt32, @size : UInt64, @mtime_ns : Int64, @inode : UInt64) : Nil
     end
 
     def kind : Kind

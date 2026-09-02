@@ -9,7 +9,7 @@ module Pylon::Wire::Message
 
     getter pairs : Array(Pair)
 
-    def initialize(@pairs : Array(Pair))
+    def initialize(@pairs : Array(Pair)) : Nil
     end
 
     def tag : Tag

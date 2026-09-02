@@ -3,7 +3,7 @@ struct Pylon::CLI
     struct Invalid
       getter message : String
 
-      def initialize(@message : String)
+      def initialize(@message : String) : Nil
       end
     end
 
@@ -30,7 +30,7 @@ struct Pylon::CLI
     getter host : String
     getter path : String
 
-    def initialize(@host : String, @path : String)
+    def initialize(@host : String, @path : String) : Nil
     end
   end
 end

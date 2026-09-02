@@ -7,7 +7,7 @@ private NAMES    = {"a", "b"}
 private def random_entry(random : Random, depth : Int32) : Entry?
   return CONTENTS[random.rand(CONTENTS.size)] if depth <= 0 || random.rand(3) == 0
 
-  contents = {} of String => Entry
+  contents = Hash(String, Entry).new
   NAMES.each do |name|
     if (child = random_entry(random, depth - 1))
       contents[name] = child
@@ -40,7 +40,7 @@ describe "expanding changes" do
   end
 
   it "produces the same tree as the change it replaced" do
-    seed = 20260910_u64
+    seed = 20_260_910_u64
     random = Random.new(seed)
 
     300.times do |iteration|

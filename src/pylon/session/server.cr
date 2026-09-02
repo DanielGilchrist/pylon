@@ -19,7 +19,7 @@ module Pylon::Session
       @subscriber : Watch::Any? = nil,
       @checkpoints : Checkpoint::Schedule? = nil,
       @log : IO = STDERR,
-    )
+    ) : Nil
       @lock = Sync::Mutex.new
       @stopping = false
       @sequence = 0_u32
@@ -56,21 +56,19 @@ module Pylon::Session
       requests = Channel(Wire::Message::Any).new(READ_AHEAD)
 
       Fibers.detach(:server_requests) do
-        begin
-          loop do
-            message = Wire::Message.read(@input)
-            break if message.is_a?(Wire::Closed)
+        loop do
+          message = Wire::Message.read(@input)
+          break if message.is_a?(Wire::Closed)
 
-            if message.is_a?(Wire::Invalid)
-              @log.puts("pylon: stopped reading requests: #{message.reason}")
-              break
-            end
-
-            requests.send(message)
+          if message.is_a?(Wire::Invalid)
+            @log.puts("pylon: stopped reading requests: #{message.reason}")
+            break
           end
-        ensure
-          requests.close
+
+          requests.send(message)
         end
+      ensure
+        requests.close
       end
 
       requests
@@ -85,14 +83,12 @@ module Pylon::Session
       @pushed = pushed
 
       Fibers.detach(:server_announce) do
-        begin
-          until @stopping
-            subscriber.signals.receive?
-            push unless @stopping
-          end
-        ensure
-          pushed.close
+        until @stopping
+          subscriber.signals.receive?
+          push unless @stopping
         end
+      ensure
+        pushed.close
       end
     end
 

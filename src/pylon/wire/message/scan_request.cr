@@ -8,7 +8,7 @@ module Pylon::Wire::Message
 
     getter now_ns : Int64
 
-    def initialize(@now_ns : Int64)
+    def initialize(@now_ns : Int64) : Nil
     end
 
     def tag : Tag

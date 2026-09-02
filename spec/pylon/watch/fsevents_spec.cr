@@ -68,7 +68,7 @@ describe Pylon::Watch::FSEvents do
     File.write(File.join(staging, "incoming", "top.rb"), "puts 1")
     File.write(File.join(staging, "incoming", "sub", "inner.rb"), "puts 2")
 
-    watcher = FSEvents.open(root, [] of String)
+    watcher = FSEvents.open(root, Array(String).new)
     watcher.should be_a(FSEvents)
     next unless watcher.is_a?(FSEvents)
 

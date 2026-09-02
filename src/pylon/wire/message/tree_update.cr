@@ -8,7 +8,7 @@ module Pylon::Wire::Message
     getter sequence : UInt32
     getter root : Core::Entry?
 
-    def initialize(@sequence : UInt32, @root : Core::Entry?)
+    def initialize(@sequence : UInt32, @root : Core::Entry?) : Nil
     end
 
     def tag : Tag

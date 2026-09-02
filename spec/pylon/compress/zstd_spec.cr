@@ -12,7 +12,7 @@ private RUBY = <<-SOURCE
   end
   SOURCE
 
-private def round_trip(codec, source : Bytes) : Bytes
+private def round_trip(codec : Codec, source : Bytes) : Bytes
   packed = codec.compress(source, Bytes.new(codec.bound(source.size)))
   packed.should be_a(Bytes)
   return Bytes.empty unless packed.is_a?(Bytes)

@@ -15,9 +15,9 @@ struct MemoryFilesystem
     statable : Bool = true,
     reported_size : UInt64? = nil
 
-  getter reads = [] of String
+  getter reads = Array(String).new
 
-  def initialize(@nodes : Hash(String, Node))
+  def initialize(@nodes : Hash(String, Node)) : Nil
   end
 
   def self.build(files : Hash(String, String)) : MemoryFilesystem

@@ -6,7 +6,7 @@ module Pylon::Scan
     getter digest : Bytes
     getter? provisional : Bool
 
-    def initialize(@metadata : Metadata, @digest : Bytes, @provisional : Bool = false)
+    def initialize(@metadata : Metadata, @digest : Bytes, @provisional : Bool = false) : Nil
     end
 
     def reuse(observed : Metadata, now_ns : Int64, granularity_ns : Int64) : Bytes?

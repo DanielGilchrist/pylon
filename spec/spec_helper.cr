@@ -4,7 +4,7 @@ require "./support/entries"
 
 include Pylon::Core
 
-def cycle!(session, now_ns : Int64) : Pylon::Session::Report
+def cycle!(session : Pylon::Session::Session, now_ns : Int64) : Pylon::Session::Report
   result = session.cycle(now_ns)
   return result if result.is_a?(Pylon::Session::Report)
 
@@ -20,8 +20,8 @@ record ReconcileCase,
   base_changes : Changes = Changes.new,
   local_changes : Changes = Changes.new,
   remote_changes : Changes = Changes.new,
-  conflicts : Array(Conflict) = [] of Conflict,
-  troubles : Array(Trouble) = [] of Trouble
+  conflicts : Array(Conflict) = Array(Conflict).new,
+  troubles : Array(Trouble) = Array(Trouble).new
 
 def assert_changes(actual : Changes, expected : Changes, label : String) : Nil
   actual.size.should eq(expected.size), "#{label}: expected #{expected.size} change(s), got #{actual.size}"

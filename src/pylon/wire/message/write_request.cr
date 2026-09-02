@@ -10,11 +10,11 @@ module Pylon::Wire::Message
     getter changes : Core::Changes
     getter source : ContentSource
 
-    def self.new(changes : Core::Changes, contents : Contents)
+    def self.new(changes : Core::Changes, contents : Contents) : WriteRequest
       new(changes, ContentSource::Materialised.new(contents))
     end
 
-    def initialize(@changes : Core::Changes, @source : ContentSource)
+    def initialize(@changes : Core::Changes, @source : ContentSource) : Nil
     end
 
     def contents : Contents

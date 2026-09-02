@@ -48,7 +48,7 @@ module Pylon::Wire
     end
 
     def read(io : IO) : Any | Closed | Invalid
-      case byte = first_byte(io)
+      case (byte = first_byte(io))
       in Closed, Invalid
         byte
       in UInt8

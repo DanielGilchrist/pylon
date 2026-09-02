@@ -2,14 +2,14 @@ require "../../spec_helper"
 require "../../../src/pylon/cli/sync"
 require "../../../src/pylon/cli/local"
 
-private def parse_sync(extra : Array(String) = [] of String) : Pylon::CLI::Sync
+private def parse_sync(extra : Array(String) = Array(String).new) : Pylon::CLI::Sync
   parsed = Pylon::CLI::Sync.parse(["./here", "user@host:/there"] + extra)
   raise "the sync command did not parse: #{parsed.inspect}" unless parsed.is_a?(Pylon::CLI::Sync)
 
   parsed
 end
 
-private def parse_local(extra : Array(String) = [] of String) : Pylon::CLI::Local
+private def parse_local(extra : Array(String) = Array(String).new) : Pylon::CLI::Local
   parsed = Pylon::CLI::Local.parse(["./one", "./two"] + extra)
   raise "the local command did not parse: #{parsed.inspect}" unless parsed.is_a?(Pylon::CLI::Local)
 

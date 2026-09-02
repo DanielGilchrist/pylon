@@ -6,7 +6,7 @@ include Pylon::Write
 
 private NOW = 1_000_000_000_000_i64
 
-private def writer(target, staging, cache)
+private def writer(target : MemoryTarget, staging : MemoryStaging, cache : Pylon::Scan::Cache) : Writer(MemoryTarget, MemoryStaging)
   Writer.new(target, staging, cache, NOW)
 end
 
@@ -15,7 +15,8 @@ private def cache_for(target : MemoryTarget, paths : Enumerable(String)) : Pylon
 
   paths.each do |path|
     node = target.nodes[path]
-    metadata = target.metadata(path).not_nil!
+    next unless (metadata = target.metadata(path))
+
     cache[path] = Pylon::Scan::CacheEntry.new(metadata, Digest::SHA256.digest(node.content))
   end
 

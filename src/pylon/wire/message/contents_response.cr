@@ -9,10 +9,10 @@ module Pylon::Wire::Message
 
     getter source : ContentSource
 
-    def initialize(@source : ContentSource)
+    def initialize(@source : ContentSource) : Nil
     end
 
-    def initialize(contents : Contents)
+    def initialize(contents : Contents) : Nil
       @source = ContentSource::Materialised.new(contents)
     end
 

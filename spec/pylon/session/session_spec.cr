@@ -8,7 +8,7 @@ include Pylon::Core
 
 private NOW = Time.utc.to_unix_ns.to_i64
 
-private def in_pair(& : String, String, Session(LocalEndpoint, LocalEndpoint) ->)
+private def in_pair(& : String, String, Session(LocalEndpoint, LocalEndpoint) ->) : Nil
   base = File.join(Dir.tempdir, "pylon-session-#{Random::Secure.hex(8)}")
   local_root = File.join(base, "local")
   remote_root = File.join(base, "remote")
@@ -28,7 +28,7 @@ private def tick : Int64
 end
 
 private def tree(root : String) : Hash(String, String)
-  files = {} of String => String
+  files = Hash(String, String).new
 
   Dir.glob(File.join(root, "**", "*")).each do |path|
     next unless File.file?(path)

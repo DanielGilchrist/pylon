@@ -8,7 +8,7 @@ module Pylon::Wire::Message
 
     getter message : String
 
-    def initialize(@message : String)
+    def initialize(@message : String) : Nil
     end
 
     def tag : Tag

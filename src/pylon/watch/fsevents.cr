@@ -42,7 +42,7 @@ module Pylon::Watch
       ignores : Array(String),
       signals : Channel(Nil) = Channel(Nil).new(1),
     ) : FSEvents | Unavailable
-      case resolved = Filesystem.realpath(root)
+      case (resolved = Filesystem.realpath(root))
       in Problem
         Unavailable.new("the sync root could not be resolved: #{resolved.reason}")
       in String
@@ -59,7 +59,7 @@ module Pylon::Watch
 
     @started : Start? | Unresolved = Unresolved.new
 
-    def initialize(@root : String, @ignores : Scan::Ignores, @signals : Channel(Nil))
+    def initialize(@root : String, @ignores : Scan::Ignores, @signals : Channel(Nil)) : Nil
       @prefix = "#{@root}/"
       @paths = Set(String).new
       @lock = Sync::Mutex.new

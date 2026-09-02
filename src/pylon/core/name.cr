@@ -19,7 +19,7 @@ module Pylon::Core
       nil
     end
 
-    protected def initialize(@value : String)
+    protected def initialize(@value : String) : Nil
     end
   end
 end

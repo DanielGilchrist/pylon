@@ -172,7 +172,7 @@ module Pylon::Wire
       signature.blocks.each_with_index do |block, position|
         break if position >= full_blocks
 
-        (candidates[block.weak] ||= [] of Int32) << position
+        (candidates[block.weak] ||= Array(Int32).new) << position
       end
 
       candidates

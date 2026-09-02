@@ -4,7 +4,7 @@ require "../../src/pylon/disk"
 
 include Pylon
 
-private def in_sandbox(& : String, Disk ->)
+private def in_sandbox(& : String, Disk ->) : Nil
   root = File.join(Dir.tempdir, "pylon-target-#{Random::Secure.hex(8)}")
   Dir.mkdir_p(root)
 

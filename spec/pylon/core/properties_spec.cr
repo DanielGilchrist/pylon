@@ -9,7 +9,7 @@ private def random_entry(random : Random, depth : Int32, pool : Tuple = ALL_CONT
     return pool[random.rand(pool.size)]
   end
 
-  contents = {} of String => Entry
+  contents = Hash(String, Entry).new
   NAMES.each do |name|
     if (child = random_entry(random, depth - 1, pool))
       contents[name] = child
@@ -30,7 +30,7 @@ private def readable_twin(entry : Entry?) : Entry?
   in Pylon::Core::Problematic
     Fixtures.f1
   in Pylon::Core::Directory
-    contents = {} of String => Entry
+    contents = Hash(String, Entry).new
     entry.contents.each { |name, child| contents[name] = readable_twin(child) || child }
     Pylon::Core::Directory.new(contents)
   end
@@ -76,7 +76,7 @@ end
 
 describe "reconciler properties" do
   it "applying a reconciliation leaves nothing further to do" do
-    seed = 20260826_u64
+    seed = Time.utc(2026, 8, 26).to_unix.to_u64
     random = Random.new(seed)
 
     200.times do |iteration|
@@ -102,7 +102,7 @@ describe "reconciler properties" do
   end
 
   it "converges both replicas when there is no conflict" do
-    seed = 20260827_u64
+    seed = Time.utc(2026, 8, 27).to_unix.to_u64
     random = Random.new(seed)
 
     200.times do |iteration|
@@ -127,7 +127,7 @@ describe "reconciler properties" do
   end
 
   it "never records an unsyncable entry in the base" do
-    seed = 20260828_u64
+    seed = Time.utc(2026, 8, 28).to_unix.to_u64
     random = Random.new(seed)
 
     200.times do |iteration|
@@ -148,7 +148,7 @@ describe "reconciler properties" do
   end
 
   it "keeps the base entry for every path that is unreadable on both sides" do
-    seed = 20260902_u64
+    seed = Time.utc(2026, 9, 2).to_unix.to_u64
     random = Random.new(seed)
 
     200.times do |iteration|

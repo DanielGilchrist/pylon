@@ -14,7 +14,7 @@ struct Pylon::CLI
     getter root : String
 
     @[Kebab::Option(description: "Path to ignore, repeatable")]
-    getter ignore : Array(String) = [] of String
+    getter ignore : Array(String) = Array(String).new
 
     @[Kebab::Option(description: "Where to keep sync state")]
     getter state : String?
@@ -26,7 +26,7 @@ struct Pylon::CLI
       endpoint = Session::LocalEndpoint.new(root, Scan::Ignores.new(ignore), compression: compression)
 
       state.try do |path|
-        case restored = Session::Checkpoint.load(path)
+        case (restored = Session::Checkpoint.load(path))
         in Session::Checkpoint then endpoint.cache = restored.local_cache
         in Session::Checkpoint::Absent
         in Session::Checkpoint::Damaged
@@ -34,7 +34,7 @@ struct Pylon::CLI
         end
       end
 
-      case opened = Watch::Watcher.open(root, ignore, Channel(Nil).new(1))
+      case (opened = Watch::Watcher.open(root, ignore, Channel(Nil).new(1)))
       in Watch::Any
         subscriber = opened
         endpoint.accelerate!
@@ -46,8 +46,8 @@ struct Pylon::CLI
       checkpoints = state.try do |path|
         Session::Checkpoint::Schedule.new(
           path,
-          -> { Session::Checkpoint.new(nil, endpoint.cache) },
-          on_problem: ->(problem : String) { STDERR.puts("pylon: #{problem}") },
+          -> : Session::Checkpoint { Session::Checkpoint.new(nil, endpoint.cache) },
+          on_problem: ->(problem : String) : Nil { STDERR.puts("pylon: #{problem}") },
         )
       end
 

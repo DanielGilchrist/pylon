@@ -13,7 +13,7 @@ private FORBIDDEN = {
 
 describe "Pylon::Core purity" do
   it "performs no side effects" do
-    offences = [] of String
+    offences = Array(String).new
 
     Dir.glob(File.join(__DIR__, "..", "..", "..", "src", "pylon", "core", "**", "*.cr")).each do |path|
       File.read_lines(path).each_with_index(1) do |line, number|

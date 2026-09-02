@@ -3,7 +3,7 @@ require "../../wire"
 module Pylon::Wire
   module Delta
     struct OpsEncoder
-      def initialize
+      def initialize : Nil
         @ops = IO::Memory.new
         @pending_offset = 0_i64
         @pending_length = 0_i64

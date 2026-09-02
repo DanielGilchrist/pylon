@@ -30,11 +30,11 @@ module Pylon::Scan
     private alias Surveyed = SurveyedDirectory | SurveyedFile | SurveyedLink | SurveyedUntracked | SurveyedProblem
 
     private class Survey
-      getter nodes = {} of String => Surveyed
-      getter children = {} of String => Array(String)
-      getter pending = [] of PendingFile
-      getter reused = {} of String => Bytes | Problem
-      getter carried = {} of String => Core::Entry
+      getter nodes = Hash(String, Surveyed).new
+      getter children = Hash(String, Array(String)).new
+      getter pending = Array(PendingFile).new
+      getter reused = Hash(String, Bytes | Problem).new
+      getter carried = Hash(String, Core::Entry).new
     end
 
     def initialize(
@@ -47,7 +47,7 @@ module Pylon::Scan
       @baseline : Core::Entry? = nil,
       @recheck : Set(String) = Set(String).new,
       @tally : Tally = Tally.new,
-    )
+    ) : Nil
       @next_cache = Cache.new
       @dirty = expand(@recheck)
     end
@@ -99,7 +99,7 @@ module Pylon::Scan
         return
       end
 
-      case observed = @filesystem.metadata(path)
+      case (observed = @filesystem.metadata(path))
       in Nil
         return
       in Problem
@@ -111,7 +111,7 @@ module Pylon::Scan
       case observed.kind
       in .directory?
         survey.nodes[path] = SurveyedDirectory.new
-        names = [] of String
+        names = Array(String).new
         baseline_contents = baseline.is_a?(Core::Directory) ? baseline.contents : nil
 
         listed = @filesystem.each_child(path) do |name|
@@ -177,7 +177,7 @@ module Pylon::Scan
         return
       end
 
-      partials = Array.new(workers) { {} of String => Bytes | Problem }
+      partials = Array.new(workers) { Hash(String, Bytes | Problem).new }
 
       Pylon::Fibers.parallel(:scan_digest, workers) do |worker|
         hash_slice(survey, pending, partials[worker], worker, workers)
@@ -216,7 +216,7 @@ module Pylon::Scan
 
       case node
       in SurveyedDirectory
-        contents = {} of String => Core::Entry
+        contents = Hash(String, Core::Entry).new
 
         survey.children[path]?.try &.each do |name|
           if (child = build(survey, digests, Core::Paths.join(path, name)))
@@ -226,7 +226,7 @@ module Pylon::Scan
 
         Core::Directory.new(contents)
       in SurveyedFile
-        case digest = digests[path]?
+        case (digest = digests[path]?)
         in Nil
           raise "the scan surveyed #{path.inspect} as a file but computed no digest for it"
         in Problem
@@ -241,7 +241,7 @@ module Pylon::Scan
           Core::File.new(digest, executable: node.metadata.executable?)
         end
       in SurveyedLink
-        case target = node.target
+        case (target = node.target)
         in Problem
           Core::Problematic.new("the link target #{target.reason}")
         in String

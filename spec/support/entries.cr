@@ -5,8 +5,8 @@ require "../../src/pylon/scan/metadata"
 module Fixtures
   include Pylon::Core
 
-  def self.built(local : Array(String) = [] of String, remote : Array(String) = [] of String) : Preferences
-    case preferences = Preferences.build(local, remote)
+  def self.built(local : Array(String) = Array(String).new, remote : Array(String) = Array(String).new) : Preferences
+    case (preferences = Preferences.build(local, remote))
     in Preferences          then preferences
     in Preferences::Invalid then raise "the fixture preferences are not a valid glob: #{preferences.message}"
     end

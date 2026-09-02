@@ -12,7 +12,7 @@ struct Pylon::CLI
     @progress : Session::Progress? = nil
     @scan : Scan::Tally? = nil
 
-    def initialize(@io : IO, @verbose : Bool = false, @dry_run : Bool = false, @errors : IO = STDERR)
+    def initialize(@io : IO, @verbose : Bool = false, @dry_run : Bool = false, @errors : IO = STDERR) : Nil
       @announced = Set(String).new
       @announced_troubles = Set(String).new
       @spinner = Spinner.new(@io)
@@ -136,11 +136,11 @@ struct Pylon::CLI
 
       outgoing = report.remote_outcomes.select(&.applied?)
       incoming = report.local_outcomes.select(&.applied?)
-      skipped = @verbose ? report.skipped : [] of Write::Outcome
+      skipped = @verbose ? report.skipped : Array(Write::Outcome).new
       spoke = announce(report.conflicts)
       spoke = announce_troubles(report.troubles) || spoke
 
-      return unless spoke || !outgoing.empty? || !incoming.empty? || !skipped.empty?
+      return if !spoke && outgoing.empty? && incoming.empty? && skipped.empty?
 
       show("↑", Colorize::ColorANSI::Green, outgoing)
       show("↓", Colorize::ColorANSI::Blue, incoming)

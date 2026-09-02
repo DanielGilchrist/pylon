@@ -53,11 +53,11 @@ module Pylon::Watch
       @root : String,
       @ignores : Scan::Ignores,
       @signals : Channel(Nil),
-    )
+    ) : Nil
       @descriptor = descriptor
       @wake_read = wake_read
       @wake_write = wake_write
-      @paths = {} of Int32 => String
+      @paths = Hash(Int32, String).new
       @dirty = Set(String).new
       @lock = Sync::Mutex.new
       @fresh = false

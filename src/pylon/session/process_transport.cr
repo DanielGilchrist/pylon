@@ -13,14 +13,14 @@ module Pylon::Session
     getter writer : IO
 
     def self.open(command : String, arguments : Array(String)) : ProcessTransport | Problem
-      case process = start(command, arguments, Process::Redirect::Inherit)
+      case (process = start(command, arguments, Process::Redirect::Inherit))
       in Problem then process
       in Process then new(process)
       end
     end
 
     def self.open(command : String, arguments : Array(String), &relay : String ->) : ProcessTransport | Problem
-      case process = start(command, arguments, Process::Redirect::Pipe)
+      case (process = start(command, arguments, Process::Redirect::Pipe))
       in Problem
         process
       in Process
@@ -48,7 +48,7 @@ module Pylon::Session
       Problem.new("#{command} could not be started: #{error.message || error.class.name}")
     end
 
-    private def initialize(@process : Process)
+    private def initialize(@process : Process) : Nil
       @reader = @process.output
       @writer = @process.input
     end

@@ -5,11 +5,11 @@ require "./staging/unrecoverable"
 
 module Pylon::Session
   struct Staging(R)
-    def initialize(@contents : Wire::Contents, @resolver : R = Unrecoverable.new)
+    def initialize(@contents : Wire::Contents, @resolver : R = Unrecoverable.new) : Nil
     end
 
     def content(digest : Bytes) : Bytes?
-      case staged = @contents[digest]?
+      case (staged = @contents[digest]?)
       in Nil
         @resolver.recovered_content(digest)
       in Bytes

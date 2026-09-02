@@ -35,8 +35,8 @@ module Pylon::Write
       folded
     end
 
-    getter independent = [] of Int32
-    getter removals = [] of Int32
-    getter ordered = [] of Int32
+    getter independent = Array(Int32).new
+    getter removals = Array(Int32).new
+    getter ordered = Array(Int32).new
   end
 end

@@ -3,7 +3,7 @@ module Pylon::Core
     getter contents : Hash(String, Entry)
     getter? contains_problematic : Bool
 
-    def initialize(contents : Hash(String, V) = Hash(String, Entry).new) forall V
+    def initialize(contents : Hash(String, V) = Hash(String, Entry).new) : Nil forall V
       if contents.is_a?(Hash(String, Entry))
         @contents = contents
       else
@@ -50,7 +50,7 @@ module Pylon::Core
     end
 
     private def carry_forward(stop_at : String) : Hash(String, Entry)
-      carried = {} of String => Entry
+      carried = Hash(String, Entry).new
 
       contents.each do |name, child|
         break if name == stop_at
@@ -65,7 +65,7 @@ module Pylon::Core
   struct File
     getter digest : Bytes
 
-    def initialize(@digest : Bytes, @executable : Bool = false)
+    def initialize(@digest : Bytes, @executable : Bool = false) : Nil
     end
 
     def executable? : Bool
@@ -80,7 +80,7 @@ module Pylon::Core
   struct SymbolicLink
     getter target : String
 
-    def initialize(@target : String)
+    def initialize(@target : String) : Nil
     end
 
     def syncable : SymbolicLink
@@ -97,7 +97,7 @@ module Pylon::Core
   struct Problematic
     getter problem : String
 
-    def initialize(@problem : String)
+    def initialize(@problem : String) : Nil
     end
 
     def syncable : Nil

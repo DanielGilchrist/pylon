@@ -19,7 +19,7 @@ struct Pylon::CLI
     getter remote : String
 
     @[Kebab::Option(description: "Path to ignore, repeatable")]
-    getter ignore : Array(String) = [] of String
+    getter ignore : Array(String) = Array(String).new
 
     @[Kebab::Option(description: "Where to keep sync state")]
     getter state : String?
@@ -28,10 +28,10 @@ struct Pylon::CLI
     getter compression : Int32 = Pylon::Compress::Zstd::DEFAULT_LEVEL
 
     @[Kebab::Option(description: "Conflicts matching this glob keep the first directory's copy, repeatable, . is the fallback")]
-    getter prefer_local : Array(String) = [] of String
+    getter prefer_local : Array(String) = Array(String).new
 
     @[Kebab::Option(description: "Conflicts matching this glob keep the second directory's copy, repeatable, . is the fallback")]
-    getter prefer_remote : Array(String) = [] of String
+    getter prefer_remote : Array(String) = Array(String).new
 
     @[Kebab::Option(short: 'w', description: "Keep running and sync on every change")]
     getter? watch : Bool = false
@@ -70,8 +70,8 @@ struct Pylon::CLI
       checkpoints = state.try do |path|
         Session::Checkpoint::Schedule.new(
           path,
-          -> { Session::Checkpoint.new(session.base, left.cache, right.cache) },
-          on_problem: ->(problem : String) { reporter.warn(problem) },
+          -> : Session::Checkpoint { Session::Checkpoint.new(session.base, left.cache, right.cache) },
+          on_problem: ->(problem : String) : Nil { reporter.warn(problem) },
         )
       end
 
@@ -90,10 +90,10 @@ struct Pylon::CLI
       end
 
       signals = Channel(Nil).new(16)
-      watchers = [] of {Session::LocalEndpoint, Watch::Any}
+      watchers = Array(::Tuple(Session::LocalEndpoint, Watch::Any)).new
 
       [{left, local}, {right, remote}].each do |endpoint, root|
-        case subscriber = Watch::Watcher.open(root, ignore, signals)
+        case (subscriber = Watch::Watcher.open(root, ignore, signals))
         in Watch::Any
           watchers << {endpoint, subscriber}
         in Watch::Unavailable
@@ -105,8 +105,8 @@ struct Pylon::CLI
 
       watchers.each { |endpoint, _| endpoint.accelerate! }
 
-      runner = Session::Runner.new(session, signals, before: -> { drain(watchers) }, gauge: -> { register(watchers) })
-      Signal::INT.trap { runner.stop }
+      runner = Session::Runner.new(session, signals, before: -> : Nil { drain(watchers) }, gauge: -> : Int32 { register(watchers) })
+      Process.on_terminate { runner.stop }
 
       fault = runner.run do |report, elapsed|
         reporter.report(report, elapsed)
@@ -126,7 +126,7 @@ struct Pylon::CLI
       path = state
       return Session::Checkpoint.new if path.nil?
 
-      case loaded = Session::Checkpoint.load(path)
+      case (loaded = Session::Checkpoint.load(path))
       in Session::Checkpoint then loaded
       in Session::Checkpoint::Absent
         Session::Checkpoint.new
@@ -136,11 +136,11 @@ struct Pylon::CLI
       end
     end
 
-    private def drain(watchers) : Nil
+    private def drain(watchers : Array(::Tuple(Session::LocalEndpoint, Watch::Any))) : Nil
       watchers.each { |endpoint, subscriber| endpoint.mark_dirty(subscriber.drain) }
     end
 
-    private def register(watchers) : Int32
+    private def register(watchers : Array(::Tuple(Session::LocalEndpoint, Watch::Any))) : Int32
       watchers.sum { |endpoint, subscriber| endpoint.register(subscriber.drain) }
     end
   end

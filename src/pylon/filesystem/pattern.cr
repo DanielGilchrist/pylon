@@ -16,7 +16,7 @@ module Pylon
         new(text)
       end
 
-      private def initialize(@text : String)
+      private def initialize(@text : String) : Nil
       end
 
       getter text : String

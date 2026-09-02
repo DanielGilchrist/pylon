@@ -4,7 +4,7 @@ require "../fault"
 module Pylon::Session
   class RemoteEndpoint
     class PendingSignatures
-      def initialize(@endpoint : RemoteEndpoint, @fault : Fault?)
+      def initialize(@endpoint : RemoteEndpoint, @fault : Fault?) : Nil
         @settled = false
       end
 
@@ -17,7 +17,7 @@ module Pylon::Session
           return fault
         end
 
-        case received = @endpoint.receive_signatures
+        case (received = @endpoint.receive_signatures)
         in Fault
           received
         in Wire::Delta::Signatures

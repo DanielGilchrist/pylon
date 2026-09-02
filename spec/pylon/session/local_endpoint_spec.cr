@@ -4,11 +4,11 @@ require "../../../src/pylon/session/local_endpoint"
 
 include Pylon::Session
 
-private def in_endpoint(files : Hash(String, String), & : LocalEndpoint, Hash(String, Bytes) ->)
+private def in_endpoint(files : Hash(String, String), & : LocalEndpoint, Hash(String, Bytes) ->) : Nil
   root = File.join(Dir.tempdir, "pylon-endpoint-#{Random::Secure.hex(8)}")
   Dir.mkdir_p(root)
 
-  digests = {} of String => Bytes
+  digests = Hash(String, Bytes).new
   files.each do |name, content|
     File.write(File.join(root, name), content)
     digests[name] = Digest::SHA256.digest(content).to_slice

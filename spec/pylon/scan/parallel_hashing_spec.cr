@@ -8,7 +8,7 @@ include Pylon::Scan
 
 private FILES = 400
 
-private def in_tree(& : String ->)
+private def in_tree(& : String ->) : Nil
   root = File.join(Dir.tempdir, "pylon-hash-#{Random::Secure.hex(8)}")
   Dir.mkdir_p(File.join(root, "nested"))
 

@@ -21,9 +21,9 @@ module Pylon::Session
     @baseline : Core::Entry?
     @recheck : Set(String)
 
-    def initialize(@root : String, @ignores : Scan::Ignores = Scan::Ignores::NONE, @compression : Int32 = Compress::Zstd::DEFAULT_LEVEL)
+    def initialize(@root : String, @ignores : Scan::Ignores = Scan::Ignores::NONE, @compression : Int32 = Compress::Zstd::DEFAULT_LEVEL) : Nil
       @cache = Scan::Cache.new
-      @by_digest = {} of Bytes => Located
+      @by_digest = Hash(Bytes, Located).new
       @baseline = nil
       @recheck = Set(String).new
       @accelerated = false
@@ -114,7 +114,7 @@ module Pylon::Session
 
       Wire::ContentSource::Streaming.new(
         digests: wanted.map(&.digest).to_set,
-        emit: ->(io : IO) do
+        emit: ->(io : IO) : Nil do
           buffer = Bytes.new(Wire::Chunks::CHUNK_BYTES)
           scratch = Wire::Chunks.scratch
           codec = Compress::Zstd.new(@compression)
@@ -137,7 +137,7 @@ module Pylon::Session
             @on_stream.try(&.call(want.size))
           end
         end,
-        materialise: -> { materialise(wanted) },
+        materialise: -> : Wire::Contents { materialise(wanted) },
       )
     end
 
@@ -155,7 +155,7 @@ module Pylon::Session
       Wire::Patch.new(based.base, ops)
     end
 
-    private def emit_patch(io : IO, want : Wanted, patch : Wire::Patch, codec, scratch : Bytes) : Nil
+    private def emit_patch(io : IO, want : Wanted, patch : Wire::Patch, codec : Compress::Codec, scratch : Bytes) : Nil
       {% if flag?(:timing) %}
         Wire::Delta.deltas_sent += 1
         Wire::Delta.delta_bytes += patch.ops.size
@@ -187,7 +187,7 @@ module Pylon::Session
     end
 
     private def within(digests : Array(Bytes), budget : UInt64) : Array(Wanted)
-      wanted = [] of Wanted
+      wanted = Array(Wanted).new
       spent = 0_u64
 
       digests.each do |digest|
@@ -237,7 +237,7 @@ module Pylon::Session
     end
 
     private def verified_read(path : String, digest : Bytes) : Bytes?
-      case content = @disk.read(path)
+      case (content = @disk.read(path))
       in Problem
         nil
       in Bytes

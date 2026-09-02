@@ -1,6 +1,6 @@
 module Pylon::Scan
   class Tally
-    def initialize
+    def initialize : Nil
       @files = Atomic(Int64).new(0)
       @hashed_bytes = Atomic(Int64).new(0)
       @finished = Atomic(Int32).new(0)

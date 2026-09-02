@@ -1,6 +1,6 @@
 require "../../spec_helper"
 
-private def build(local : Array(String) = [] of String, remote : Array(String) = [] of String) : Preferences
+private def build(local : Array(String) = Array(String).new, remote : Array(String) = Array(String).new) : Preferences
   case (preferences = Preferences.build(local, remote))
   in Preferences          then preferences
   in Preferences::Invalid then fail(preferences.message)
@@ -45,15 +45,15 @@ describe Pylon::Core::Preferences do
   end
 
   it "refuses a malformed glob as a value" do
-    Preferences.build(["[oops"], [] of String).should be_a(Preferences::Invalid)
+    Preferences.build(["[oops"], Array(String).new).should be_a(Preferences::Invalid)
   end
 
   it "refuses a malformed glob when the bad segment is not the first" do
-    Preferences.build(["src/[abc"], [] of String).should be_a(Preferences::Invalid)
+    Preferences.build(["src/[abc"], Array(String).new).should be_a(Preferences::Invalid)
   end
 
   it "refuses a malformed glob on the remote side too" do
-    Preferences.build([] of String, ["[oops"]).should be_a(Preferences::Invalid)
+    Preferences.build(Array(String).new, ["[oops"]).should be_a(Preferences::Invalid)
   end
 
   it "never raises while matching a rule it accepted" do

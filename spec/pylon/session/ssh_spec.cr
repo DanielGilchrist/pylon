@@ -25,7 +25,7 @@ describe Pylon::Session::SSH do
       "pylon server /srv/app",
     ])
 
-    arguments.index("user@host").not_nil!.should be > arguments.index("-p").not_nil!
+    arguments.index!("user@host").should be > arguments.index!("-p")
   end
 
   it "omits flags that were not asked for" do
@@ -35,7 +35,7 @@ describe Pylon::Session::SSH do
 end
 
 private def opened(command : String, arguments : Array(String)) : ProcessTransport
-  case transport = ProcessTransport.open(command, arguments)
+  case (transport = ProcessTransport.open(command, arguments))
   in Pylon::Problem   then fail(transport.reason)
   in ProcessTransport then transport
   end
@@ -43,7 +43,7 @@ end
 
 describe Pylon::Session::ProcessTransport do
   it "carries bytes to a child process and back" do
-    transport = opened("cat", [] of String)
+    transport = opened("cat", Array(String).new)
 
     transport.writer.puts("hello over the pipe")
     transport.writer.flush
@@ -72,7 +72,7 @@ describe Pylon::Session::ProcessTransport do
   end
 
   it "reports a command that cannot be started instead of raising" do
-    opened = ProcessTransport.open("pylon-no-such-binary", [] of String)
+    opened = ProcessTransport.open("pylon-no-such-binary", Array(String).new)
 
     fail("expected a problem, got a transport") unless opened.is_a?(Pylon::Problem)
     opened.reason.should contain("pylon-no-such-binary could not be started")

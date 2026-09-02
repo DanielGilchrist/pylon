@@ -25,7 +25,7 @@ struct Pylon::CLI
     getter remote : String
 
     @[Kebab::Option(description: "Path to ignore, repeatable")]
-    getter ignore : Array(String) = [] of String
+    getter ignore : Array(String) = Array(String).new
 
     @[Kebab::Option(description: "SSH config file")]
     getter config : String?
@@ -43,10 +43,10 @@ struct Pylon::CLI
     getter compression : Int32 = Pylon::Compress::Zstd::DEFAULT_LEVEL
 
     @[Kebab::Option(description: "Conflicts matching this glob keep this machine's copy, repeatable, . is the fallback")]
-    getter prefer_local : Array(String) = [] of String
+    getter prefer_local : Array(String) = Array(String).new
 
     @[Kebab::Option(description: "Conflicts matching this glob keep the remote's copy, repeatable, . is the fallback")]
-    getter prefer_remote : Array(String) = [] of String
+    getter prefer_remote : Array(String) = Array(String).new
 
     @[Kebab::Option(short: 'w', description: "Keep running and sync on every change")]
     getter? watch : Bool = false
@@ -91,7 +91,7 @@ struct Pylon::CLI
       begin
         left = Session::LocalEndpoint.new(local, ignores, compression: compression)
         left.cache = restored.local_cache
-        left.on_stream = ->(bytes : UInt64) { reporter.streamed(bytes) }
+        left.on_stream = ->(bytes : UInt64) : Nil { reporter.streamed(bytes) }
 
         reporter.observe(left.tally)
         reporter.starting(local, remote) unless dry_run?
@@ -105,14 +105,14 @@ struct Pylon::CLI
           base: restored.base,
           dry_run: dry_run?,
           push_first: restored.base.nil?,
-          on_progress: ->(update : Session::Progress) { reporter.progress(update) },
+          on_progress: ->(update : Session::Progress) : Nil { reporter.progress(update) },
         )
 
         checkpoints = state.try do |path|
           Session::Checkpoint::Schedule.new(
             path,
-            -> { Session::Checkpoint.new(session.base, left.cache, restored.remote_cache) },
-            on_problem: ->(problem : String) { reporter.warn(problem) },
+            -> : Session::Checkpoint { Session::Checkpoint.new(session.base, left.cache, restored.remote_cache) },
+            on_problem: ->(problem : String) : Nil { reporter.warn(problem) },
           )
         end
 
@@ -122,7 +122,15 @@ struct Pylon::CLI
       end
     end
 
-    private def drive(session, reporter, checkpoints, remote_endpoint, local_endpoint, target, signals) : Nil
+    private def drive(
+      session : Session::Session(Session::LocalEndpoint, Session::RemoteEndpoint),
+      reporter : Reporter,
+      checkpoints : Session::Checkpoint::Schedule?,
+      remote_endpoint : Session::RemoteEndpoint,
+      local_endpoint : Session::LocalEndpoint,
+      target : Target,
+      signals : Channel(Nil),
+    ) : Nil
       unless watch?
         cycle_started = Time.instant
         result = session.cycle(Time.utc.to_unix_ns.to_i64)
@@ -144,11 +152,11 @@ struct Pylon::CLI
       runner = Session::Runner.new(
         session,
         signals,
-        before: -> { local_endpoint.mark_dirty(subscriber.drain) },
-        gauge: -> { local_endpoint.register(subscriber.drain) },
+        before: -> : Nil { local_endpoint.mark_dirty(subscriber.drain) },
+        gauge: -> : Int32 { local_endpoint.register(subscriber.drain) },
       )
 
-      Signal::INT.trap { runner.stop }
+      Process.on_terminate { runner.stop }
 
       started = Time.instant
       first = true
@@ -183,7 +191,7 @@ struct Pylon::CLI
       path = state
       return Session::Checkpoint.new if path.nil?
 
-      case loaded = Session::Checkpoint.load(path)
+      case (loaded = Session::Checkpoint.load(path))
       in Session::Checkpoint then loaded
       in Session::Checkpoint::Absent
         Session::Checkpoint.new
