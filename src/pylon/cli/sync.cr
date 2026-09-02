@@ -17,6 +17,7 @@ struct Pylon::CLI
     include Kebab::Parseable
 
     DEFAULT_REMOTE_COMMAND = "pylon serve"
+    DEFAULT_COMPRESSION    = 9
 
     @[Kebab::Argument(description: "Local directory")]
     getter local : String
@@ -39,8 +40,8 @@ struct Pylon::CLI
     @[Kebab::Option(description: "Where to keep sync state")]
     getter state : String?
 
-    @[Kebab::Option(description: "zstd level for content sent from this side")]
-    getter compression : Int32 = Pylon::Compress::Zstd::DEFAULT_LEVEL
+    @[Kebab::Option(description: "zstd level for content sent over the link, both directions")]
+    getter compression : Int32 = DEFAULT_COMPRESSION
 
     @[Kebab::Option(description: "Conflicts matching this glob keep this machine's copy, repeatable, . is the fallback")]
     getter prefer_local : Array(String) = Array(String).new

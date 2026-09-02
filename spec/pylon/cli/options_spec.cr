@@ -26,6 +26,12 @@ describe Pylon::CLI::Sync do
     parsed.ignore.should be_empty
     parsed.state.should be_nil
     parsed.remote_command.should eq(Pylon::CLI::Sync::DEFAULT_REMOTE_COMMAND)
+    parsed.compression.should eq(Pylon::CLI::Sync::DEFAULT_COMPRESSION)
+  end
+
+  it "compresses harder than a local sync because the link, not the CPU, is the bottleneck" do
+    Pylon::CLI::Sync::DEFAULT_COMPRESSION.should be > Pylon::Compress::Zstd::DEFAULT_LEVEL
+    parse_sync(["--compression", "1"]).compression.should eq(1)
   end
 
   it "keeps the given directories" do
@@ -63,6 +69,7 @@ describe Pylon::CLI::Local do
     parsed.dry_run?.should be_false
     parsed.verbose?.should be_false
     parsed.state.should be_nil
+    parsed.compression.should eq(Pylon::Compress::Zstd::DEFAULT_LEVEL)
   end
 
   it "turns on watching, dry runs and verbosity from their short flags" do
