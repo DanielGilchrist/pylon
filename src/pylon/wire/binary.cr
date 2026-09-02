@@ -170,6 +170,7 @@ module Pylon::Wire
         io.write_bytes(metadata.mtime_ns, FORMAT)
         io.write_bytes(metadata.inode, FORMAT)
         write_bytes(io, entry.digest)
+        write_bool(io, entry.provisional?)
       end
     end
 
@@ -187,7 +188,8 @@ module Pylon::Wire
           inode: reader.u64,
         )
 
-        cache[path] = Scan::CacheEntry.new(metadata, reader.digest)
+        digest = reader.digest
+        cache[path] = Scan::CacheEntry.new(metadata, digest, provisional: reader.bool)
       end
 
       cache

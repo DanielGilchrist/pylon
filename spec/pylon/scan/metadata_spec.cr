@@ -70,6 +70,12 @@ describe Pylon::Scan::CacheEntry do
     entry.reuse(racy, NOW, GRANULARITY).should be_nil
   end
 
+  it "refuses to reuse a digest that was recorded inside the granularity window" do
+    entry = CacheEntry.new(metadata, DIGEST, provisional: true)
+
+    entry.reuse(metadata, NOW, GRANULARITY).should be_nil
+  end
+
   it "refuses to reuse a digest when an editor rewrote the file via rename" do
     entry = CacheEntry.new(metadata, DIGEST)
 

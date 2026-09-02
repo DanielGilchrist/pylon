@@ -69,6 +69,22 @@ describe Pylon::Scan::Scanner do
     racy.reads.should eq(["README.md"])
   end
 
+  it "distrusts a digest that was recorded inside the granularity window" do
+    filesystem = sample.with("README.md", mtime_ns: NOW)
+    warm = scan(filesystem).cache
+
+    edited = filesystem.with("README.md", content: "howdy")
+    later = NOW + Scanner::DEFAULT_GRANULARITY_NS * 10
+    snapshot = Scanner.new(edited, warm, later, parallelism: 1).scan
+
+    edited.reads.should eq(["README.md"])
+    root = snapshot.root.should_not be_nil
+    next if root.nil?
+
+    Fixtures.file!(Fixtures.dig!(root, "README.md")).digest
+      .should eq(Digest::SHA256.digest("howdy"))
+  end
+
   it "records the executable bit without rehashing the content" do
     filesystem = sample
     warm = scan(filesystem).cache

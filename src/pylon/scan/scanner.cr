@@ -221,7 +221,12 @@ module Pylon::Scan
         in Problem
           Core::Problematic.new(digest.reason)
         in Bytes
-          @next_cache[path] = CacheEntry.new(node.metadata, digest)
+          @next_cache[path] = CacheEntry.new(
+            node.metadata,
+            digest,
+            provisional: node.metadata.racy?(@now_ns, @granularity_ns),
+          )
+
           Core::File.new(digest, executable: node.metadata.executable?)
         end
       in SurveyedLink
