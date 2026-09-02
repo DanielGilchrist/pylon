@@ -1,5 +1,7 @@
 module Pylon::Scan
   struct Ignores
+    TEMPORARY_PREFIX = ".pylon-tmp-"
+
     @patterns : Set(String)
 
     def initialize(patterns : Enumerable(String))
@@ -30,6 +32,7 @@ module Pylon::Scan
       name = separator ? relative_path[(separator + 1)..] : relative_path
 
       return true if name == ".DS_Store"
+      return true if name.starts_with?(TEMPORARY_PREFIX)
       return true if name.size > 2 && name.starts_with?('#') && name.ends_with?('#')
 
       vim_swap?(name)

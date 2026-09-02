@@ -3,6 +3,7 @@ require "./filesystem"
 require "./wire/chunks"
 require "./wire/binary"
 require "./wire/content_kind"
+require "./scan/ignores"
 require "./scan/metadata"
 require "./scan/observed"
 require "./write/problem"
@@ -10,7 +11,7 @@ require "./write/problem"
 module Pylon
   struct Disk
     READ_BUFFER_BYTES = 64 * 1024
-    TEMPORARY_PREFIX  = ".pylon-tmp-"
+    TEMPORARY_PREFIX  = Scan::Ignores::TEMPORARY_PREFIX
 
     def initialize(@root : String)
     end

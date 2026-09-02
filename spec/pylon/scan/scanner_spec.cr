@@ -158,6 +158,9 @@ describe Pylon::Scan::Ignores do
     ignores.ignore?("docs/.DS_Store").should be_true
     ignores.ignore?("app/#scratch.rb#").should be_true
 
+    ignores.ignore?(".pylon-tmp-4f6a2b1c").should be_true
+    ignores.ignore?("app/models/.pylon-tmp-ffffffff").should be_true
+
     ignores.ignore?("app/models/leave_balance.rb").should be_false
     ignores.ignore?("recordings/session.swp").should be_false
     ignores.ignore?("app/models/swap.rb").should be_false
