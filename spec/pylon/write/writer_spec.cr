@@ -27,7 +27,7 @@ describe Pylon::Write::Writer do
     digest = staging.add("hello")
 
     outcomes = writer(target, staging, Pylon::Scan::Cache.new)
-      .write([Change.new("greeting.txt", nil, Pylon::Core::File.new(digest))])
+      .write(Pylon::Core::Changes[Change.new("greeting.txt", nil, Pylon::Core::File.new(digest))])
 
     outcomes.size.should eq(1)
     outcomes.first.applied?.should be_true
@@ -43,7 +43,7 @@ describe Pylon::Write::Writer do
     subtree = Pylon::Core::Directory.new({"models" => Pylon::Core::Directory.new({"user.rb" => Pylon::Core::File.new(digest)})})
 
     outcome = writer(target, staging, Pylon::Scan::Cache.new)
-      .write([Change.new("app", nil, subtree)]).first
+      .write(Pylon::Core::Changes[Change.new("app", nil, subtree)]).first
 
     outcome.applied?.should be_true
     target.operations.should eq(["mkdir app", "mkdir app/models", "write app/models/user.rb"])
@@ -53,7 +53,7 @@ describe Pylon::Write::Writer do
     target = MemoryTarget.new
 
     outcome = writer(target, MemoryStaging.new, Pylon::Scan::Cache.new)
-      .write([Change.new("link", nil, Pylon::Core::SymbolicLink.new("elsewhere"))]).first
+      .write(Pylon::Core::Changes[Change.new("link", nil, Pylon::Core::SymbolicLink.new("elsewhere"))]).first
 
     outcome.applied?.should be_true
     outcome.entry.should eq(Pylon::Core::SymbolicLink.new("elsewhere"))
@@ -66,7 +66,7 @@ describe Pylon::Write::Writer do
     target.writable = false
 
     outcome = writer(target, MemoryStaging.new, Pylon::Scan::Cache.new)
-      .write([Change.new("link", nil, Pylon::Core::SymbolicLink.new("elsewhere"))]).first
+      .write(Pylon::Core::Changes[Change.new("link", nil, Pylon::Core::SymbolicLink.new("elsewhere"))]).first
 
     outcome.applied?.should be_false
     outcome.skipped.should eq(WriteFailed.new("the target is read-only"))
@@ -84,7 +84,7 @@ describe Pylon::Write::Writer do
     incoming = staging.add("from the other side")
 
     outcome = writer(target, staging, cache)
-      .write([Change.new("notes.txt", Pylon::Core::File.new(original), Pylon::Core::File.new(incoming))]).first
+      .write(Pylon::Core::Changes[Change.new("notes.txt", Pylon::Core::File.new(original), Pylon::Core::File.new(incoming))]).first
 
     outcome.applied?.should be_false
     outcome.skipped.should eq(ModificationDetected.new)
@@ -99,7 +99,7 @@ describe Pylon::Write::Writer do
     incoming = staging.add("replacement")
 
     outcome = writer(target, staging, Pylon::Scan::Cache.new)
-      .write([Change.new("notes.txt", Pylon::Core::File.new(digest), Pylon::Core::File.new(incoming))]).first
+      .write(Pylon::Core::Changes[Change.new("notes.txt", Pylon::Core::File.new(digest), Pylon::Core::File.new(incoming))]).first
 
     outcome.skipped.should eq(UnknownState.new)
     target.operations.should be_empty
@@ -111,7 +111,7 @@ describe Pylon::Write::Writer do
     cache = cache_for(target, ["script.sh"])
     staging = MemoryStaging.new
 
-    outcome = writer(target, staging, cache).write([
+    outcome = writer(target, staging, cache).write(Pylon::Core::Changes[
       Change.new("script.sh", Pylon::Core::File.new(digest), Pylon::Core::File.new(digest, executable: true)),
     ]).first
 
@@ -128,7 +128,7 @@ describe Pylon::Write::Writer do
     incoming = staging.add("after")
 
     outcome = writer(target, staging, cache)
-      .write([Change.new("notes.txt", Pylon::Core::File.new(original), Pylon::Core::File.new(incoming))]).first
+      .write(Pylon::Core::Changes[Change.new("notes.txt", Pylon::Core::File.new(original), Pylon::Core::File.new(incoming))]).first
 
     outcome.applied?.should be_true
     target.operations.should eq(["write notes.txt"])
@@ -144,7 +144,7 @@ describe Pylon::Write::Writer do
 
     old = Pylon::Core::Directory.new({"user.rb" => Pylon::Core::File.new(digest)})
     outcome = writer(target, staging, cache)
-      .write([Change.new("app", old, Pylon::Core::File.new(incoming))]).first
+      .write(Pylon::Core::Changes[Change.new("app", old, Pylon::Core::File.new(incoming))]).first
 
     outcome.applied?.should be_true
     target.operations.should eq(["remove app", "write app"])
@@ -156,7 +156,7 @@ describe Pylon::Write::Writer do
     cache = cache_for(target, ["gone.txt"])
 
     outcome = writer(target, MemoryStaging.new, cache)
-      .write([Change.new("gone.txt", Pylon::Core::File.new(digest), nil)]).first
+      .write(Pylon::Core::Changes[Change.new("gone.txt", Pylon::Core::File.new(digest), nil)]).first
 
     outcome.applied?.should be_true
     outcome.entry.should be_nil
@@ -169,7 +169,7 @@ describe Pylon::Write::Writer do
     missing = Digest::SHA256.digest("never staged".to_slice)
 
     outcome = writer(target, staging, Pylon::Scan::Cache.new)
-      .write([Change.new("ghost.txt", nil, Pylon::Core::File.new(missing))]).first
+      .write(Pylon::Core::Changes[Change.new("ghost.txt", nil, Pylon::Core::File.new(missing))]).first
 
     outcome.applied?.should be_false
     outcome.skipped.should eq(StagedContentMissing.new)
@@ -184,7 +184,7 @@ describe Pylon::Write::Writer do
     digest = staging.add("hello")
 
     outcome = writer(target, staging, Pylon::Scan::Cache.new)
-      .write([Change.new("greeting.txt", nil, Pylon::Core::File.new(digest))]).first
+      .write(Pylon::Core::Changes[Change.new("greeting.txt", nil, Pylon::Core::File.new(digest))]).first
 
     outcome.applied?.should be_false
     outcome.skipped.should eq(WriteFailed.new("the target is read-only"))
@@ -199,7 +199,7 @@ describe Pylon::Write::Writer do
     target.writable = false
 
     outcome = writer(target, staging, cache)
-      .write([Change.new("stuck", Pylon::Core::File.new(digest), nil)]).first
+      .write(Pylon::Core::Changes[Change.new("stuck", Pylon::Core::File.new(digest), nil)]).first
 
     outcome.applied?.should be_false
     outcome.skipped.should eq(WriteFailed.new("the target is read-only"))
@@ -219,7 +219,7 @@ describe Pylon::Write::Writer do
     })
 
     outcome = writer(target, staging, Pylon::Scan::Cache.new)
-      .write([Change.new("app", nil, subtree)]).first
+      .write(Pylon::Core::Changes[Change.new("app", nil, subtree)]).first
 
     outcome.applied?.should be_false
     entry = outcome.entry

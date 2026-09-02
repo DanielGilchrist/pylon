@@ -1,4 +1,5 @@
 require "../core/change"
+require "./delta"
 require "./reader"
 require "../core/entry"
 require "../scan/cache_entry"
@@ -87,7 +88,7 @@ module Pylon::Wire
       end
     end
 
-    def write_changes(io : IO, changes : Array(Core::Change)) : Nil
+    def write_changes(io : IO, changes : Core::Changes) : Nil
       io.write_bytes(changes.size.to_u32, FORMAT)
 
       changes.each do |change|
@@ -97,9 +98,9 @@ module Pylon::Wire
       end
     end
 
-    def read_changes(reader : Reader) : Array(Core::Change)
+    def read_changes(reader : Reader) : Core::Changes
       count = reader.count
-      changes = Array(Core::Change).new(Wire.capacity_hint(count))
+      changes = Core::Changes.new(initial_capacity: Wire.capacity_hint(count))
 
       reader.repeat(count) do
         path = reader.path
@@ -190,6 +191,61 @@ module Pylon::Wire
       end
 
       cache
+    end
+
+    def read_digests(reader : Reader) : Array(Bytes)
+      count = reader.count
+      digests = Array(Bytes).new(Wire.capacity_hint(count))
+      reader.repeat(count) { digests << reader.digest }
+      digests
+    end
+
+    def read_signatures(reader : Reader) : Delta::Signatures
+      count = reader.count
+      signatures = Delta::Signatures.new(initial_capacity: Wire.capacity_hint(count))
+
+      reader.repeat(count) do
+        wanted = reader.digest
+        base = reader.digest
+        signature = read_signature(reader)
+        signatures[wanted] = Delta::Based.new(base, signature) if signature
+      end
+
+      signatures
+    end
+
+    def read_signature(reader : Reader) : Delta::Signature?
+      block_size = reader.u32
+      base_size = reader.u64
+
+      unless Delta.plausible_dimensions?(block_size, base_size)
+        reader.fail("a content signature claims impossible dimensions")
+        return
+      end
+
+      count = ((base_size + block_size - 1) // block_size).to_u32
+      blocks = Array(Delta::Block).new(Wire.capacity_hint(count))
+
+      reader.repeat(count) do
+        weak = reader.u32
+        strong = Bytes.new(Delta::STRONG_BYTES)
+        reader.fill(strong)
+        blocks << Delta::Block.new(weak, strong)
+      end
+
+      return if reader.failed?
+
+      Delta::Signature.new(block_size.to_i32, base_size.to_i64, blocks)
+    end
+
+    def write_signature(io : IO, signature : Delta::Signature) : Nil
+      io.write_bytes(signature.block_size.to_u32, FORMAT)
+      io.write_bytes(signature.base_size.to_u64, FORMAT)
+
+      signature.blocks.each do |block|
+        io.write_bytes(block.weak, FORMAT)
+        io.write(block.strong)
+      end
     end
   end
 end

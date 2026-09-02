@@ -1,4 +1,4 @@
-require "./contents"
+require "./patch"
 require "./binary"
 
 module Pylon::Wire
@@ -17,7 +17,7 @@ module Pylon::Wire
       end
 
       def write(io : IO) : Nil
-        Wire.write_contents(io, contents)
+        Chunks.write_contents(io, contents)
       end
     end
 

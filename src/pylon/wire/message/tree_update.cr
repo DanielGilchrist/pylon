@@ -1,7 +1,7 @@
-require "./chunks"
+require "../chunks"
 require "./writable"
 
-module Pylon::Wire
+module Pylon::Wire::Message
   struct TreeUpdate
     include Writable
 

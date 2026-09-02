@@ -1,4 +1,5 @@
 require "./change"
+require "./changes"
 require "./entry"
 
 module Pylon::Core
@@ -22,7 +23,7 @@ module Pylon::Core
       end
     end
 
-    def apply(base : Entry?, changes : Array(Change)) : Entry?
+    def apply(base : Entry?, changes : Changes) : Entry?
       return base if changes.empty?
 
       root = Pending.new

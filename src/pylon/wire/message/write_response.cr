@@ -1,8 +1,9 @@
-require "./contents"
-require "./binary"
+require "../patch"
+require "../binary"
+require "../chunks"
 require "./writable"
 
-module Pylon::Wire
+module Pylon::Wire::Message
   struct WriteResponse
     include Writable
 
@@ -16,7 +17,7 @@ module Pylon::Wire
     end
 
     def write_payload(io : IO) : Nil
-      Binary.write_outcomes(io, outcomes)
+      Chunks.write_outcomes(io, outcomes)
     end
   end
 end

@@ -1,8 +1,8 @@
-require "./contents"
-require "./chunks"
+require "../patch"
+require "../chunks"
 require "./writable"
 
-module Pylon::Wire
+module Pylon::Wire::Message
   struct ScanResponse
     include Writable
 

@@ -4,7 +4,7 @@ require "./malformed"
 
 module Pylon::Core
   struct RelativePath
-    ROOT = new("")
+    ROOT                = new("")
     PATH_SEPARATOR_BYTE = '/'.ord.to_u8
 
     getter value : String

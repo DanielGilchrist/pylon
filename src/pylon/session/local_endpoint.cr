@@ -6,6 +6,7 @@ require "../write/writer"
 require "../wire/message"
 require "./staging"
 require "./pending_write"
+require "./local_endpoint/settled_signatures"
 
 module Pylon::Session
   class LocalEndpoint
@@ -83,7 +84,32 @@ module Pylon::Session
       snapshot
     end
 
-    def content_source(digests : Array(Bytes), budget : UInt64) : Wire::ContentSource
+    def delta_capable? : Bool
+      false
+    end
+
+    def signatures_begin(pairs : Array(Wire::Message::SignaturesRequest::Pair)) : SettledSignatures
+      SettledSignatures.new(signatures(pairs))
+    end
+
+    def signatures(pairs : Array(Wire::Message::SignaturesRequest::Pair)) : Wire::Delta::Signatures
+      found = Wire::Delta::Signatures.new
+
+      pairs.each do |pair|
+        located = @by_digest[pair.base]?
+        next if located.nil?
+        next unless Wire::Delta.worthwhile?(located.size)
+
+        content = verified_read(located.path, pair.base)
+        next if content.nil?
+
+        found[pair.wanted] = Wire::Delta::Based.new(pair.base, Wire::Delta.signature(content))
+      end
+
+      found
+    end
+
+    def content_source(digests : Array(Bytes), budget : UInt64, signatures : Wire::Delta::Signatures = Wire::Delta::Signatures.new) : Wire::ContentSource
       wanted = within(digests, budget)
 
       Wire::ContentSource::Streaming.new(
@@ -95,12 +121,50 @@ module Pylon::Session
           hasher = Digest::SHA256.new
 
           wanted.each do |want|
-            @disk.stream(want.path, want.digest, io, buffer, codec, scratch, hasher)
+            patch = compute_patch(want, signatures)
+
+            if patch
+              emit_patch(io, want, patch, codec, scratch)
+            else
+              {% if flag?(:timing) %}
+                Wire::Delta.fulls_sent += 1
+                Wire::Delta.full_bytes += want.size
+              {% end %}
+
+              @disk.stream(want.path, want.digest, io, buffer, codec, scratch, hasher)
+            end
+
             @on_stream.try(&.call(want.size))
           end
         end,
         materialise: -> { materialise(wanted) },
       )
+    end
+
+    private def compute_patch(want : Wanted, signatures : Wire::Delta::Signatures) : Wire::Patch?
+      based = signatures[want.digest]?
+      return if based.nil?
+      return unless Wire::Delta.worthwhile?(want.size)
+
+      content = verified_read(want.path, want.digest)
+      return if content.nil?
+
+      ops = Wire::Delta.compute(content, based.signature)
+      return if ops.nil?
+
+      Wire::Patch.new(based.base, ops)
+    end
+
+    private def emit_patch(io : IO, want : Wanted, patch : Wire::Patch, codec, scratch : Bytes) : Nil
+      {% if flag?(:timing) %}
+        Wire::Delta.deltas_sent += 1
+        Wire::Delta.delta_bytes += patch.ops.size
+      {% end %}
+
+      Wire::Binary.write_bytes(io, want.digest)
+      Wire::ContentKind::Patch.write(io)
+      Wire::Binary.write_bytes(io, patch.base)
+      Wire::Chunks.write_all(io, patch.ops, codec, scratch)
     end
 
     private def materialise(wanted : Array(Wanted)) : Wire::Contents
@@ -139,7 +203,11 @@ module Pylon::Session
       wanted
     end
 
-    def payload_size(changes : Array(Core::Change)) : UInt64?
+    def known_size(path : String) : UInt64?
+      @cache[path]?.try(&.metadata.size)
+    end
+
+    def payload_size(changes : Core::Changes) : UInt64?
       changes.sum(0_u64) do |change|
         entry = change.new
         next 0_u64 unless entry.is_a?(Core::File)
@@ -157,11 +225,27 @@ module Pylon::Session
       by_digest
     end
 
-    def write(changes : Array(Core::Change), source : Wire::ContentSource) : Array(Write::Outcome)
-      Write::Writer.new(@disk, Staging.new(source.contents), @cache).write(changes)
+    def write(changes : Core::Changes, source : Wire::ContentSource) : Array(Write::Outcome)
+      Write::Writer.new(@disk, Staging.new(source.contents, self), @cache).write(changes)
     end
 
-    def write_begin(changes : Array(Core::Change), source : Wire::ContentSource) : PendingWrite
+    def recovered_content(digest : Bytes) : Bytes?
+      located = @by_digest[digest]?
+      return if located.nil?
+
+      verified_read(located.path, digest)
+    end
+
+    private def verified_read(path : String, digest : Bytes) : Bytes?
+      case content = @disk.read(path)
+      in Problem
+        nil
+      in Bytes
+        Core::Digests.matches?(content, digest) ? content : nil
+      end
+    end
+
+    def write_begin(changes : Core::Changes, source : Wire::ContentSource) : PendingWrite
       outcomes = write(changes, source)
       PendingWrite.new(Proc(Array(Write::Outcome) | Fault).new { outcomes })
     end

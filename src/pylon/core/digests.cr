@@ -1,39 +1,37 @@
+require "digest/sha256"
 require "./change"
 require "./entry"
+require "./changes"
+require "./digests/collector"
 
 module Pylon::Core
   module Digests
     extend self
 
-    class Collector
-      def initialize
-        @wanted = [] of Bytes
-        @seen = Set(Bytes).new
-      end
+    def matches?(content : Bytes, digest : Bytes) : Bool
+      hasher = ::Digest::SHA256.new
+      return false unless digest.size == hasher.digest_size
 
-      def required(changes : Array(Change), offset : Int32 = 0) : Array(Bytes)
-        @wanted.clear
-        @seen.clear
-
-        changes.each(within: offset...) { |change| collect(change.new) }
-
-        @wanted
-      end
-
-      private def collect(entry : Entry?) : Nil
-        case entry
-        in Nil, SymbolicLink, Untracked, Problematic
-          nil
-        in File
-          @wanted << entry.digest if @seen.add?(entry.digest)
-        in Directory
-          entry.contents.each_value { |child| collect(child) }
-        end
-      end
+      hasher.update(content)
+      hasher.final == digest
     end
 
-    def required(changes : Array(Change)) : Array(Bytes)
-      Collector.new.required(changes)
+    def all(entry : Entry?) : Set(Bytes)
+      digests = Set(Bytes).new
+      gather(entry, digests)
+
+      digests
+    end
+
+    private def gather(entry : Entry?, into : Set(Bytes)) : Nil
+      case entry
+      in Nil, SymbolicLink, Untracked, Problematic
+        nil
+      in File
+        into << entry.digest
+      in Directory
+        entry.contents.each_value { |child| gather(child, into) }
+      end
     end
   end
 end

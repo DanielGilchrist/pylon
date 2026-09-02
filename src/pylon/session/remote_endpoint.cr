@@ -3,6 +3,7 @@ require "../fibers"
 require "../wire/message"
 require "./fault"
 require "./pending_write"
+require "./remote_endpoint/pending_signatures"
 
 module Pylon::Session
   class RemoteEndpoint
@@ -14,10 +15,10 @@ module Pylon::Session
 
     @fault : Fault? = nil
     @tree : Core::Entry? = nil
-    @unapplied = [] of Core::Change
+    @unapplied = Core::Changes.new
 
     def initialize(@input : IO, @output : IO, @signals : Channel(Nil)? = nil)
-      @responses = Channel(Wire::Message).new(RESPONSE_BUFFER)
+      @responses = Channel(Wire::Message::Any).new(RESPONSE_BUFFER)
       @greeting = Channel(Nil).new
       @known = false
       @sequence = 0_u32
@@ -28,9 +29,9 @@ module Pylon::Session
     def scan(now_ns : Int64) : Scan::Snapshot | Fault
       return Scan::Snapshot.new(settled_tree, Scan::Cache.new) if @known
 
-      reply = exchange(Wire::ScanRequest.new(now_ns))
+      reply = exchange(Wire::Message::ScanRequest.new(now_ns))
       return reply if reply.is_a?(Fault)
-      return unexpected("a scan response", reply) unless reply.is_a?(Wire::ScanResponse)
+      return unexpected("a scan response", reply) unless reply.is_a?(Wire::Message::ScanResponse)
 
       @unapplied.clear
       @tree = reply.root
@@ -38,29 +39,49 @@ module Pylon::Session
       Scan::Snapshot.new(reply.root, Scan::Cache.new)
     end
 
-    def content_source(digests : Array(Bytes), budget : UInt64) : Wire::ContentSource | Fault
+    def delta_capable? : Bool
+      true
+    end
+
+    def signatures_begin(pairs : Array(Wire::Message::SignaturesRequest::Pair)) : PendingSignatures
+      PendingSignatures.new(self, transmit(Wire::Message::SignaturesRequest.new(pairs)))
+    end
+
+    def content_source(digests : Array(Bytes), budget : UInt64, signatures : Wire::Delta::Signatures = Wire::Delta::Signatures.new) : Wire::ContentSource | Fault
       return Wire::ContentSource::Materialised.new(Wire::Contents.new) if digests.empty?
 
-      reply = exchange(Wire::ContentsRequest.new(digests, budget))
+      reply = exchange(Wire::Message::ContentsRequest.new(digests, budget, signatures))
       return reply if reply.is_a?(Fault)
-      return unexpected("a contents response", reply) unless reply.is_a?(Wire::ContentsResponse)
+      return unexpected("a contents response", reply) unless reply.is_a?(Wire::Message::ContentsResponse)
 
       Wire::ContentSource::Materialised.new(reply.contents)
     end
 
-    def payload_size(changes : Array(Core::Change)) : UInt64?
+    def known_size(path : String) : UInt64?
       nil
     end
 
-    def write_begin(changes : Array(Core::Change), source : Wire::ContentSource) : PendingWrite
-      transmit(Wire::WriteRequest.new(changes, source))
+    def payload_size(changes : Core::Changes) : UInt64?
+      nil
+    end
+
+    def write_begin(changes : Core::Changes, source : Wire::ContentSource) : PendingWrite
+      transmit(Wire::Message::WriteRequest.new(changes, source))
       PendingWrite.new(Proc(Array(Write::Outcome) | Fault).new { receive_written })
+    end
+
+    protected def receive_signatures : Wire::Delta::Signatures | Fault
+      reply = await
+      return reply if reply.is_a?(Fault)
+      return unexpected("a signatures response", reply) unless reply.is_a?(Wire::Message::SignaturesResponse)
+
+      reply.signatures
     end
 
     private def receive_written : Array(Write::Outcome) | Fault
       reply = await
       return reply if reply.is_a?(Fault)
-      return unexpected("a write response", reply) unless reply.is_a?(Wire::WriteResponse)
+      return unexpected("a write response", reply) unless reply.is_a?(Wire::Message::WriteResponse)
 
       reply.outcomes.each { |outcome| @unapplied << Core::Change.new(outcome.path, nil, outcome.entry) }
       reply.outcomes
@@ -75,31 +96,31 @@ module Pylon::Session
       @tree
     end
 
-    private def unexpected(wanted : String, reply : Wire::Message) : Misbehaved
+    private def unexpected(wanted : String, reply : Wire::Message::Any) : Misbehaved
       Misbehaved.new("expected #{wanted}, got #{reply.class.name}")
     end
 
     private def listen : Nil
-      case greeting = Wire.read_greeting(@input)
-      in Wire::Compatible
+      case greeting = Wire::Greeting.read(@input)
+      in Wire::Greeting::Compatible
         @greeting.close
-      in Wire::Incompatible
+      in Wire::Greeting::Incompatible
         stop_with(Incompatible.new(
           "the remote pylon uses wire protocol version #{greeting.version} but this one uses #{Wire::PROTOCOL}. Update the remote binary",
         ))
         return
-      in Wire::Foreign
+      in Wire::Greeting::Foreign
         stop_with(Incompatible.new(
           "the remote did not identify itself as a pylon server. It may be an outdated pylon binary or the wrong command",
         ))
         return
-      in Wire::Unreachable
+      in Wire::Greeting::Unreachable
         stop_with(Stopped.new("the connection failed before the remote identified itself: #{greeting.reason}"))
         return
       end
 
       loop do
-        case message = Wire.read_message(@input)
+        case message = Wire::Message.read(@input)
         in Wire::Closed
           @fault ||= Stopped.new
           @responses.close
@@ -108,13 +129,13 @@ module Pylon::Session
           @fault ||= Stopped.new(message.reason)
           @responses.close
           return
-        in Wire::TreeUpdate
+        in Wire::Message::TreeUpdate
           @unapplied.clear
           @tree = message.root
           @sequence = message.sequence
           @known = true
           signal
-        in Wire::TreeDelta
+        in Wire::Message::TreeDelta
           if message.sequence == @sequence + 1
             @tree = Core::Applier.apply(settled_tree, message.changes)
             @sequence = message.sequence
@@ -123,9 +144,9 @@ module Pylon::Session
           end
 
           signal
-        in Wire::Failure, Wire::ScanResponse, Wire::ContentsResponse, Wire::WriteResponse
+        in Wire::Message::Failure, Wire::Message::ScanResponse, Wire::Message::ContentsResponse, Wire::Message::SignaturesResponse, Wire::Message::WriteResponse
           @responses.send(message)
-        in Wire::ScanRequest, Wire::ContentsRequest, Wire::WriteRequest
+        in Wire::Message::ScanRequest, Wire::Message::ContentsRequest, Wire::Message::SignaturesRequest, Wire::Message::WriteRequest
           @fault ||= Misbehaved.new("the server sent a #{message.class.name}, which only clients send")
           @responses.close
           return
@@ -149,7 +170,7 @@ module Pylon::Session
       end
     end
 
-    private def exchange(request : Wire::Message) : Wire::Message | Fault
+    private def exchange(request : Wire::Message::Any) : Wire::Message::Any | Fault
       if (fault = transmit(request))
         return fault
       end
@@ -157,7 +178,7 @@ module Pylon::Session
       await
     end
 
-    private def transmit(request : Wire::Message) : Fault?
+    private def transmit(request : Wire::Message::Any) : Fault?
       @greeting.receive?
 
       if (fault = @fault)
@@ -166,17 +187,17 @@ module Pylon::Session
 
       @exchanges += 1
 
-      if (problem = Wire.write_message(@output, request))
+      if (problem = Wire::Message.write(@output, request))
         return (@fault ||= Stopped.new(problem.reason))
       end
 
       nil
     end
 
-    private def await : Wire::Message | Fault
+    private def await : Wire::Message::Any | Fault
       reply = @responses.receive?
       return (@fault || Stopped.new) if reply.nil?
-      return Misbehaved.new(reply.message) if reply.is_a?(Wire::Failure)
+      return Misbehaved.new(reply.message) if reply.is_a?(Wire::Message::Failure)
 
       reply
     end

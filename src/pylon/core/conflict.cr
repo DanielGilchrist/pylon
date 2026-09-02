@@ -1,10 +1,5 @@
-module Pylon::Core
-  struct Conflict
-    getter root : String
-    getter local_changes : Array(Change)
-    getter remote_changes : Array(Change)
+require "./changes"
 
-    def initialize(@root : String, @local_changes : Array(Change), @remote_changes : Array(Change))
-    end
-  end
+module Pylon::Core
+  record Conflict, root : String, local_changes : Changes, remote_changes : Changes
 end

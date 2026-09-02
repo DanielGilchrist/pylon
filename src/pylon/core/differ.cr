@@ -1,4 +1,5 @@
 require "./change"
+require "./changes"
 require "./entry"
 require "./paths"
 
@@ -6,13 +7,14 @@ module Pylon::Core
   module Differ
     extend self
 
-    def diff(base : Entry?, target : Entry?) : Array(Change)
-      changes = [] of Change
+    def diff(base : Entry?, target : Entry?) : Changes
+      changes = Changes.new
       walk("", base, target, changes)
+
       changes
     end
 
-    private def walk(path : String, base : Entry?, target : Entry?, into : Array(Change)) : Nil
+    private def walk(path : String, base : Entry?, target : Entry?, into : Changes) : Nil
       return if base == target
 
       unless base.is_a?(Directory) && target.is_a?(Directory)

@@ -1,9 +1,9 @@
-require "./contents"
-require "./content_source"
-require "./binary"
+require "../patch"
+require "../content_source"
+require "../binary"
 require "./writable"
 
-module Pylon::Wire
+module Pylon::Wire::Message
   struct ContentsResponse
     include Writable
 

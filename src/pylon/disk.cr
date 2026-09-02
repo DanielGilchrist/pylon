@@ -2,6 +2,7 @@ require "digest/sha256"
 require "./filesystem"
 require "./wire/chunks"
 require "./wire/binary"
+require "./wire/content_kind"
 require "./scan/metadata"
 require "./scan/observed"
 require "./write/problem"
@@ -72,6 +73,7 @@ module Pylon
 
     def stream(relative_path : String, digest : Bytes, io : IO, buffer : Bytes, codec, scratch : Bytes, hasher : Digest::SHA256 = Digest::SHA256.new) : Nil
       Wire::Binary.write_bytes(io, digest)
+      Wire::ContentKind::Full.write(io)
       hasher.reset
 
       opened = Filesystem.open(absolute(relative_path)) do |file|

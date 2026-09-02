@@ -1,17 +1,17 @@
 require "../../spec_helper"
 require "../../../src/pylon/write/writer"
 require "../../../src/pylon/session/staging"
-require "../../../src/pylon/wire/contents"
+require "../../../src/pylon/wire/patch"
 require "../../../src/pylon/disk"
 
 private FILES = 120
 
 private def build_writer(disk, contents, parallelism = Pylon::Write::Writer::DEFAULT_PARALLELISM)
-  Pylon::Write::Writer.new(disk, Pylon::Session::Staging.new(contents), Pylon::Scan::Cache.new, parallelism: parallelism)
+  Pylon::Write::Writer.new(disk, Pylon::Session::Staging.new(contents, Pylon::Session::Staging::Unrecoverable.new), Pylon::Scan::Cache.new, parallelism: parallelism)
 end
 
-private def bulk_changes : Array(Pylon::Core::Change)
-  changes = [] of Pylon::Core::Change
+private def bulk_changes : Pylon::Core::Changes
+  changes = Pylon::Core::Changes.new
 
   changes << Pylon::Core::Change.new("nested", nil, Pylon::Core::Directory.new)
 
@@ -26,7 +26,7 @@ private def bulk_changes : Array(Pylon::Core::Change)
   changes
 end
 
-private def staged_contents(changes : Array(Pylon::Core::Change)) : Pylon::Wire::Contents
+private def staged_contents(changes : Pylon::Core::Changes) : Pylon::Wire::Contents
   contents = Pylon::Wire::Contents.new
 
   changes.each_with_index do |change, index|
@@ -75,7 +75,7 @@ describe "Writer running independent file writes in parallel" do
   end
 
   it "handles worker counts that do not divide the changes evenly" do
-    changes = bulk_changes.first(101)
+    changes = bulk_changes.batch(0, 101)
     contents = staged_contents(changes)
 
     root = File.tempname("pylon-parallel-uneven")
@@ -92,7 +92,7 @@ describe "Writer running independent file writes in parallel" do
   end
 
   it "creates every directory before the files inside it, whatever ran in parallel" do
-    changes = [] of Pylon::Core::Change
+    changes = Pylon::Core::Changes.new
     contents = Pylon::Wire::Contents.new
 
     20.times do |index|

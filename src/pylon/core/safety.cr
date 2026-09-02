@@ -23,7 +23,7 @@ module Pylon::Core
       base : Entry?,
       local : Entry?,
       remote : Entry?,
-      changes : Array(Change),
+      changes : Changes,
     ) : Reason?
       return Reason::EndpointEmptiedRoot if emptied_root?(base, local, remote)
 

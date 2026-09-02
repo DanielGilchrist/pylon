@@ -58,4 +58,51 @@ describe Pylon::Session::LocalEndpoint do
       offered.digests.should eq(Set{digests["a.rb"]})
     end
   end
+
+  it "writes a file from its own disk when the content arrived without bytes" do
+    in_endpoint({"a.rb" => "shared body"}) do |endpoint, digests|
+      changes = Pylon::Core::Changes[Change.new("copy.rb", nil, Pylon::Core::File.new(digests["a.rb"]))]
+
+      outcomes = endpoint.write(changes, Pylon::Wire::ContentSource::Materialised.new(Pylon::Wire::Contents.new))
+
+      outcomes.size.should eq(1)
+      outcomes[0].applied?.should be_true
+      File.read(File.join(endpoint.root, "copy.rb")).should eq("shared body")
+    end
+  end
+
+  it "answers a signature for a base large enough to be worth a delta" do
+    body = "def item end\n" * 1000
+
+    in_endpoint({"a.rb" => body}) do |endpoint, digests|
+      wanted = Digest::SHA256.digest("the edited version").to_slice
+
+      found = endpoint.signatures([Pylon::Wire::Message::SignaturesRequest::Pair.new(wanted, digests["a.rb"])])
+
+      found[wanted]?.try(&.base).should eq(digests["a.rb"])
+    end
+  end
+
+  it "skips signatures for bases too small to be worth a delta" do
+    in_endpoint({"a.rb" => "tiny"}) do |endpoint, digests|
+      wanted = Digest::SHA256.digest("the edited version").to_slice
+
+      found = endpoint.signatures([Pylon::Wire::Message::SignaturesRequest::Pair.new(wanted, digests["a.rb"])])
+
+      found.should be_empty
+    end
+  end
+
+  it "refuses recovered content whose bytes no longer match the digest" do
+    in_endpoint({"a.rb" => "original"}) do |endpoint, digests|
+      File.write(File.join(endpoint.root, "a.rb"), "mutated")
+      changes = Pylon::Core::Changes[Change.new("copy.rb", nil, Pylon::Core::File.new(digests["a.rb"]))]
+
+      outcomes = endpoint.write(changes, Pylon::Wire::ContentSource::Materialised.new(Pylon::Wire::Contents.new))
+
+      outcomes.size.should eq(1)
+      outcomes[0].applied?.should be_false
+      File.exists?(File.join(endpoint.root, "copy.rb")).should be_false
+    end
+  end
 end

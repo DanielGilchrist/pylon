@@ -72,7 +72,7 @@ describe Pylon::Wire::Binary do
   end
 
   it "round trips changes" do
-    changes = [
+    changes = Changes[
       Change.new("a.rb", nil, Fixtures.f1),
       Change.new("b/c.rb", Fixtures.f1, nil),
       Change.new("", Fixtures.d0, Fixtures.d1),
@@ -126,7 +126,7 @@ describe Pylon::Wire::Binary do
 
   it "refuses a traversing change path rather than letting it reach disk" do
     io = IO::Memory.new
-    Binary.write_changes(io, [Pylon::Core::Change.new("../../etc/passwd", nil, Fixtures.f1)])
+    Binary.write_changes(io, Changes[Pylon::Core::Change.new("../../etc/passwd", nil, Fixtures.f1)])
 
     fails_to_decode(io.to_slice) { |reader| Binary.read_changes(reader) }.should be_true
   end

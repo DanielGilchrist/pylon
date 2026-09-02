@@ -40,8 +40,10 @@ module Pylon::Write
     skipped : Skipped? = nil do
     # Both ends apply these to their own copy of the remote tree so the next
     # delta has a shared baseline.
-    def self.changes(outcomes : Array(Outcome)) : Array(Core::Change)
-      outcomes.map { |outcome| Core::Change.new(outcome.path, nil, outcome.entry) }
+    def self.changes(outcomes : Array(Outcome)) : Core::Changes
+      changes = Core::Changes.new(initial_capacity: outcomes.size)
+      outcomes.each { |outcome| changes << Core::Change.new(outcome.path, nil, outcome.entry) }
+      changes
     end
 
     def applied? : Bool

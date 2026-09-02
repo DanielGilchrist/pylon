@@ -17,12 +17,12 @@ record ReconcileCase,
   base : Entry?,
   local : Entry?,
   remote : Entry?,
-  base_changes : Array(Change) = [] of Change,
-  local_changes : Array(Change) = [] of Change,
-  remote_changes : Array(Change) = [] of Change,
+  base_changes : Changes = Changes.new,
+  local_changes : Changes = Changes.new,
+  remote_changes : Changes = Changes.new,
   conflicts : Array(Conflict) = [] of Conflict
 
-def assert_changes(actual : Array(Change), expected : Array(Change), label : String) : Nil
+def assert_changes(actual : Changes, expected : Changes, label : String) : Nil
   actual.size.should eq(expected.size), "#{label}: expected #{expected.size} change(s), got #{actual.size}"
 
   by_path = expected.to_h { |change| {change.path, change} }

@@ -90,7 +90,7 @@ describe Pylon::CLI::Reporter do
   end
 
   it "explains a conflict rather than just counting it" do
-    output = rendered(report_of(conflicts: [Conflict.new("db/structure.sql", [] of Change, [] of Change)]))
+    output = rendered(report_of(conflicts: [Conflict.new("db/structure.sql", Changes.new, Changes.new)]))
 
     output.should contain("conflict")
     output.should contain("db/structure.sql")
@@ -98,7 +98,7 @@ describe Pylon::CLI::Reporter do
   end
 
   it "groups a flood of conflicts by directory" do
-    conflicts = Array.new(30) { |index| Conflict.new("config/locales/translation.#{index}.yml", [] of Change, [] of Change) }
+    conflicts = Array.new(30) { |index| Conflict.new("config/locales/translation.#{index}.yml", Changes.new, Changes.new) }
 
     output = rendered(report_of(conflicts: conflicts))
 
@@ -112,7 +112,7 @@ describe Pylon::CLI::Reporter do
     Colorize.enabled = false
     io = IO::Memory.new
     reporter = Pylon::CLI::Reporter.new(io)
-    conflict = report_of(conflicts: [Conflict.new("db/structure.sql", [] of Change, [] of Change)])
+    conflict = report_of(conflicts: [Conflict.new("db/structure.sql", Changes.new, Changes.new)])
 
     reporter.report(conflict)
     first = io.to_s

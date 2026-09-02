@@ -11,9 +11,9 @@ module Pylon::Core
     end
 
     private struct State
-      getter base_changes = [] of Change
-      getter local_changes = [] of Change
-      getter remote_changes = [] of Change
+      getter base_changes = Changes.new
+      getter local_changes = Changes.new
+      getter remote_changes = Changes.new
       getter conflicts = [] of Conflict
       getter troubles = [] of Trouble
 
@@ -144,8 +144,8 @@ module Pylon::Core
       private def record_conflict(path : String, base : Entry?, local : Entry?, remote : Entry?) : Nil
         conflicts << Conflict.new(
           path,
-          [Change.new(path, base, local)],
-          [Change.new(path, base, remote)],
+          Changes[Change.new(path, base, local)],
+          Changes[Change.new(path, base, remote)],
         )
       end
 

@@ -1,8 +1,8 @@
-require "./contents"
-require "./binary"
+require "../patch"
+require "../binary"
 require "./writable"
 
-module Pylon::Wire
+module Pylon::Wire::Message
   struct ScanRequest
     include Writable
 

@@ -3,42 +3,44 @@ require "../fibers"
 require "../core/paths"
 require "../core/entry"
 require "../scan/snapshot"
+require "./grouping"
 require "./guard"
+require "./indexed_outcomes"
 require "./outcome"
 require "./problem"
 
 module Pylon::Write
   struct Writer(F, S)
+    # APFS contends on staged writes past ~4 workers, 2 was the measured as being the most optimal.
+    # ext4 on Linux didn't seem to have the same problem so just leaving it to scale by CPU count for now.
     {% if flag?(:darwin) %}
       DEFAULT_PARALLELISM = 2
     {% else %}
       DEFAULT_PARALLELISM = System.cpu_count.to_i * 2
     {% end %}
+
     PARALLEL_THRESHOLD = 16
 
     def initialize(@filesystem : F, @staging : S, @cache : Scan::Cache, @parallelism : Int32 = DEFAULT_PARALLELISM)
     end
 
-    def write(changes : Array(Core::Change)) : Array(Outcome)
-      independent = independent_indices(changes)
+    def write(changes : Core::Changes) : Array(Outcome)
+      grouping = Grouping.partition(changes) { |change| independent?(change) }
 
-      if @parallelism <= 1 || independent.size < PARALLEL_THRESHOLD
+      if @parallelism <= 1 || grouping.independent.size < PARALLEL_THRESHOLD
         return changes.map { |change| write_one(change) }
       end
 
-      sequential = write_skipping(changes, independent)
-      concurrent = write_concurrently(changes, independent)
-      interleave(changes.size, independent, sequential, concurrent)
-    end
+      sequential = write_group(changes, grouping.ordered)
+      concurrent = write_concurrently(changes, grouping.independent)
+      removed = write_group(changes, grouping.removals)
 
-    private def independent_indices(changes : Array(Core::Change)) : Array(Int32)
-      indices = [] of Int32
-
-      changes.each_with_index do |change, index|
-        indices << index if independent?(change)
-      end
-
-      indices
+      assemble(
+        changes.size,
+        IndexedOutcomes.new(grouping.ordered, sequential),
+        IndexedOutcomes.new(grouping.independent, concurrent),
+        IndexedOutcomes.new(grouping.removals, removed),
+      )
     end
 
     private def independent?(change : Core::Change) : Bool
@@ -48,29 +50,19 @@ module Pylon::Write
       !clear_first?(change.old, new)
     end
 
-    private def write_skipping(changes : Array(Core::Change), independent : Array(Int32)) : Array(Outcome)
-      outcomes = Array(Outcome).new(changes.size - independent.size)
-      skip = 0
-
-      changes.each_with_index do |change, index|
-        if skip < independent.size && independent[skip] == index
-          skip += 1
-          next
-        end
-
-        outcomes << write_one(change)
-      end
-
+    private def write_group(changes : Core::Changes, indices : Array(Int32)) : Array(Outcome)
+      outcomes = Array(Outcome).new(indices.size)
+      indices.each { |index| outcomes << write_one(changes[index]) }
       outcomes
     end
 
-    private def write_concurrently(changes : Array(Core::Change), independent : Array(Int32)) : Array(Outcome)
+    private def write_concurrently(changes : Core::Changes, independent : Array(Int32)) : Array(Outcome)
       stripe = (independent.size + @parallelism - 1) // @parallelism
       groups = independent.each_slice(stripe).to_a
       slices = Array(Array(Outcome)).new(groups.size) { [] of Outcome }
 
       Fibers.parallel(:write, groups.size) do |worker|
-        write_group(changes, groups[worker], slices[worker])
+        groups[worker].each { |index| slices[worker] << write_one(changes[index]) }
       end
 
       collected = Array(Outcome).new(independent.size)
@@ -78,27 +70,15 @@ module Pylon::Write
       collected
     end
 
-    private def write_group(changes : Array(Core::Change), indices : Array(Int32), into : Array(Outcome)) : Nil
-      indices.each { |index| into << write_one(changes[index]) }
-    end
-
-    private def interleave(
-      total : Int32,
-      independent : Array(Int32),
-      sequential : Array(Outcome),
-      concurrent : Array(Outcome),
-    ) : Array(Outcome)
+    private def assemble(total : Int32, *groups : IndexedOutcomes) : Array(Outcome)
       outcomes = Array(Outcome).new(total)
-      concurrent_cursor = 0
-      sequential_cursor = 0
 
       total.times do |index|
-        if concurrent_cursor < independent.size && independent[concurrent_cursor] == index
-          outcomes << concurrent[concurrent_cursor]
-          concurrent_cursor += 1
-        else
-          outcomes << sequential[sequential_cursor]
-          sequential_cursor += 1
+        groups.each do |group|
+          if (claimed = group.claim?(index))
+            outcomes << claimed
+            break
+          end
         end
       end
 
@@ -150,7 +130,7 @@ module Pylon::Write
 
     private def directory?(entry : Core::Entry) : Bool
       case entry
-      in Core::Directory                                                     then true
+      in Core::Directory                                                    then true
       in Core::File, Core::SymbolicLink, Core::Untracked, Core::Problematic then false
       end
     end

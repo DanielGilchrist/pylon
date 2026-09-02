@@ -1,5 +1,8 @@
+require "digest/sha256"
 require "../compress/zstd"
 require "./binary"
+require "./content_kind"
+require "./patch"
 
 module Pylon::Wire
   module Chunks
@@ -37,24 +40,104 @@ module Pylon::Wire
     end
 
     def write_entry(io : IO, entry : Core::Entry?) : Nil
-      packed = IO::Memory.new
-      Binary.write_entry(packed, entry)
-      write_all(io, packed.to_slice, Compress::Zstd.new, scratch)
+      write_packed(io) { |packed| Binary.write_entry(packed, entry) }
     end
 
     def read_entry(reader : Reader) : Core::Entry?
+      read_packed(reader, "the tree payload") { |inner| Binary.read_entry(inner) }
+    end
+
+    def write_changes(io : IO, changes : Core::Changes) : Nil
+      write_packed(io) { |packed| Binary.write_changes(packed, changes) }
+    end
+
+    def read_changes(reader : Reader) : Core::Changes
+      read_packed(reader, "the changes payload") { |inner| Binary.read_changes(inner) } || Core::Changes.new
+    end
+
+    def write_outcomes(io : IO, outcomes : Array(Write::Outcome)) : Nil
+      write_packed(io) { |packed| Binary.write_outcomes(packed, outcomes) }
+    end
+
+    def read_contents(reader : Reader) : Contents
+      count = reader.count
+      contents = Contents.new(initial_capacity: Wire.capacity_hint(count))
+      codec = Compress::Zstd.new
+      scratch = scratch()
+      hasher = Digest::SHA256.new
+      sum = Bytes.new(DIGEST_BYTES)
+
+      reader.repeat(count) do
+        digest = reader.digest
+
+        case ContentKind.from_value?(reader.byte)
+        in Nil
+          reader.fail("an unknown content kind arrived, both sides must run the same pylon version")
+        in .full?
+          content = read_all(reader, codec, scratch)
+          next if content.nil?
+
+          hasher.reset
+          hasher.update(content)
+          hasher.final(sum)
+
+          contents[digest] = content if sum == digest
+        in .patch?
+          base = reader.digest
+          ops = read_all(reader, codec, scratch)
+          next if ops.nil?
+
+          contents[digest] = Patch.new(base, ops)
+        end
+      end
+
+      contents
+    end
+
+    def write_contents(io : IO, contents : Contents) : Nil
+      io.write_bytes(contents.size.to_u32, FORMAT)
+      codec = Compress::Zstd.new
+      scratch = scratch()
+
+      contents.each do |digest, payload|
+        Binary.write_bytes(io, digest)
+
+        case payload
+        in Bytes
+          ContentKind::Full.write(io)
+          write_all(io, payload, codec, scratch)
+        in Patch
+          ContentKind::Patch.write(io)
+          Binary.write_bytes(io, payload.base)
+          write_all(io, payload.ops, codec, scratch)
+        end
+      end
+    end
+
+    def read_outcomes(reader : Reader) : Array(Write::Outcome)
+      read_packed(reader, "the outcomes payload") { |inner| Binary.read_outcomes(inner) } || [] of Write::Outcome
+    end
+
+    private def write_packed(io : IO, & : IO ->) : Nil
+      packed = IO::Memory.new
+      yield packed
+      write_all(io, packed.to_slice, Compress::Zstd.new, scratch)
+    end
+
+    private def read_packed(reader : Reader, payload : String, & : Reader -> T) : T? forall T
       packed = read_all(reader, Compress::Zstd.new, scratch)
       return if reader.failed?
 
       if packed.nil?
-        reader.fail("the tree payload arrived invalidated")
+        reader.fail("#{payload} arrived invalidated")
         return
       end
 
       inner = Reader.new(IO::Memory.new(packed))
-      entry = Binary.read_entry(inner)
+      value = yield inner
       reader.fail(inner.reason) if inner.failed?
-      entry
+
+      value
     end
 
     def read_all(reader : Reader, codec, scratch : Bytes) : Bytes?

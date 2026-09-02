@@ -1,6 +1,6 @@
 require "./tag"
 
-module Pylon::Wire
+module Pylon::Wire::Message
   module Writable
     abstract def tag : Tag
     abstract def write_payload(io : IO) : Nil

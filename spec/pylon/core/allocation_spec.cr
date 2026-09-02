@@ -14,8 +14,8 @@ private def wide_tree(files : Int32) : Entry
   Pylon::Core::Directory.new(directories)
 end
 
-private def changes_for(tree : Entry) : Array(Change)
-  Change.expand([Change.new("", nil, tree)])
+private def changes_for(tree : Entry) : Changes
+  Changes.expand([Change.new("", nil, tree)])
 end
 
 describe "allocation budgets" do

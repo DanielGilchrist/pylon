@@ -1,14 +1,15 @@
-require "./binary"
+require "../binary"
+require "../chunks"
 require "./writable"
 
-module Pylon::Wire
+module Pylon::Wire::Message
   struct TreeDelta
     include Writable
 
     getter sequence : UInt32
-    getter changes : Array(Core::Change)
+    getter changes : Core::Changes
 
-    def initialize(@sequence : UInt32, @changes : Array(Core::Change))
+    def initialize(@sequence : UInt32, @changes : Core::Changes)
     end
 
     def tag : Tag
@@ -17,7 +18,7 @@ module Pylon::Wire
 
     def write_payload(io : IO) : Nil
       io.write_bytes(sequence, FORMAT)
-      Binary.write_changes(io, changes)
+      Chunks.write_changes(io, changes)
     end
   end
 end

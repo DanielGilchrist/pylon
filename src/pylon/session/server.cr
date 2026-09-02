@@ -44,7 +44,7 @@ module Pylon::Session
     end
 
     private def greet : Bool
-      if (problem = Wire.write_greeting(@output))
+      if (problem = Wire::Greeting.write(@output))
         @log.puts("pylon: the greeting could not be sent, stopping: #{problem.reason}")
         return false
       end
@@ -52,13 +52,13 @@ module Pylon::Session
       true
     end
 
-    private def receive_ahead : Channel(Wire::Message)
-      requests = Channel(Wire::Message).new(READ_AHEAD)
+    private def receive_ahead : Channel(Wire::Message::Any)
+      requests = Channel(Wire::Message::Any).new(READ_AHEAD)
 
       Fibers.detach(:server_requests) do
         begin
           loop do
-            message = Wire.read_message(@input)
+            message = Wire::Message.read(@input)
             break if message.is_a?(Wire::Closed)
 
             if message.is_a?(Wire::Invalid)
@@ -114,9 +114,9 @@ module Pylon::Session
 
         failed =
           if @sent.nil?
-            Wire.write_message(@output, Wire::TreeUpdate.new(@sequence, current))
+            Wire::Message.write(@output, Wire::Message::TreeUpdate.new(@sequence, current))
           else
-            Wire.write_message(@output, Wire::TreeDelta.new(@sequence, Core::Differ.diff(@sent, current)))
+            Wire::Message.write(@output, Wire::Message::TreeDelta.new(@sequence, Core::Differ.diff(@sent, current)))
           end
 
         @sent = current if failed.nil?
@@ -133,32 +133,44 @@ module Pylon::Session
       @endpoint.mark_dirty(subscriber.drain)
     end
 
-    private def serve(request : Wire::Message) : Bool
+    private def serve(request : Wire::Message::Any) : Bool
       problem =
         case request
-        in Wire::ScanRequest
+        in Wire::Message::ScanRequest
           @lock.synchronize do
             drain
             current = @endpoint.scan(request.now_ns).root
             @sent = current
-            Wire.write_message(@output, Wire::ScanResponse.new(current))
+            Wire::Message.write(@output, Wire::Message::ScanResponse.new(current))
           end
-        in Wire::ContentsRequest
+        in Wire::Message::ContentsRequest
           @lock.synchronize do
-            Wire.write_message(@output, Wire::ContentsResponse.new(@endpoint.content_source(request.digests, request.budget)))
+            response = Wire::Message::ContentsResponse.new(@endpoint.content_source(request.digests, request.budget, request.signatures))
+            Wire::Message.write(@output, response)
           end
-        in Wire::WriteRequest
+        in Wire::Message::SignaturesRequest
+          @lock.synchronize do
+            response = Wire::Message::SignaturesResponse.new(@endpoint.signatures(request.pairs))
+            Wire::Message.write(@output, response)
+          end
+        in Wire::Message::WriteRequest
           @lock.synchronize do
             outcomes = @endpoint.write(request.changes, Wire::ContentSource::Materialised.new(request.contents))
             @sent = Core::Applier.apply(@sent, Write::Outcome.changes(outcomes)) unless @sent.nil?
-            failed = Wire.write_message(@output, Wire::WriteResponse.new(outcomes))
+            failed = Wire::Message.write(@output, Wire::Message::WriteResponse.new(outcomes))
             @checkpoints.try(&.save_if_due) if failed.nil?
             failed
           end
-        in Wire::Failure, Wire::ScanResponse, Wire::TreeUpdate, Wire::TreeDelta,
-           Wire::ContentsResponse, Wire::WriteResponse
+        in Wire::Message::Failure,
+           Wire::Message::ScanResponse,
+           Wire::Message::TreeUpdate,
+           Wire::Message::TreeDelta,
+           Wire::Message::ContentsResponse,
+           Wire::Message::SignaturesResponse,
+           Wire::Message::WriteResponse
           @lock.synchronize do
-            Wire.write_message(@output, Wire::Failure.new("unexpected message from the client"))
+            failure = Wire::Message::Failure.new("the client sent a #{request.class.name}, which only servers send")
+            Wire::Message.write(@output, failure)
           end
 
           return false

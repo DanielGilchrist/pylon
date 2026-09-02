@@ -13,6 +13,12 @@ module Pylon::Session
     WRITE_WINDOW       =   2
     PROGRESS_THRESHOLD = 200
 
+    # The signature lets us diff against the receiver's copy and send a patch instead
+    # of the whole file. To do this we need to perform a round trip. For smaller batches
+    # the round trip ends up costing more than sending the whole batch anyway so we don't
+    # bother if the batch is under a certain size.
+    DELTA_WAIT_BYTES = 256_u64 * 1024
+
     getter base : Core::Entry?
 
     def initialize(
@@ -81,8 +87,8 @@ module Pylon::Session
         )
       end
 
-      local_changes = Core::Change.expand(reconciliation.local_changes)
-      remote_changes = Core::Change.expand(reconciliation.remote_changes)
+      local_changes = Core::Changes.expand(reconciliation.local_changes)
+      remote_changes = Core::Changes.expand(reconciliation.remote_changes)
 
       if @dry_run
         return Report.new(
@@ -97,10 +103,12 @@ module Pylon::Session
         fetched = Time.instant
       {% end %}
 
-      local_outcomes = ship(local_changes, @remote, @local, :to_local)
+      local_holds = digests_present_in(local_snapshot.root, local_changes)
+      local_outcomes = transfer(local_changes, @remote, @local, :to_local, local_holds)
       return local_outcomes if local_outcomes.is_a?(Fault)
 
-      remote_outcomes = ship(remote_changes, @local, @remote, :to_remote)
+      remote_holds = digests_present_in(remote_snapshot.root, remote_changes)
+      remote_outcomes = transfer(remote_changes, @local, @remote, :to_remote, remote_holds)
       return remote_outcomes if remote_outcomes.is_a?(Fault)
 
       {% if flag?(:timing) %}
@@ -108,7 +116,7 @@ module Pylon::Session
         alloc_written = GC.stats.total_bytes
       {% end %}
 
-      commit!(Core::Change.expand(reconciliation.base_changes), local_outcomes, remote_outcomes)
+      commit!(Core::Changes.expand(reconciliation.base_changes), local_outcomes, remote_outcomes)
 
       {% if flag?(:timing) %}
         STDERR.puts("  client scans=%.1f reconcile=%.1f contents=%.1f write=%.1f commit=%.1f" % [
@@ -118,7 +126,7 @@ module Pylon::Session
           (written - fetched).total_milliseconds,
           (Time.instant - written).total_milliseconds,
         ])
-        STDERR.puts("  client alloc scans=%.1f reconcile=%.1f ship=%.1f commit=%.1f MiB" % [
+        STDERR.puts("  client alloc scans=%.1f reconcile=%.1f transfer=%.1f commit=%.1f MiB" % [
           (alloc_scanned - alloc_started) / 1048576.0,
           (alloc_reconciled - alloc_scanned) / 1048576.0,
           (alloc_written - alloc_reconciled) / 1048576.0,
@@ -132,40 +140,88 @@ module Pylon::Session
       Report.new(reconciliation.conflicts, local_outcomes, remote_outcomes, troubles: reconciliation.troubles)
     end
 
-    private def ship(changes : Array(Core::Change), source, target, direction : Direction) : Array(Write::Outcome) | Fault
+    private def digests_present_in(root : Core::Entry?, changes : Core::Changes) : Set(Bytes)
+      return Set(Bytes).new if changes.empty?
+
+      Core::Digests.all(root)
+    end
+
+    private def transfer(changes : Core::Changes, source, target, direction : Direction, target_holds : Set(Bytes)) : Array(Write::Outcome) | Fault
       total = changes.size
       outcomes = Array(Write::Outcome).new(total)
       offset = 0
       inflight = Deque(PendingWrite).new(WRITE_WINDOW)
       total_bytes = source.payload_size(changes)
       collector = Core::Digests::Collector.new
+      signatures = Wire::Delta::Signatures.new
+      candidates = Set(Bytes).new
+      pending_signatures = nil
+
+      if source.delta_capable? || target.delta_capable?
+        pairs = delta_pairs(changes, source, target_holds, candidates)
+        pending_signatures = target.signatures_begin(pairs) unless pairs.empty?
+      end
+
+      changes = changes.deletes_last(candidates)
+
+      reused = 0
+
+      {% if flag?(:timing) %}
+        Wire::Delta.reset_tallies
+      {% end %}
 
       notify(direction, outcomes, total, total_bytes)
 
       while offset < changes.size
+        if source.delta_capable? && pending_signatures && (fault = pending_signatures.settle_into(signatures))
+          return fault
+        end
+
         wanted = collector.required(changes, offset)
-        provided = source.content_source(wanted, TRANSFER_BUDGET)
+        {% if flag?(:timing) %}
+          before_reject = wanted.size
+        {% end %}
+
+        wanted.reject! { |digest| target_holds.includes?(digest) }
+
+        {% if flag?(:timing) %}
+          reused += before_reject - wanted.size
+        {% end %}
+
+        provided = source.content_source(wanted, TRANSFER_BUDGET, signatures)
         return provided if provided.is_a?(Fault)
 
-        taken = split(changes, offset, provided.digests)
+        taken = split(changes, offset, provided.digests, target_holds)
 
         if taken.zero?
           changes.each(within: offset...) { |change| outcomes << Write::Outcome.new(change.path, change.old, Write::StagedContentMissing.new) }
           break
         end
 
-        batch = changes[offset, taken]
+        batch = changes.batch(offset, taken)
         offset += taken
+
+        if pending_signatures && worth_waiting_for_signature?(batch, source, candidates) && (fault = pending_signatures.settle_into(signatures))
+          return fault
+        end
 
         inflight.push(target.write_begin(batch, provided))
 
         if inflight.size == WRITE_WINDOW && (oldest = inflight.shift?)
+          if pending_signatures && (fault = pending_signatures.settle_into(signatures))
+            return fault
+          end
+
           written = oldest.await
           return written if written.is_a?(Fault)
 
           outcomes.concat(written)
           notify(direction, outcomes, total, total_bytes)
         end
+      end
+
+      if pending_signatures && (fault = pending_signatures.settle_into(signatures))
+        return fault
       end
 
       while (oldest = inflight.shift?)
@@ -176,7 +232,32 @@ module Pylon::Session
         notify(direction, outcomes, total, total_bytes)
       end
 
+      {% if flag?(:timing) %}
+        if total > 0
+          STDERR.puts("  transfer #{direction}: changes=#{total} reused=#{reused} candidates=#{candidates.size} signatures=#{signatures.size} deltas=#{Wire::Delta.deltas_sent} (#{(Wire::Delta.delta_bytes / 1048576.0).round(2)} MiB ops) fulls=#{Wire::Delta.fulls_sent} (#{(Wire::Delta.full_bytes / 1048576.0).round(2)} MiB raw)")
+        end
+      {% end %}
+
       outcomes
+    end
+
+    private def worth_waiting_for_signature?(batch : Core::Changes, source, candidates : Set(Bytes)) : Bool
+      return false if candidates.empty?
+
+      weight = 0_u64
+
+      batch.each do |change|
+        entry = change.new
+        next unless entry.is_a?(Core::File) && candidates.includes?(entry.digest)
+
+        size = source.known_size(change.path)
+        return true if size.nil?
+
+        weight += size
+        return true if weight >= DELTA_WAIT_BYTES
+      end
+
+      false
     end
 
     private def notify(direction : Direction, outcomes : Array(Write::Outcome), total : Int32, total_bytes : UInt64?) : Nil
@@ -185,14 +266,41 @@ module Pylon::Session
       @on_progress.try(&.call(Progress.new(direction, outcomes.size, total, total_bytes)))
     end
 
-    private def split(changes : Array(Core::Change), offset : Int32, available : Set(Bytes)) : Int32
+    private def delta_pairs(
+      changes : Core::Changes,
+      source,
+      target_holds : Set(Bytes),
+      candidates : Set(Bytes),
+    ) : Array(Wire::Message::SignaturesRequest::Pair)
+      pairs = [] of Wire::Message::SignaturesRequest::Pair
+
+      changes.each do |change|
+        new = change.new
+        old = change.old
+        next unless new.is_a?(Core::File) && old.is_a?(Core::File)
+
+        digest = new.digest
+        next if old.digest == digest
+        next if target_holds.includes?(digest)
+
+        size = source.known_size(change.path)
+        next if size && !Wire::Delta.worthwhile?(size)
+        next unless candidates.add?(digest)
+
+        pairs << Wire::Message::SignaturesRequest::Pair.new(digest, old.digest)
+      end
+
+      pairs
+    end
+
+    private def split(changes : Core::Changes, offset : Int32, available : Set(Bytes), target_holds : Set(Bytes)) : Int32
       taken = 0
 
       changes.each(within: offset...) do |change|
         entry = change.new
         digest = entry.is_a?(Core::File) ? entry.digest : nil
 
-        break if digest && !available.includes?(digest)
+        break if digest && !available.includes?(digest) && !target_holds.includes?(digest)
 
         taken += 1
       end
@@ -201,7 +309,7 @@ module Pylon::Session
     end
 
     private def commit!(
-      planned : Array(Core::Change),
+      planned : Core::Changes,
       local_outcomes : Array(Write::Outcome),
       remote_outcomes : Array(Write::Outcome),
     ) : Nil
@@ -209,15 +317,17 @@ module Pylon::Session
       local_outcomes.each { |outcome| actual[outcome.path] = outcome.entry }
       remote_outcomes.each { |outcome| actual[outcome.path] = outcome.entry }
 
-      planned.map! do |change|
-        if actual.has_key?(change.path)
+      landed = Core::Changes.new(initial_capacity: planned.size)
+
+      planned.each do |change|
+        landed << if actual.has_key?(change.path)
           Core::Change.new(change.path, change.old, actual[change.path])
         else
           change
         end
       end
 
-      @base = Core::Applier.apply(@base, planned).try(&.syncable)
+      @base = Core::Applier.apply(@base, landed).try(&.syncable)
     end
   end
 end

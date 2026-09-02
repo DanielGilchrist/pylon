@@ -1,19 +1,20 @@
-require "./content_source"
-require "./binary"
+require "../content_source"
+require "../binary"
+require "../chunks"
 require "./writable"
 
-module Pylon::Wire
+module Pylon::Wire::Message
   struct WriteRequest
     include Writable
 
-    getter changes : Array(Core::Change)
+    getter changes : Core::Changes
     getter source : ContentSource
 
-    def self.new(changes : Array(Core::Change), contents : Contents)
+    def self.new(changes : Core::Changes, contents : Contents)
       new(changes, ContentSource::Materialised.new(contents))
     end
 
-    def initialize(@changes : Array(Core::Change), @source : ContentSource)
+    def initialize(@changes : Core::Changes, @source : ContentSource)
     end
 
     def contents : Contents
@@ -25,7 +26,7 @@ module Pylon::Wire
     end
 
     def write_payload(io : IO) : Nil
-      Binary.write_changes(io, changes)
+      Chunks.write_changes(io, changes)
       source.write(io)
     end
   end
