@@ -154,6 +154,10 @@ module Pylon::Session
         pending_signatures = target.signatures_begin(pairs) unless pairs.empty?
       end
 
+      if pending_signatures && source.delta_capable? && (fault = pending_signatures.settle_into(signatures))
+        return fault
+      end
+
       changes = changes.deletes_last(candidates)
 
       reused = 0
@@ -165,10 +169,6 @@ module Pylon::Session
       notify(direction, outcomes, total, total_bytes)
 
       while offset < changes.size
-        if source.delta_capable? && pending_signatures && (fault = pending_signatures.settle_into(signatures))
-          return fault
-        end
-
         wanted = collector.required(changes, offset)
         {% if flag?(:timing) %}
           before_reject = wanted.size
@@ -200,10 +200,6 @@ module Pylon::Session
         inflight.push(target.write_begin(batch, provided))
 
         if inflight.size == WRITE_WINDOW && (oldest = inflight.shift?)
-          if pending_signatures && (fault = pending_signatures.settle_into(signatures))
-            return fault
-          end
-
           written = oldest.await
           return written if written.is_a?(Fault)
 

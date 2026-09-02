@@ -3,14 +3,11 @@ require "../fibers"
 require "../wire/message"
 require "./fault"
 require "./pending_write"
+require "./session"
 require "./remote_endpoint/pending_signatures"
 
 module Pylon::Session
   class RemoteEndpoint
-    # the reader fiber must never block, or it stops draining the socket
-    # while the server is mid-push, which deadlocks both ends
-    RESPONSE_BUFFER = 8
-
     getter exchanges = 0
 
     @fault : Fault? = nil
@@ -18,7 +15,10 @@ module Pylon::Session
     @unapplied = Core::Changes.new
 
     def initialize(@input : IO, @output : IO, @signals : Channel(Nil)? = nil) : Nil
-      @responses = Channel(Wire::Message::Any).new(RESPONSE_BUFFER)
+      @scanned = Channel(Wire::Message::ScanResponse).new(1)
+      @contents = Channel(Wire::Message::ContentsResponse).new(1)
+      @signatures = Channel(Wire::Message::SignaturesResponse).new(1)
+      @written = Channel(Wire::Message::WriteResponse).new(Session::WRITE_WINDOW)
       @greeting = Channel(Nil).new
       @known = false
       @sequence = 0_u32
@@ -29,9 +29,8 @@ module Pylon::Session
     def scan(now_ns : Int64) : Core::Entry? | Fault
       return settled_tree if @known
 
-      reply = exchange(Wire::Message::ScanRequest.new(now_ns))
+      reply = exchange(Wire::Message::ScanRequest.new(now_ns), @scanned)
       return reply if reply.is_a?(Fault)
-      return unexpected("a scan response", reply) unless reply.is_a?(Wire::Message::ScanResponse)
 
       @unapplied.clear
       @tree = reply.root
@@ -48,9 +47,8 @@ module Pylon::Session
     def content_source(digests : Array(Bytes), budget : UInt64, signatures : Wire::Delta::Signatures = Wire::Delta::Signatures.new) : Wire::ContentSource | Fault
       return Wire::ContentSource::Materialised.new(Wire::Contents.new) if digests.empty?
 
-      reply = exchange(Wire::Message::ContentsRequest.new(digests, budget, signatures))
+      reply = exchange(Wire::Message::ContentsRequest.new(digests, budget, signatures), @contents)
       return reply if reply.is_a?(Fault)
-      return unexpected("a contents response", reply) unless reply.is_a?(Wire::Message::ContentsResponse)
 
       Wire::ContentSource::Materialised.new(reply.contents)
     end
@@ -69,17 +67,15 @@ module Pylon::Session
     end
 
     protected def receive_signatures : Wire::Delta::Signatures | Fault
-      reply = await
+      reply = receive(@signatures)
       return reply if reply.is_a?(Fault)
-      return unexpected("a signatures response", reply) unless reply.is_a?(Wire::Message::SignaturesResponse)
 
       reply.signatures
     end
 
     private def receive_written : Array(Write::Outcome) | Fault
-      reply = await
+      reply = receive(@written)
       return reply if reply.is_a?(Fault)
-      return unexpected("a write response", reply) unless reply.is_a?(Wire::Message::WriteResponse)
 
       reply.outcomes.each { |outcome| @unapplied << Core::Change.new(outcome.path, nil, outcome.entry) }
       reply.outcomes
@@ -92,10 +88,6 @@ module Pylon::Session
       end
 
       @tree
-    end
-
-    private def unexpected(wanted : String, reply : Wire::Message::Any) : Misbehaved
-      Misbehaved.new("expected #{wanted}, got #{reply.class.name}")
     end
 
     private def listen : Nil
@@ -120,12 +112,10 @@ module Pylon::Session
       loop do
         case (message = Wire::Message.read(@input))
         in Wire::Closed
-          @fault ||= Stopped.new
-          @responses.close
+          stop_with(Stopped.new)
           return
         in Wire::Invalid
-          @fault ||= Stopped.new(message.reason)
-          @responses.close
+          stop_with(Stopped.new(message.reason))
           return
         in Wire::Message::TreeUpdate
           @unapplied.clear
@@ -142,19 +132,40 @@ module Pylon::Session
           end
 
           signal
-        in Wire::Message::Failure, Wire::Message::ScanResponse, Wire::Message::ContentsResponse, Wire::Message::SignaturesResponse, Wire::Message::WriteResponse
-          @responses.send(message)
+        in Wire::Message::ScanResponse
+          return unless deliver(@scanned, message)
+        in Wire::Message::ContentsResponse
+          return unless deliver(@contents, message)
+        in Wire::Message::SignaturesResponse
+          return unless deliver(@signatures, message)
+        in Wire::Message::WriteResponse
+          return unless deliver(@written, message)
+        in Wire::Message::Failure
+          stop_with(Misbehaved.new(message.message))
+          return
         in Wire::Message::ScanRequest, Wire::Message::ContentsRequest, Wire::Message::SignaturesRequest, Wire::Message::WriteRequest
-          @fault ||= Misbehaved.new("the server sent a #{message.class.name}, which only clients send")
-          @responses.close
+          stop_with(Misbehaved.new("the server sent a #{message.class.name}, which only clients send"))
           return
         end
       end
     end
 
+    private def deliver(channel : Channel(T), message : T) : Bool forall T
+      select
+      when channel.send(message)
+        true
+      else
+        stop_with(Misbehaved.new("the server sent a #{message.class.name} that nothing was waiting for"))
+        false
+      end
+    end
+
     private def stop_with(fault : Fault) : Nil
-      @fault = fault
-      @responses.close
+      @fault ||= fault
+      @scanned.close
+      @contents.close
+      @signatures.close
+      @written.close
       @greeting.close
     end
 
@@ -168,12 +179,12 @@ module Pylon::Session
       end
     end
 
-    private def exchange(request : Wire::Message::Any) : Wire::Message::Any | Fault
+    private def exchange(request : Wire::Message::Any, replies : Channel(T)) : T | Fault forall T
       if (fault = transmit(request))
         return fault
       end
 
-      await
+      receive(replies)
     end
 
     private def transmit(request : Wire::Message::Any) : Fault?
@@ -192,12 +203,8 @@ module Pylon::Session
       nil
     end
 
-    private def await : Wire::Message::Any | Fault
-      reply = @responses.receive?
-      return (@fault || Stopped.new) if reply.nil?
-      return Misbehaved.new(reply.message) if reply.is_a?(Wire::Message::Failure)
-
-      reply
+    private def receive(channel : Channel(T)) : T | Fault forall T
+      channel.receive? || @fault || Stopped.new
     end
   end
 end
