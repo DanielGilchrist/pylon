@@ -25,7 +25,7 @@ describe Pylon::CLI::Sync do
     parsed.verbose?.should be_false
     parsed.ignore.should be_empty
     parsed.state.should be_nil
-    parsed.remote_command.should eq(Pylon::CLI::DEFAULT_REMOTE_COMMAND)
+    parsed.remote_command.should eq(Pylon::CLI::Sync::DEFAULT_REMOTE_COMMAND)
   end
 
   it "keeps the given directories" do
