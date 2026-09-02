@@ -77,13 +77,13 @@ module Pylon::Core
       leading = case_colliding_delete_indexes
 
       Changes.new(initial_capacity: size).tap do |ordered|
-        leading.try(&.each { |index| ordered << @changes[index] })
+        leading.each { |index| ordered << @changes[index] }
         @changes.each { |change| ordered << change unless change.new.nil? || late?(change, late) }
         @changes.each { |change| ordered << change if late?(change, late) }
 
         @changes.each_with_index do |change, index|
           next unless change.new.nil?
-          next if leading && leading.includes?(index)
+          next if leading.includes?(index)
 
           ordered << change
         end
@@ -91,23 +91,21 @@ module Pylon::Core
     end
 
     def subtract_case_collision_digests(holds : Set(Bytes)) : Nil
-      case_colliding_delete_indexes.try &.each do |index|
+      case_colliding_delete_indexes.each do |index|
         old = @changes[index].old
         holds.delete(old.digest) if old.is_a?(File)
       end
     end
 
-    private def case_colliding_delete_indexes : Array(Int32)?
+    def case_colliding_delete_indexes : Set(Int32)
       survivors = nil
-      colliding = nil
+      colliding = Set(Int32).new
 
       @changes.each_with_index do |change, index|
         next unless change.new.nil?
 
         survivors ||= surviving_folded_paths
-        next unless survivors.includes?(change.path.downcase)
-
-        (colliding ||= Array(Int32).new) << index
+        colliding << index if survivors.includes?(change.path.downcase)
       end
 
       colliding
