@@ -7,6 +7,7 @@ module Pylon::Wire
   FORMAT            = IO::ByteFormat::LittleEndian
   DIGEST_BYTES      = 32
   MAX_FIELD_BYTES   = 1 << 20
+  MAX_CONTENT_BYTES = 256 * 1024 * 1024
   CAPACITY_HINT_CAP = 4096
 
   alias Payload = Bytes | Patch

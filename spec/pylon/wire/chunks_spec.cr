@@ -66,6 +66,20 @@ describe Pylon::Wire::Chunks do
     reader.reason.should contain("packed bytes")
   end
 
+  it "refuses a content item that exceeds the sync limit rather than buffering without bound" do
+    content = Bytes.new(Chunks::CHUNK_BYTES * 3) { |index| (index % 251).to_u8 }
+    io = IO::Memory.new
+    Chunks.write_all(io, content, Pylon::Compress::Zstd.new, Chunks.scratch)
+    io.rewind
+
+    reader = Reader.new(io)
+    collected = Chunks.read_all(reader, Pylon::Compress::Zstd.new, Chunks.scratch, limit: Chunks::CHUNK_BYTES * 2)
+
+    collected.should be_nil
+    reader.failed?.should be_true
+    reader.reason.should contain("sync limit")
+  end
+
   it "refuses a tree payload that arrived invalidated" do
     io = IO::Memory.new
     Chunks.write_chunk(io, "half a tree".to_slice, Pylon::Compress::Zstd.new, Chunks.scratch)

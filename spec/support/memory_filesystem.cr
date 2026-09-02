@@ -12,7 +12,8 @@ struct MemoryFilesystem
     inode : UInt64 = 0_u64,
     mtime_ns : Int64 = 0_i64,
     readable : Bool = true,
-    statable : Bool = true
+    statable : Bool = true,
+    reported_size : UInt64? = nil
 
   getter reads = [] of String
 
@@ -66,7 +67,7 @@ struct MemoryFilesystem
 
     Pylon::Scan::Metadata.new(
       mode: mode.to_u32,
-      size: node.content.bytesize.to_u64,
+      size: node.reported_size || node.content.bytesize.to_u64,
       mtime_ns: node.mtime_ns,
       inode: node.inode,
     )

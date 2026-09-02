@@ -126,10 +126,10 @@ describe Pylon::CLI::Reporter do
     io.to_s.should contain("conflict resolved")
   end
 
-  it "says which side an unreadable path is on and why it matters" do
+  it "says which side an unsyncable path is on and why it matters" do
     output = rendered(report_of(troubles: [Trouble.new("locked.rb", :remote, "permission denied")]))
 
-    output.should contain("unreadable on the remote")
+    output.should contain("cannot sync on the remote")
     output.should contain("locked.rb")
     output.should contain("permission denied")
     output.should contain("will not sync")
@@ -138,14 +138,14 @@ describe Pylon::CLI::Reporter do
       .should_not contain("on the remote")
   end
 
-  it "mentions an unreadable path once, not on every cycle" do
+  it "mentions an unsyncable path once, not on every cycle" do
     Colorize.enabled = false
     io = IO::Memory.new
     reporter = Pylon::CLI::Reporter.new(io)
     troubled = report_of(troubles: [Trouble.new("locked.rb", :local, "permission denied")])
 
     reporter.report(troubled)
-    io.to_s.should contain("unreadable")
+    io.to_s.should contain("cannot sync")
     io.clear
 
     reporter.report(troubled)

@@ -203,7 +203,7 @@ struct Pylon::CLI
         next if @announced_troubles.includes?(key)
 
         where = trouble.side.remote? ? " on the remote" : ""
-        @io.puts "#{indent}#{"!".colorize.yellow.bold} #{"unreadable#{where}".colorize.yellow} #{trouble.path} #{"(#{trouble.reason}; it will not sync until this is fixed)".colorize.dark_gray}"
+        @io.puts "#{indent}#{"!".colorize.yellow.bold} #{"cannot sync#{where}".colorize.yellow} #{trouble.path} #{"(#{trouble.reason}; it will not sync until this is fixed)".colorize.dark_gray}"
         spoke = true
       end
 

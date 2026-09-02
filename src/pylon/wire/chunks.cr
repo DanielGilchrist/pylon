@@ -140,7 +140,7 @@ module Pylon::Wire
       value
     end
 
-    def read_all(reader : Reader, codec, scratch : Bytes) : Bytes?
+    def read_all(reader : Reader, codec, scratch : Bytes, limit : Int32 = Wire::MAX_CONTENT_BYTES) : Bytes?
       content = Bytes.empty
       filled = 0
 
@@ -161,12 +161,18 @@ module Pylon::Wire
           break
         end
 
+        if filled + raw_size.to_i32 > limit
+          reader.fail("a content item ran past the #{limit} byte sync limit, refusing to buffer it")
+          break
+        end
+
         packed = scratch[0, packed_size]
         reader.fill(packed)
         break if reader.failed?
 
         if content.size - filled < raw_size
-          grown = Bytes.new(Math.max(content.size * 2, filled + raw_size.to_i32))
+          wanted = Math.max(content.size.to_i64 * 2, (filled + raw_size.to_i32).to_i64)
+          grown = Bytes.new(Math.min(wanted, limit.to_i64).to_i32)
           content[0, filled].copy_to(grown)
           content = grown
         end

@@ -116,6 +116,15 @@ describe Pylon::Scan::Scanner do
     flagged.problem.should contain("EACCES")
   end
 
+  it "refuses to sync a file over the size limit and says so instead of hashing it" do
+    filesystem = sample.with("README.md", reported_size: Pylon::Wire::MAX_CONTENT_BYTES.to_u64 + 1)
+    root = scan(filesystem).root
+
+    flagged = Fixtures.problem!(Fixtures.dig!(root, "README.md"))
+    flagged.problem.should contain("only syncs files up to")
+    filesystem.reads.should_not contain("README.md")
+  end
+
   it "marks an unreadable file problematic rather than failing the scan" do
     filesystem = sample.with("README.md", readable: false)
     root = scan(filesystem).root.should_not be_nil

@@ -1,6 +1,7 @@
 require "digest/sha256"
 require "../fibers"
 require "../filesystem"
+require "../wire"
 require "../core/entry"
 require "../core/paths"
 require "./cache_entry"
@@ -11,6 +12,7 @@ require "./snapshot"
 module Pylon::Scan
   struct Scanner(F)
     READ_BUFFER_BYTES      = 64 * 1024
+    MEBIBYTE               = 1024 * 1024
     DEFAULT_GRANULARITY_NS = Metadata::DEFAULT_GRANULARITY_NS
     DEFAULT_PARALLELISM    = System.cpu_count.to_i * 2
 
@@ -127,6 +129,15 @@ module Pylon::Scan
           survey.nodes[path] = SurveyedProblem.new(listed.reason)
         end
       in .file?
+        if observed.size > Wire::MAX_CONTENT_BYTES
+          size_mib = (observed.size / MEBIBYTE).round(1)
+          limit_mib = Wire::MAX_CONTENT_BYTES // MEBIBYTE
+          survey.nodes[path] = SurveyedProblem.new(
+            "the file is #{size_mib} MiB and pylon only syncs files up to #{limit_mib} MiB",
+          )
+          return
+        end
+
         survey.nodes[path] = SurveyedFile.new(observed)
         @tally.saw_file
 
