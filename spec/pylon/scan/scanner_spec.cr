@@ -132,6 +132,21 @@ describe Pylon::Scan::Ignores do
     ignores.ignore?("app/node_modules_helper.rb").should be_false
     ignores.ignore?("").should be_false
   end
+
+  it "ignores editor scratch files everywhere without any configured patterns" do
+    ignores = Ignores::NONE
+
+    ignores.ignore?(".leave_balance.rb.swp").should be_true
+    ignores.ignore?("app/models/.leave_balance.rb.swp").should be_true
+    ignores.ignore?("app/models/.leave_balance.rb.swo").should be_true
+    ignores.ignore?("docs/.DS_Store").should be_true
+    ignores.ignore?("app/#scratch.rb#").should be_true
+
+    ignores.ignore?("app/models/leave_balance.rb").should be_false
+    ignores.ignore?("recordings/session.swp").should be_false
+    ignores.ignore?("app/models/swap.rb").should be_false
+    ignores.ignore?("#").should be_false
+  end
 end
 
 describe "accelerated scanning" do
