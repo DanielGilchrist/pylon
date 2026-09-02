@@ -6,27 +6,18 @@ module Pylon::Core
     extend self
 
     enum Reason
-      EndpointEmptiedRoot
       RootDeletion
       RootTypeChange
 
       def explain : String
         case self
-        in .endpoint_emptied_root? then "one side lost everything it had; refusing to mirror that"
-        in .root_deletion?         then "a change would delete the sync root"
-        in .root_type_change?      then "a change would replace the sync root with something else"
+        in .root_deletion?    then "a change would delete the sync root"
+        in .root_type_change? then "a change would replace the sync root with something else"
         end
       end
     end
 
-    def check(
-      base : Entry?,
-      local : Entry?,
-      remote : Entry?,
-      changes : Changes,
-    ) : Reason?
-      return Reason::EndpointEmptiedRoot if emptied_root?(base, local, remote)
-
+    def check(changes : Changes) : Reason?
       changes.each do |change|
         next unless change.path.empty?
 
@@ -41,24 +32,6 @@ module Pylon::Core
       end
 
       nil
-    end
-
-    private def emptied_root?(base : Entry?, local : Entry?, remote : Entry?) : Bool
-      return false unless base.is_a?(Directory)
-      return false if syncable_children(base) < 2
-
-      empty?(local) != empty?(remote)
-    end
-
-    private def empty?(entry : Entry?) : Bool
-      return true if entry.nil?
-      return false unless entry.is_a?(Directory)
-
-      syncable_children(entry).zero?
-    end
-
-    private def syncable_children(entry : Directory) : Int32
-      entry.contents.each_value.count(&.is_a?(Syncable))
     end
   end
 end

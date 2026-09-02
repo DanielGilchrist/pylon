@@ -20,7 +20,7 @@ Run all three checks before considering a change done. The end-to-end script cat
 
 `Session#cycle` drives one sync: scan both sides in parallel, reconcile the two trees against the base, ship content, write, commit the new base. With `--watch`, `Runner` repeats the cycle on watcher signals.
 
-- `core/` pure tree logic, no I/O. `Entry` is the tree node (a whole tree is nested entries), `Reconciler` turns base/local/remote into per-side changes and conflicts, `Differ` diffs two trees, `Applier` applies changes to a tree, `Safety` halts the cycle before anything is written when the planned changes would delete or retype the sync root, or when one side suddenly reports an empty tree while the other does not (an unmounted disk must not be mirrored as a mass deletion, for example).
+- `core/` pure tree logic, no I/O. `Entry` is the tree node (a whole tree is nested entries), `Reconciler` turns base/local/remote into per-side changes and conflicts, `Differ` diffs two trees, `Applier` applies changes to a tree, `Safety` halts the cycle before anything is written when the planned changes would delete or retype the sync root.
 - `scan/` turns a directory into an `Entry` tree. `Scanner` reuses untouched subtrees via a baseline plus recheck set, `Cache` holds per-path metadata and digests, `Ignores` filters paths.
 - `write/` applies changes to a filesystem. `Guard` refuses a write when the on-disk state no longer matches the cache, `Outcome` reports what happened per path.
 - `wire/` the binary protocol. `Message` is the frame union, `Binary` encodes and decodes, `Chunks` moves zstd-compressed content, `ContentSource` supplies content to send.

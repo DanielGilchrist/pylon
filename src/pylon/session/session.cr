@@ -70,12 +70,7 @@ module Pylon::Session
         alloc_reconciled = GC.stats.total_bytes
       {% end %}
 
-      halt = Core::Safety.check(
-        @base,
-        local_snapshot.root,
-        remote_snapshot.root,
-        reconciliation.local_changes + reconciliation.remote_changes,
-      )
+      halt = Core::Safety.check(reconciliation.local_changes + reconciliation.remote_changes)
 
       if halt
         return Report.new(

@@ -153,42 +153,12 @@ describe Pylon::Session::Session do
 end
 
 describe "safety halts" do
-  it "refuses to mirror one side losing everything" do
-    in_pair do |local, remote, session|
-      File.write(File.join(local, "one.rb"), "1")
-      File.write(File.join(local, "two.rb"), "2")
-      File.write(File.join(local, "three.rb"), "3")
-      cycle!(session, tick)
-
-      Dir.children(local).each { |name| File.delete(File.join(local, name)) }
-      report = cycle!(session, tick)
-
-      report.halted?.should be_true
-      report.halt.should eq(Safety::Reason::EndpointEmptiedRoot)
-      Dir.children(remote).size.should eq(3)
-    end
-  end
-
-  it "keeps refusing until a human intervenes" do
+  it "mirrors one side deliberately emptying everything" do
     in_pair do |local, remote, session|
       3.times { |index| File.write(File.join(local, "f#{index}.rb"), "x") }
       cycle!(session, tick)
 
       Dir.children(local).each { |name| File.delete(File.join(local, name)) }
-
-      cycle!(session, tick).halted?.should be_true
-      cycle!(session, tick).halted?.should be_true
-      Dir.children(remote).size.should eq(3)
-    end
-  end
-
-  it "propagates the deletion once the other side agrees" do
-    in_pair do |local, remote, session|
-      3.times { |index| File.write(File.join(local, "f#{index}.rb"), "x") }
-      cycle!(session, tick)
-
-      Dir.children(local).each { |name| File.delete(File.join(local, name)) }
-      Dir.children(remote).each { |name| File.delete(File.join(remote, name)) }
 
       report = cycle!(session, tick)
 

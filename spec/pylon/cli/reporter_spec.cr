@@ -46,7 +46,7 @@ describe Pylon::CLI::Reporter do
   end
 
   it "leaves the timing off a halted cycle" do
-    output = rendered(report_of(halt: Safety::Reason::EndpointEmptiedRoot), elapsed: 240.milliseconds)
+    output = rendered(report_of(halt: Safety::Reason::RootDeletion), elapsed: 240.milliseconds)
 
     output.should_not contain("synced in")
   end
@@ -191,7 +191,7 @@ describe Pylon::CLI::Reporter do
   end
 
   it "leads with the halt and says nothing changed" do
-    output = rendered(report_of(halt: Safety::Reason::EndpointEmptiedRoot))
+    output = rendered(report_of(halt: Safety::Reason::RootDeletion))
 
     output.should contain("halted")
     output.should contain("nothing was changed on either side")
