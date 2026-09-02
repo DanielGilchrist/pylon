@@ -22,10 +22,14 @@ describe Pylon::Fibers do
     contexts_named("ScanDigest").should eq(1)
   end
 
-  it "grows the context when a later call asks for more workers" do
-    Pylon::Fibers.parallel(:write, 2) { |worker| worker }
-    Pylon::Fibers.parallel(:write, 8) { |worker| worker }
+  it "runs every worker even when asked for more than the context has threads" do
+    workers = Pylon::Fibers::WORKER_THREADS + 5
+    ran = Array(Int32).new(workers, 0)
 
+    Pylon::Fibers.parallel(:write, 2) { |worker| worker }
+    Pylon::Fibers.parallel(:write, workers) { |worker| ran[worker] += 1 }
+
+    ran.all?(1).should be_true
     contexts_named("Write").should eq(1)
   end
 
