@@ -7,7 +7,7 @@ require "../../../src/pylon/disk"
 private FILES = 120
 
 private def build_writer(disk, contents, parallelism = Pylon::Write::Writer::DEFAULT_PARALLELISM)
-  Pylon::Write::Writer.new(disk, Pylon::Session::Staging.new(contents, Pylon::Session::Staging::Unrecoverable.new), Pylon::Scan::Cache.new, parallelism: parallelism)
+  Pylon::Write::Writer.new(disk, Pylon::Session::Staging.new(contents, Pylon::Session::Staging::Unrecoverable.new), Pylon::Scan::Cache.new, Time.utc.to_unix_ns.to_i64, parallelism: parallelism)
 end
 
 private def bulk_changes : Pylon::Core::Changes

@@ -52,6 +52,13 @@ class MemoryTarget
     end
   end
 
+  def digest(path : String) : Bytes | Pylon::Problem
+    node = @nodes[path]?
+    return Pylon::Problem.new("the file vanished after the scan saw it") if node.nil?
+
+    Digest::SHA256.digest(node.content)
+  end
+
   def each_child(path : String, & : String ->) : Pylon::Missing | Pylon::Problem | Nil
     node = @nodes[path]?
     return Pylon::Missing.new if node.nil?

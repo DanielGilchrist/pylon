@@ -11,7 +11,7 @@ require "./snapshot"
 module Pylon::Scan
   struct Scanner(F)
     READ_BUFFER_BYTES      = 64 * 1024
-    DEFAULT_GRANULARITY_NS = 1_000_000_000_i64
+    DEFAULT_GRANULARITY_NS = Metadata::DEFAULT_GRANULARITY_NS
     DEFAULT_PARALLELISM    = System.cpu_count.to_i * 2
 
     @next_cache : Cache
@@ -224,7 +224,7 @@ module Pylon::Scan
           @next_cache[path] = CacheEntry.new(
             node.metadata,
             digest,
-            provisional: node.metadata.racy?(@now_ns, @granularity_ns),
+            provisional: node.metadata.freshly_modified?(@now_ns, @granularity_ns),
           )
 
           Core::File.new(digest, executable: node.metadata.executable?)

@@ -4,8 +4,10 @@ require "../../../src/pylon/write/writer"
 
 include Pylon::Write
 
+private NOW = 1_000_000_000_000_i64
+
 private def writer(target, staging, cache)
-  Writer.new(target, staging, cache)
+  Writer.new(target, staging, cache, NOW)
 end
 
 private def cache_for(target : MemoryTarget, paths : Enumerable(String)) : Pylon::Scan::Cache
@@ -90,6 +92,39 @@ describe Pylon::Write::Writer do
     outcome.skipped.should eq(ModificationDetected.new)
     target.operations.should be_empty
     String.new(target.nodes["notes.txt"].content).should eq("edited by hand")
+  end
+
+  it "catches an edit hidden inside the clock granularity window by rehashing" do
+    target = MemoryTarget.new
+    original = target.seed_file("notes.txt", "original", mtime_ns: NOW)
+    cache = cache_for(target, ["notes.txt"])
+
+    target.seed_file("notes.txt", "origiNAL", mtime_ns: NOW)
+
+    staging = MemoryStaging.new
+    incoming = staging.add("from the other side")
+
+    outcome = writer(target, staging, cache)
+      .write(Pylon::Core::Changes[Change.new("notes.txt", Pylon::Core::File.new(original), Pylon::Core::File.new(incoming))]).first
+
+    outcome.applied?.should be_false
+    outcome.skipped.should eq(ModificationDetected.new)
+    String.new(target.nodes["notes.txt"].content).should eq("origiNAL")
+  end
+
+  it "still overwrites a freshly modified file once a rehash proves it unchanged" do
+    target = MemoryTarget.new
+    original = target.seed_file("notes.txt", "original", mtime_ns: NOW)
+    cache = cache_for(target, ["notes.txt"])
+
+    staging = MemoryStaging.new
+    incoming = staging.add("from the other side")
+
+    outcome = writer(target, staging, cache)
+      .write(Pylon::Core::Changes[Change.new("notes.txt", Pylon::Core::File.new(original), Pylon::Core::File.new(incoming))]).first
+
+    outcome.applied?.should be_true
+    String.new(target.nodes["notes.txt"].content).should eq("from the other side")
   end
 
   it "refuses to act without cache evidence" do

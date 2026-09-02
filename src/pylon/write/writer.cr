@@ -27,7 +27,9 @@ module Pylon::Write
       @filesystem : F,
       @staging : S,
       @cache : Scan::Cache,
+      @now_ns : Int64,
       @ignores : Scan::Ignores = Scan::Ignores::NONE,
+      @granularity_ns : Int64 = Scan::Metadata::DEFAULT_GRANULARITY_NS,
       @parallelism : Int32 = DEFAULT_PARALLELISM,
     )
     end
@@ -94,16 +96,20 @@ module Pylon::Write
     end
 
     private def write_one(change : Core::Change) : Outcome
+      old = change.old
       verdict = Guard.check(
-        change.old,
+        old,
         @cache[change.path]?,
         @filesystem.observe(change.path),
+        @now_ns,
+        @granularity_ns,
       )
+      verdict = verify_content(change.path, old) if verdict.inconclusive? && old.is_a?(Core::File)
 
       case verdict
       in .modification_detected?
         return Outcome.new(change.path, change.old, ModificationDetected.new)
-      in .unknown_state?
+      in .unknown_state?, .inconclusive?
         return Outcome.new(change.path, change.old, UnknownState.new)
       in .proceed?
       end
@@ -119,7 +125,7 @@ module Pylon::Write
           case guard_removal(change.path, old)
           in .modification_detected?
             return Outcome.new(change.path, change.old, ModificationDetected.new)
-          in .unknown_state?
+          in .unknown_state?, .inconclusive?
             return Outcome.new(change.path, change.old, UnknownState.new)
           in .proceed?
           end
@@ -179,10 +185,20 @@ module Pylon::Write
       observed = @filesystem.observe(path)
       return Verdict::Proceed if observed.nil?
 
-      verdict = Guard.check(expected, @cache[path]?, observed)
+      verdict = Guard.check(expected, @cache[path]?, observed, @now_ns, @granularity_ns)
+      verdict = verify_content(path, expected) if verdict.inconclusive? && expected.is_a?(Core::File)
       return verdict unless verdict.proceed?
 
       expected.is_a?(Core::Directory) ? guard_removal(path, expected) : verdict
+    end
+
+    private def verify_content(path : String, expected : Core::File) : Verdict
+      case digest = @filesystem.digest(path)
+      in Problem
+        Verdict::UnknownState
+      in Bytes
+        digest == expected.digest ? Verdict::Proceed : Verdict::ModificationDetected
+      end
     end
 
     private def expendable?(path : String) : Bool

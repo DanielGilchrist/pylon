@@ -24,8 +24,10 @@ private def cached(digest : Bytes = DIGEST, **overrides) : Pylon::Scan::CacheEnt
   Pylon::Scan::CacheEntry.new(metadata(**overrides), digest)
 end
 
+private NOW = MTIME + 1_000_000_000_i64 * 10
+
 private def check(expected, cached, observed) : Verdict
-  Guard.check(expected, cached, observed)
+  Guard.check(expected, cached, observed, NOW)
 end
 
 describe Pylon::Write::Guard do
@@ -53,6 +55,19 @@ describe Pylon::Write::Guard do
     check(Pylon::Core::File.new(DIGEST), cached, observed_file(size: 101_u64)).should eq(Verdict::ModificationDetected)
     check(Pylon::Core::File.new(DIGEST), cached, observed_file(mtime_ns: MTIME + 1)).should eq(Verdict::ModificationDetected)
     check(Pylon::Core::File.new(DIGEST), cached, observed_file(inode: 8_u64)).should eq(Verdict::ModificationDetected)
+  end
+
+  it "cannot conclude anything about a file modified within the clock granularity window" do
+    fresh = observed_file(mtime_ns: NOW)
+    entry = Pylon::Scan::CacheEntry.new(metadata(mtime_ns: NOW), DIGEST)
+
+    check(Pylon::Core::File.new(DIGEST), entry, fresh).should eq(Verdict::Inconclusive)
+  end
+
+  it "cannot conclude anything from a digest that was recorded inside the granularity window" do
+    entry = Pylon::Scan::CacheEntry.new(metadata, DIGEST, provisional: true)
+
+    check(Pylon::Core::File.new(DIGEST), entry, observed_file).should eq(Verdict::Inconclusive)
   end
 
   it "refuses when only the permissions changed" do

@@ -19,6 +19,7 @@ module Pylon::Scan
     end
 
     NANOSECONDS_PER_SECOND = 1_000_000_000_i64
+    DEFAULT_GRANULARITY_NS = 1_000_000_000_i64
 
     def self.of(path : String) : Metadata | Problem | Nil
       stat = uninitialized LibC::Stat
@@ -86,7 +87,7 @@ module Pylon::Scan
       same_content?(other) && mode == other.mode
     end
 
-    def racy?(now_ns : Int64, granularity_ns : Int64) : Bool
+    def freshly_modified?(now_ns : Int64, granularity_ns : Int64) : Bool
       now_ns - mtime_ns < granularity_ns
     end
   end

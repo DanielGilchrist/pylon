@@ -3,5 +3,6 @@ module Pylon::Write
     Proceed
     ModificationDetected
     UnknownState
+    Inconclusive
   end
 end

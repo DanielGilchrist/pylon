@@ -11,7 +11,7 @@ module Pylon::Scan
 
     def reuse(observed : Metadata, now_ns : Int64, granularity_ns : Int64) : Bytes?
       return if @provisional
-      return if observed.racy?(now_ns, granularity_ns)
+      return if observed.freshly_modified?(now_ns, granularity_ns)
       return unless metadata.same_content?(observed)
 
       digest

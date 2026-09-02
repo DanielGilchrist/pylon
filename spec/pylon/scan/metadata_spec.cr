@@ -49,10 +49,10 @@ describe Pylon::Scan::Metadata do
     base.reusable?(metadata(mode: (LibC::S_IFDIR | 0o644).to_u32)).should be_false
   end
 
-  it "treats a file written inside the clock granularity window as racy" do
-    metadata(mtime_ns: NOW).racy?(NOW, GRANULARITY).should be_true
-    metadata(mtime_ns: NOW - GRANULARITY + 1).racy?(NOW, GRANULARITY).should be_true
-    metadata(mtime_ns: NOW - GRANULARITY).racy?(NOW, GRANULARITY).should be_false
+  it "treats a file written inside the clock granularity window as freshly modified" do
+    metadata(mtime_ns: NOW).freshly_modified?(NOW, GRANULARITY).should be_true
+    metadata(mtime_ns: NOW - GRANULARITY + 1).freshly_modified?(NOW, GRANULARITY).should be_true
+    metadata(mtime_ns: NOW - GRANULARITY).freshly_modified?(NOW, GRANULARITY).should be_false
   end
 end
 
