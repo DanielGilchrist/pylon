@@ -2,6 +2,8 @@ require "../core/change"
 require "../fibers"
 require "../core/paths"
 require "../core/entry"
+require "../missing"
+require "../scan/ignores"
 require "../scan/snapshot"
 require "./grouping"
 require "./guard"
@@ -21,7 +23,13 @@ module Pylon::Write
 
     PARALLEL_THRESHOLD = 16
 
-    def initialize(@filesystem : F, @staging : S, @cache : Scan::Cache, @parallelism : Int32 = DEFAULT_PARALLELISM)
+    def initialize(
+      @filesystem : F,
+      @staging : S,
+      @cache : Scan::Cache,
+      @ignores : Scan::Ignores = Scan::Ignores::NONE,
+      @parallelism : Int32 = DEFAULT_PARALLELISM,
+    )
     end
 
     def write(changes : Core::Changes) : Array(Outcome)
@@ -105,6 +113,18 @@ module Pylon::Write
       end
 
       if clear_first?(change.old, change.new)
+        old = change.old
+
+        if old.is_a?(Core::Directory)
+          case guard_removal(change.path, old)
+          in .modification_detected?
+            return Outcome.new(change.path, change.old, ModificationDetected.new)
+          in .unknown_state?
+            return Outcome.new(change.path, change.old, UnknownState.new)
+          in .proceed?
+          end
+        end
+
         if (blocked = @filesystem.remove(change.path))
           return Outcome.new(change.path, change.old, WriteFailed.new(blocked.reason))
         end
@@ -133,6 +153,42 @@ module Pylon::Write
       in Core::Directory                                                    then true
       in Core::File, Core::SymbolicLink, Core::Untracked, Core::Problematic then false
       end
+    end
+
+    private def guard_removal(path : String, expected : Core::Directory) : Verdict
+      contents = expected.contents
+
+      listed = @filesystem.each_child(path) do |name|
+        child_path = Core::Paths.join(path, name)
+
+        if (child = contents[name]?)
+          verdict = guard_child(child_path, child)
+          return verdict unless verdict.proceed?
+        elsif !expendable?(child_path)
+          return Verdict::ModificationDetected
+        end
+      end
+
+      case listed
+      in Missing, Nil then Verdict::Proceed
+      in Problem      then Verdict::UnknownState
+      end
+    end
+
+    private def guard_child(path : String, expected : Core::Entry) : Verdict
+      observed = @filesystem.observe(path)
+      return Verdict::Proceed if observed.nil?
+
+      verdict = Guard.check(expected, @cache[path]?, observed)
+      return verdict unless verdict.proceed?
+
+      expected.is_a?(Core::Directory) ? guard_removal(path, expected) : verdict
+    end
+
+    private def expendable?(path : String) : Bool
+      return true if @ignores.ignore?(path)
+
+      @filesystem.observe(path).is_a?(Scan::ObservedUntracked)
     end
 
     private def swap_permissions(change : Core::Change) : Outcome?

@@ -52,6 +52,24 @@ class MemoryTarget
     end
   end
 
+  def each_child(path : String, & : String ->) : Pylon::Missing | Pylon::Problem | Nil
+    node = @nodes[path]?
+    return Pylon::Missing.new if node.nil?
+
+    prefix = path.empty? ? "" : "#{path}/"
+
+    @nodes.each_key do |key|
+      next if key == path || !key.starts_with?(prefix)
+
+      name = key[prefix.size..]
+      next if name.empty? || name.includes?('/')
+
+      yield name
+    end
+
+    nil
+  end
+
   def create_directory(path : String) : Pylon::Write::Problem?
     return read_only unless writable?
 

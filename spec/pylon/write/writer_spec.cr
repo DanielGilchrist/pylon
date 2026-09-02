@@ -163,6 +163,92 @@ describe Pylon::Write::Writer do
     target.nodes.has_key?("gone.txt").should be_false
   end
 
+  it "refuses to remove a directory that gained a file since the scan" do
+    target = MemoryTarget.new
+    target.seed_directory("docs")
+    digest = target.seed_file("docs/known.md", "known")
+    cache = cache_for(target, ["docs/known.md"])
+
+    target.seed_file("docs/fresh.md", "created after the scan")
+
+    old = Pylon::Core::Directory.new({"known.md" => Pylon::Core::File.new(digest)})
+    outcome = writer(target, MemoryStaging.new, cache)
+      .write(Pylon::Core::Changes[Change.new("docs", old, nil)]).first
+
+    outcome.applied?.should be_false
+    outcome.skipped.should eq(ModificationDetected.new)
+    target.nodes.has_key?("docs/fresh.md").should be_true
+  end
+
+  it "refuses to remove a directory holding a file edited since the scan" do
+    target = MemoryTarget.new
+    target.seed_directory("docs")
+    digest = target.seed_file("docs/notes.md", "original")
+    cache = cache_for(target, ["docs/notes.md"])
+
+    target.seed_file("docs/notes.md", "edited by hand", inode: 2_u64, mtime_ns: 9_000_i64)
+
+    old = Pylon::Core::Directory.new({"notes.md" => Pylon::Core::File.new(digest)})
+    outcome = writer(target, MemoryStaging.new, cache)
+      .write(Pylon::Core::Changes[Change.new("docs", old, nil)]).first
+
+    outcome.applied?.should be_false
+    outcome.skipped.should eq(ModificationDetected.new)
+    String.new(target.nodes["docs/notes.md"].content).should eq("edited by hand")
+  end
+
+  it "refuses to remove a directory that gained a file deep inside a nested directory" do
+    target = MemoryTarget.new
+    target.seed_directory("docs")
+    target.seed_directory("docs/guides")
+    digest = target.seed_file("docs/guides/setup.md", "steps")
+    cache = cache_for(target, ["docs/guides/setup.md"])
+
+    target.seed_file("docs/guides/fresh.md", "created after the scan")
+
+    old = Pylon::Core::Directory.new({
+      "guides" => Pylon::Core::Directory.new({"setup.md" => Pylon::Core::File.new(digest)}),
+    })
+    outcome = writer(target, MemoryStaging.new, cache)
+      .write(Pylon::Core::Changes[Change.new("docs", old, nil)]).first
+
+    outcome.applied?.should be_false
+    outcome.skipped.should eq(ModificationDetected.new)
+    target.nodes.has_key?("docs/guides/fresh.md").should be_true
+  end
+
+  it "still removes a directory when the only surprise inside is ignored" do
+    target = MemoryTarget.new
+    target.seed_directory("docs")
+    digest = target.seed_file("docs/known.md", "known")
+    cache = cache_for(target, ["docs/known.md"])
+
+    target.seed_file("docs/.DS_Store", "junk")
+
+    old = Pylon::Core::Directory.new({"known.md" => Pylon::Core::File.new(digest)})
+    outcome = writer(target, MemoryStaging.new, cache)
+      .write(Pylon::Core::Changes[Change.new("docs", old, nil)]).first
+
+    outcome.applied?.should be_true
+    target.nodes.has_key?("docs").should be_false
+  end
+
+  it "still removes a directory when a known child already vanished" do
+    target = MemoryTarget.new
+    target.seed_directory("docs")
+    digest = target.seed_file("docs/known.md", "known")
+    cache = cache_for(target, ["docs/known.md"])
+
+    target.nodes.delete("docs/known.md")
+
+    old = Pylon::Core::Directory.new({"known.md" => Pylon::Core::File.new(digest)})
+    outcome = writer(target, MemoryStaging.new, cache)
+      .write(Pylon::Core::Changes[Change.new("docs", old, nil)]).first
+
+    outcome.applied?.should be_true
+    target.nodes.has_key?("docs").should be_false
+  end
+
   it "reports what is actually on disk when staged content is missing" do
     target = MemoryTarget.new
     staging = MemoryStaging.new

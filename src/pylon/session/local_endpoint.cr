@@ -226,7 +226,7 @@ module Pylon::Session
     end
 
     def write(changes : Core::Changes, source : Wire::ContentSource) : Array(Write::Outcome)
-      Write::Writer.new(@disk, Staging.new(source.contents, self), @cache).write(changes)
+      Write::Writer.new(@disk, Staging.new(source.contents, self), @cache, @ignores).write(changes)
     end
 
     def recovered_content(digest : Bytes) : Bytes?
