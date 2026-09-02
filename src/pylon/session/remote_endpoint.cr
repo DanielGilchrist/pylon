@@ -26,8 +26,8 @@ module Pylon::Session
       Fibers.detach(:endpoint_listen) { listen }
     end
 
-    def scan(now_ns : Int64) : Scan::Snapshot | Fault
-      return Scan::Snapshot.new(settled_tree, Scan::Cache.new) if @known
+    def scan(now_ns : Int64) : Core::Entry? | Fault
+      return settled_tree if @known
 
       reply = exchange(Wire::Message::ScanRequest.new(now_ns))
       return reply if reply.is_a?(Fault)
@@ -35,8 +35,6 @@ module Pylon::Session
 
       @unapplied.clear
       @tree = reply.root
-
-      Scan::Snapshot.new(reply.root, Scan::Cache.new)
     end
 
     def delta_capable? : Bool

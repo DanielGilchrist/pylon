@@ -105,7 +105,7 @@ module Pylon::Session
     private def push : Nil
       problem = @lock.synchronize do
         drain
-        current = @endpoint.scan(Time.utc.to_unix_ns.to_i64).root
+        current = @endpoint.scan(Time.utc.to_unix_ns.to_i64)
         @sequence += 1
 
         failed =
@@ -135,7 +135,7 @@ module Pylon::Session
         in Wire::Message::ScanRequest
           @lock.synchronize do
             drain
-            current = @endpoint.scan(request.now_ns).root
+            current = @endpoint.scan(request.now_ns)
             @sent = current
             Wire::Message.write(@output, Wire::Message::ScanResponse.new(current))
           end

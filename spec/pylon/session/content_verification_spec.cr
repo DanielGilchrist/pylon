@@ -4,9 +4,9 @@ require "../../../src/pylon/session/local_endpoint"
 
 private def stale_digest_source(root : String) : {Pylon::Session::LocalEndpoint, Bytes}
   endpoint = Pylon::Session::LocalEndpoint.new(root)
-  snapshot = endpoint.scan(Time.utc.to_unix_ns.to_i64 - 5_000_000_000)
+  tree = endpoint.scan(Time.utc.to_unix_ns.to_i64 - 5_000_000_000)
 
-  digest = Fixtures.file!(Fixtures.dig!(snapshot.root, "racy.rb")).digest
+  digest = Fixtures.file!(Fixtures.dig!(tree, "racy.rb")).digest
 
   File.write(File.join(root, "racy.rb"), "changed after the scan")
   {endpoint, digest}
@@ -39,8 +39,8 @@ describe "content verification against the advertised digest" do
 
     begin
       endpoint = Pylon::Session::LocalEndpoint.new(root)
-      snapshot = endpoint.scan(Time.utc.to_unix_ns.to_i64 - 5_000_000_000)
-      digest = Fixtures.file!(Fixtures.dig!(snapshot.root, "racy.rb")).digest
+      tree = endpoint.scan(Time.utc.to_unix_ns.to_i64 - 5_000_000_000)
+      digest = Fixtures.file!(Fixtures.dig!(tree, "racy.rb")).digest
 
       File.delete(File.join(root, "racy.rb"))
 

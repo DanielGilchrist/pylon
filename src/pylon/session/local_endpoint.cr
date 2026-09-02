@@ -63,7 +63,7 @@ module Pylon::Session
       end
     end
 
-    def scan(now_ns : Int64) : Scan::Snapshot
+    def scan(now_ns : Int64) : Core::Entry?
       @tally.reset
 
       snapshot = Scan::Scanner.new(
@@ -81,7 +81,7 @@ module Pylon::Session
       end
       @baseline = @accelerated ? snapshot.root : nil
       @recheck = Set(String).new
-      snapshot
+      snapshot.root
     end
 
     def delta_capable? : Bool

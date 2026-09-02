@@ -40,11 +40,11 @@ module Pylon::Session
 
       local_pending = Fibers.future { @local.scan(now_ns) }
       remote_pending = Fibers.future { @remote.scan(now_ns) }
-      local_snapshot = Fibers.await(local_pending)
-      remote_snapshot = Fibers.await(remote_pending)
+      local_root = Fibers.await(local_pending)
+      remote_root = Fibers.await(remote_pending)
 
-      return local_snapshot if local_snapshot.is_a?(Fault)
-      return remote_snapshot if remote_snapshot.is_a?(Fault)
+      return local_root if local_root.is_a?(Fault)
+      return remote_root if remote_root.is_a?(Fault)
 
       {% if flag?(:timing) %}
         scanned = Time.instant
@@ -54,16 +54,11 @@ module Pylon::Session
       # With no saved state the local side is the source of truth: adopting
       # the remote tree as the base makes this first cycle push only.
       if @push_first
-        @base = remote_snapshot.root if @base.nil?
+        @base = remote_root if @base.nil?
         @push_first = false
       end
 
-      reconciliation = Core::Reconciler.reconcile(
-        @base,
-        local_snapshot.root,
-        remote_snapshot.root,
-        @preferences,
-      )
+      reconciliation = Core::Reconciler.reconcile(@base, local_root, remote_root, @preferences)
 
       {% if flag?(:timing) %}
         reconciled = Time.instant
@@ -98,11 +93,11 @@ module Pylon::Session
         fetched = Time.instant
       {% end %}
 
-      local_holds = digests_present_in(local_snapshot.root, local_changes)
+      local_holds = digests_present_in(local_root, local_changes)
       local_outcomes = transfer(local_changes, @remote, @local, :to_local, local_holds)
       return local_outcomes if local_outcomes.is_a?(Fault)
 
-      remote_holds = digests_present_in(remote_snapshot.root, remote_changes)
+      remote_holds = digests_present_in(remote_root, remote_changes)
       remote_outcomes = transfer(remote_changes, @local, @remote, :to_remote, remote_holds)
       return remote_outcomes if remote_outcomes.is_a?(Fault)
 
