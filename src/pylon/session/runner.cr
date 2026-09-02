@@ -2,7 +2,7 @@ require "./session"
 
 module Pylon::Session
   class Runner(A, B)
-    DEFAULT_DEBOUNCE     = 20.milliseconds
+    DEFAULT_DEBOUNCE     = 10.milliseconds
     DEFAULT_POLL         = 250.milliseconds
     DEFAULT_BURST_QUIET  = 300.milliseconds
     DEFAULT_SETTLE_LIMIT = 10.seconds
