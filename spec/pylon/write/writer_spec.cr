@@ -299,6 +299,33 @@ describe Pylon::Write::Writer do
     target.nodes.has_key?("docs").should be_false
   end
 
+  it "removes a case variant before creating its replacement, even in a parallel batch" do
+    target = MemoryTarget.new
+    staging = MemoryStaging.new
+    old_digest = target.seed_file("Readme.md", "content")
+    cache = cache_for(target, ["Readme.md"])
+    incoming = staging.add("content")
+
+    changes = Pylon::Core::Changes.new
+    changes << Change.new("Readme.md", Pylon::Core::File.new(old_digest), nil)
+    changes << Change.new("README.md", nil, Pylon::Core::File.new(incoming))
+
+    20.times do |index|
+      digest = staging.add("filler #{index}")
+      changes << Change.new("filler#{index}.rb", nil, Pylon::Core::File.new(digest))
+    end
+
+    outcomes = Writer.new(target, staging, cache, NOW, parallelism: 4).write(changes)
+
+    outcomes.count(&.applied?).should eq(changes.size)
+    target.operations.index("remove Readme.md").should_not be_nil
+    remove_at = target.operations.index("remove Readme.md")
+    write_at = target.operations.index("write README.md")
+    next if remove_at.nil? || write_at.nil?
+
+    (remove_at < write_at).should be_true
+  end
+
   it "reports what is actually on disk when staged content is missing" do
     target = MemoryTarget.new
     staging = MemoryStaging.new

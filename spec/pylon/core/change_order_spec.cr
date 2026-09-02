@@ -27,6 +27,16 @@ describe "Pylon::Core::Changes#deletes_last" do
     ordered.map(&.path).should eq(["kept.rb", "late.rb", "gone.rb"])
   end
 
+  it "runs a delete first when a surviving path differs only in case" do
+    changes = Changes[
+      Change.new("README.md", nil, Fixtures.f1),
+      Change.new("Readme.md", Fixtures.f1, nil),
+      Change.new("gone.rb", Fixtures.f1, nil),
+    ]
+
+    changes.deletes_last(NOTHING_LATE).map(&.path).should eq(["Readme.md", "README.md", "gone.rb"])
+  end
+
   it "leaves a list without deletions untouched" do
     changes = Changes[
       Change.new("a.rb", nil, Fixtures.f1),

@@ -1,16 +1,17 @@
 require "../../spec_helper"
 
-private CONTENTS = {nil, Fixtures.f1, Fixtures.f2, Fixtures.f1x, Fixtures.untracked}
-private NAMES    = {"a", "b"}
+private CONVERGING_CONTENTS = {nil, Fixtures.f1, Fixtures.f2, Fixtures.f1x, Fixtures.untracked, Fixtures.symlink_relative}
+private ALL_CONTENTS        = {nil, Fixtures.f1, Fixtures.f2, Fixtures.f1x, Fixtures.untracked, Fixtures.symlink_relative, Fixtures.problematic}
+private NAMES               = {"a", "b"}
 
-private def random_entry(random : Random, depth : Int32) : Entry?
+private def random_entry(random : Random, depth : Int32, pool : Tuple = ALL_CONTENTS) : Entry?
   if depth <= 0 || random.rand(3) == 0
-    return CONTENTS[random.rand(CONTENTS.size)]
+    return pool[random.rand(pool.size)]
   end
 
   contents = {} of String => Entry
   NAMES.each do |name|
-    if (child = random_entry(random, depth - 1))
+    if (child = random_entry(random, depth - 1, pool))
       contents[name] = child
     end
   end
@@ -20,6 +21,46 @@ end
 
 private def random_base(random : Random, depth : Int32) : Entry?
   random_entry(random, depth).try(&.syncable)
+end
+
+private def readable_twin(entry : Entry?) : Entry?
+  case entry
+  in Nil, Pylon::Core::File, Pylon::Core::SymbolicLink, Pylon::Core::Untracked
+    entry
+  in Pylon::Core::Problematic
+    Fixtures.f1
+  in Pylon::Core::Directory
+    contents = {} of String => Entry
+    entry.contents.each { |name, child| contents[name] = readable_twin(child) || child }
+    Pylon::Core::Directory.new(contents)
+  end
+end
+
+private def collect_problematic_paths(path : String, entry : Entry?, into : Set(String)) : Nil
+  case entry
+  in Nil, Pylon::Core::File, Pylon::Core::SymbolicLink, Pylon::Core::Untracked
+    nil
+  in Pylon::Core::Problematic
+    into << path
+  in Pylon::Core::Directory
+    entry.contents.each do |name, child|
+      collect_problematic_paths(Pylon::Core::Paths.join(path, name), child, into)
+    end
+  end
+end
+
+private def dig(entry : Entry?, path : String) : Entry?
+  return entry if path.empty?
+
+  current = entry
+
+  path.split('/').each do |name|
+    return unless current.is_a?(Pylon::Core::Directory)
+
+    current = current.contents[name]?
+  end
+
+  current
 end
 
 private def contains_unsyncable?(entry : Entry) : Bool
@@ -66,8 +107,8 @@ describe "reconciler properties" do
 
     200.times do |iteration|
       base = random_base(random, 2)
-      local = random_entry(random, 2)
-      remote = random_entry(random, 2)
+      local = random_entry(random, 2, CONVERGING_CONTENTS)
+      remote = random_entry(random, 2, CONVERGING_CONTENTS)
 
       {Fixtures::LOCAL_WINS, Fixtures::REMOTE_WINS}.each do |preferences|
         reconciliation = Reconciler.reconcile(base, local, remote, preferences)
@@ -102,6 +143,32 @@ describe "reconciler properties" do
 
         contains_unsyncable?(updated).should be_false,
           "seed=#{seed} iteration=#{iteration} mode=#{mode}: base holds unsyncable content"
+      end
+    end
+  end
+
+  it "keeps the base entry for every path that is unreadable on both sides" do
+    seed = 20260902_u64
+    random = Random.new(seed)
+
+    200.times do |iteration|
+      Fixtures::ALL_PREFERENCES.each do |mode|
+        local = random_entry(random, 2)
+        remote = random.rand(2) == 0 ? local : random_entry(random, 2)
+        base = readable_twin(local).try(&.syncable)
+
+        reconciliation = Reconciler.reconcile(base, local, remote, mode)
+        updated = Applier.apply(base, reconciliation.base_changes)
+
+        local_unreadable = Set(String).new
+        remote_unreadable = Set(String).new
+        collect_problematic_paths("", local, local_unreadable)
+        collect_problematic_paths("", remote, remote_unreadable)
+
+        (local_unreadable & remote_unreadable).each do |path|
+          (dig(updated, path) == dig(base, path)).should be_true,
+            "seed=#{seed} iteration=#{iteration} mode=#{mode}: the base changed at unreadable path #{path.inspect}"
+        end
       end
     end
   end

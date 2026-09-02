@@ -138,7 +138,9 @@ module Pylon::Session
     private def digests_present_in(root : Core::Entry?, changes : Core::Changes) : Set(Bytes)
       return Set(Bytes).new if changes.empty?
 
-      Core::Digests.all(root)
+      holds = Core::Digests.all(root)
+      changes.subtract_case_collision_digests(holds)
+      holds
     end
 
     private def transfer(changes : Core::Changes, source, target, direction : Direction, target_holds : Set(Bytes)) : Array(Write::Outcome) | Fault

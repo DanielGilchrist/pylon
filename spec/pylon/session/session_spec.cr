@@ -152,6 +152,21 @@ describe Pylon::Session::Session do
   end
 end
 
+describe "case-only renames" do
+  it "lands a rename that changed only the letter case in a single cycle" do
+    in_pair do |local, remote, session|
+      File.write(File.join(local, "Readme.md"), "content")
+      cycle!(session, tick)
+
+      File.rename(File.join(local, "Readme.md"), File.join(local, "README.md"))
+      cycle!(session, tick)
+
+      Dir.children(remote).should eq(Dir.children(local))
+      File.read(File.join(remote, Dir.children(remote).first)).should eq("content")
+    end
+  end
+end
+
 describe "safety halts" do
   it "mirrors one side deliberately emptying everything" do
     in_pair do |local, remote, session|

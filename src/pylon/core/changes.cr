@@ -74,11 +74,53 @@ module Pylon::Core
     end
 
     def deletes_last(late : Set(Bytes)) : Changes
+      leading = case_colliding_delete_indexes
+
       Changes.new(initial_capacity: size).tap do |ordered|
+        leading.try(&.each { |index| ordered << @changes[index] })
         @changes.each { |change| ordered << change unless change.new.nil? || late?(change, late) }
         @changes.each { |change| ordered << change if late?(change, late) }
-        @changes.each { |change| ordered << change if change.new.nil? }
+
+        @changes.each_with_index do |change, index|
+          next unless change.new.nil?
+          next if leading && leading.includes?(index)
+
+          ordered << change
+        end
       end
+    end
+
+    def subtract_case_collision_digests(holds : Set(Bytes)) : Nil
+      case_colliding_delete_indexes.try &.each do |index|
+        old = @changes[index].old
+        holds.delete(old.digest) if old.is_a?(File)
+      end
+    end
+
+    private def case_colliding_delete_indexes : Array(Int32)?
+      survivors = nil
+      colliding = nil
+
+      @changes.each_with_index do |change, index|
+        next unless change.new.nil?
+
+        survivors ||= surviving_folded_paths
+        next unless survivors.includes?(change.path.downcase)
+
+        (colliding ||= [] of Int32) << index
+      end
+
+      colliding
+    end
+
+    private def surviving_folded_paths : Set(String)
+      folded = Set(String).new
+
+      @changes.each do |change|
+        folded << change.path.downcase unless change.new.nil?
+      end
+
+      folded
     end
 
     private def late?(change : Change, late : Set(Bytes)) : Bool
