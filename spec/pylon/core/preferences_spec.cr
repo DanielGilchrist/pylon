@@ -9,7 +9,7 @@ end
 
 describe Pylon::Core::Preferences do
   it "leaves everything a conflict when no rules are given" do
-    Preferences.none.winner("sorbet/rbi/a.rbi").should be_nil
+    build.winner("sorbet/rbi/a.rbi").should be_nil
   end
 
   it "matches globs" do

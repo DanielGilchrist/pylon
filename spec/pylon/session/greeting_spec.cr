@@ -40,7 +40,7 @@ private def rejected_with(message : String, brand : Pylon::Brand = Pylon::Brand:
 
   begin
     yield socket
-    session = Session.new(LocalEndpoint.new(root), RemoteEndpoint.new(client, client, remote_configuration(root, brand: brand)))
+    session = build_session(local_endpoint(root), RemoteEndpoint.new(client, client, remote_configuration(root, brand: brand)))
 
     result = session.cycle(Time.utc.to_unix_ns.to_i64)
 

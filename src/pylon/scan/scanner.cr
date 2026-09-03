@@ -11,10 +11,9 @@ require "./snapshot"
 
 module Pylon::Scan
   struct Scanner(F)
-    READ_BUFFER_BYTES      = 64 * 1024
-    MEBIBYTE               = 1024 * 1024
-    DEFAULT_GRANULARITY_NS = Metadata::DEFAULT_GRANULARITY_NS
-    DEFAULT_PARALLELISM    = System.cpu_count.to_i * 2
+    READ_BUFFER_BYTES   = 64 * 1024
+    MEBIBYTE            = 1024 * 1024
+    DEFAULT_PARALLELISM = System.cpu_count.to_i * 2
 
     private alias Surveyed = SurveyedDirectory | SurveyedFile | SurveyedLink | SurveyedUntracked | SurveyedProblem
 
@@ -25,12 +24,11 @@ module Pylon::Scan
       @filesystem : F,
       @cache : Cache,
       @now_ns : Int64,
-      @ignores : Ignores = Ignores::NONE,
-      @granularity_ns : Int64 = DEFAULT_GRANULARITY_NS,
+      @ignores : Ignores,
+      @baseline : Core::Entry?,
+      @recheck : Set(String),
+      @tally : Tally,
       @parallelism : Int32 = DEFAULT_PARALLELISM,
-      @baseline : Core::Entry? = nil,
-      @recheck : Set(String) = Set(String).new,
-      @tally : Tally = Tally.new,
     ) : Nil
       @next_cache = Cache.new
       @dirty = expand(@recheck)
@@ -139,13 +137,13 @@ module Pylon::Scan
 
     private def reusable_digest(survey : Survey, path : String, observed : Metadata) : Bytes?
       if (cached = @cache[path]?)
-        return cached.reuse(observed, @now_ns, @granularity_ns)
+        return cached.reuse(observed, @now_ns, Metadata::GRANULARITY_NS)
       end
 
       relocated = survey.by_inode(@cache)[observed.inode]?
       return if relocated.nil?
 
-      relocated.reuse(observed, @now_ns, @granularity_ns)
+      relocated.reuse(observed, @now_ns, Metadata::GRANULARITY_NS)
     end
 
     private def carry_cache(path : String, entry : Core::Entry) : Nil
@@ -230,7 +228,7 @@ module Pylon::Scan
           @next_cache[path] = CacheEntry.new(
             node.metadata,
             digest,
-            provisional: node.metadata.freshly_modified?(@now_ns, @granularity_ns),
+            provisional: node.metadata.freshly_modified?(@now_ns, Metadata::GRANULARITY_NS),
           )
 
           Core::File.new(digest, executable: node.metadata.executable?)

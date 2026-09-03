@@ -8,11 +8,12 @@ module Fixtures
   D1 = Digest::SHA256.digest("d1")
   D2 = Digest::SHA256.digest("d2")
 
+  NONE        = built
   LOCAL_WINS  = built(local: ["."])
   REMOTE_WINS = built(remote: ["."])
 
-  ALL_PREFERENCES   = [Preferences.none, LOCAL_WINS, REMOTE_WINS]
-  NO_PREFERENCES    = [Preferences.none]
+  ALL_PREFERENCES   = [NONE, LOCAL_WINS, REMOTE_WINS]
+  NO_PREFERENCES    = [NONE]
   PREFERRING_LOCAL  = [LOCAL_WINS]
   PREFERRING_REMOTE = [REMOTE_WINS]
 
@@ -24,11 +25,11 @@ module Fixtures
   end
 
   def self.f1 : Entry
-    Pylon::Core::File.new(D1)
+    Pylon::Core::File.new(D1, executable: false)
   end
 
   def self.f2 : Entry
-    Pylon::Core::File.new(D2)
+    Pylon::Core::File.new(D2, executable: false)
   end
 
   def self.f1x : Entry

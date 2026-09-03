@@ -4,7 +4,7 @@ module Pylon::Core
   module Reconciler
     extend self
 
-    def reconcile(base : Entry?, local : Entry?, remote : Entry?, preferences : Preferences = Preferences.none) : Reconciliation
+    def reconcile(base : Entry?, local : Entry?, remote : Entry?, preferences : Preferences) : Reconciliation
       state = State.new(preferences)
       state.walk("", base, local, remote)
       state.result

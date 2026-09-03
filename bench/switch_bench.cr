@@ -30,9 +30,9 @@ opened =
     end
 
     rate = ENV["BULK_RATE_BYTES"]? || "0"
-    Session::ProcessTransport.open(proxy, [latency || "0", rate, binary] + remote_arguments)
+    Session::ProcessTransport.open(proxy, [latency || "0", rate, binary] + remote_arguments) { |line| STDERR.puts(line) }
   else
-    Session::ProcessTransport.open(binary, remote_arguments)
+    Session::ProcessTransport.open(binary, remote_arguments) { |line| STDERR.puts(line) }
   end
 
 transport =
@@ -43,7 +43,9 @@ transport =
 
 left = Session::LocalEndpoint.new(local_root, Scan::Ignores.new([ignore]), compression: level)
 right = Session::RemoteEndpoint.new(transport.reader, transport.writer, Pylon::Wire::Message::Configure.new(root: remote_root, ignores: [ignore], compression: level, brand: Pylon::Brand::DEFAULT, state: nil, watch: false))
-session = Session::Session.new(left, right, push_first: true)
+preferences = Core::Preferences.build(Array(String).new, Array(String).new)
+raise "expected empty preferences to build" if preferences.is_a?(Core::Preferences::Invalid)
+session = Session::Session.new(left, right, preferences: preferences, base: nil, dry_run: false, push_first: true, on_progress: nil)
 
 started = Time.instant
 report = session.cycle(Time.utc.to_unix_ns.to_i64)

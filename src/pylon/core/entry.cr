@@ -66,7 +66,7 @@ module Pylon::Core
   end
 
   struct File
-    def initialize(@digest : Bytes, @executable : Bool = false) : Nil
+    def initialize(@digest : Bytes, @executable : Bool) : Nil
     end
 
     getter digest : Bytes

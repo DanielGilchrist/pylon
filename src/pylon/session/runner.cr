@@ -11,12 +11,12 @@ module Pylon::Session
     def initialize(
       @session : Session(A, B),
       @signals : Channel(Nil),
+      @before : Proc(Nil)?,
+      @gauge : Proc(Int32)?,
       @debounce : Time::Span = DEFAULT_DEBOUNCE,
       @poll : Time::Span = DEFAULT_POLL,
       @burst_quiet : Time::Span = DEFAULT_BURST_QUIET,
       @settle_limit : Time::Span = DEFAULT_SETTLE_LIMIT,
-      @before : Proc(Nil)? = nil,
-      @gauge : Proc(Int32)? = nil,
     ) : Nil
       @stopping = false
     end

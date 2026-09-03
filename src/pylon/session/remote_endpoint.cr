@@ -44,7 +44,7 @@ module Pylon::Session
       PendingSignatures.new(self, transmit(Wire::Message::SignaturesRequest.new(pairs)))
     end
 
-    def content_source(digests : Array(Bytes), budget : UInt64, signatures : Wire::Delta::Signatures = Wire::Delta::Signatures.new) : Wire::ContentSource | Fault
+    def content_source(digests : Array(Bytes), budget : UInt64, signatures : Wire::Delta::Signatures) : Wire::ContentSource | Fault
       return Wire::ContentSource::Materialised.new(Wire::Contents.new) if digests.empty?
 
       reply = exchange(Wire::Message::ContentsRequest.new(digests, budget, signatures), @contents)

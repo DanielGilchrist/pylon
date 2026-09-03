@@ -13,7 +13,7 @@ private def in_pair(& : String, String, Session(LocalEndpoint, LocalEndpoint) ->
   Dir.mkdir_p(remote)
 
   begin
-    yield local, remote, Session.new(LocalEndpoint.new(local), LocalEndpoint.new(remote))
+    yield local, remote, build_session(local_endpoint(local), local_endpoint(remote))
   ensure
     FileUtils.rm_rf(base)
   end
@@ -24,7 +24,7 @@ describe Pylon::Session::Runner do
     in_pair do |local, remote, session|
       File.write(File.join(local, "first.rb"), "x")
 
-      runner = Runner.new(session, Channel(Nil).new(1), debounce: 1.millisecond, poll: 10.milliseconds)
+      runner = Runner.new(session, Channel(Nil).new(1), before: nil, gauge: nil, debounce: 1.millisecond, poll: 10.milliseconds)
       reports = Array(Report).new
 
       spawn do
@@ -45,7 +45,7 @@ describe Pylon::Session::Runner do
   it "cycles again when a signal arrives" do
     in_pair do |local, remote, session|
       signals = Channel(Nil).new(1)
-      runner = Runner.new(session, signals, debounce: 1.millisecond, poll: 1.second)
+      runner = Runner.new(session, signals, before: nil, gauge: nil, debounce: 1.millisecond, poll: 1.second)
       reports = Array(Report).new
 
       spawn { runner.run { |report, _elapsed| reports << report } }
@@ -66,7 +66,7 @@ describe Pylon::Session::Runner do
 
   it "does not cycle while nothing is happening" do
     in_pair do |_, _, session|
-      runner = Runner.new(session, Channel(Nil).new(1), debounce: 1.millisecond, poll: 10.milliseconds)
+      runner = Runner.new(session, Channel(Nil).new(1), before: nil, gauge: nil, debounce: 1.millisecond, poll: 10.milliseconds)
       reports = Array(Report).new
 
       spawn { runner.run { |report, _elapsed| reports << report } }
@@ -82,7 +82,7 @@ describe Pylon::Session::Runner do
   it "coalesces a burst of signals into a single cycle" do
     in_pair do |local, _, session|
       signals = Channel(Nil).new(16)
-      runner = Runner.new(session, signals, debounce: 30.milliseconds, poll: 1.second, burst_quiet: 20.milliseconds)
+      runner = Runner.new(session, signals, before: nil, gauge: nil, debounce: 30.milliseconds, poll: 1.second, burst_quiet: 20.milliseconds)
       reports = Array(Report).new
 
       spawn { runner.run { |report, _elapsed| reports << report } }
@@ -106,7 +106,7 @@ describe Pylon::Session::Runner do
   it "keeps waiting while signals arrive in gaps longer than the debounce" do
     in_pair do |local, _, session|
       signals = Channel(Nil).new(16)
-      runner = Runner.new(session, signals, debounce: 2.milliseconds, poll: 1.second, burst_quiet: 120.milliseconds, gauge: -> : Int32 { 100 })
+      runner = Runner.new(session, signals, debounce: 2.milliseconds, poll: 1.second, burst_quiet: 120.milliseconds, before: nil, gauge: -> : Int32 { 100 })
       reports = Array(Report).new
 
       spawn { runner.run { |report, _elapsed| reports << report } }
@@ -132,7 +132,7 @@ describe Pylon::Session::Runner do
   it "cycles anyway when a burst never goes quiet" do
     in_pair do |local, _, session|
       signals = Channel(Nil).new(16)
-      runner = Runner.new(session, signals, debounce: 2.milliseconds, poll: 1.second, burst_quiet: 60.milliseconds, settle_limit: 100.milliseconds, gauge: -> : Int32 { 100 })
+      runner = Runner.new(session, signals, debounce: 2.milliseconds, poll: 1.second, burst_quiet: 60.milliseconds, settle_limit: 100.milliseconds, before: nil, gauge: -> : Int32 { 100 })
       reports = Array(Report).new
 
       spawn { runner.run { |report, _elapsed| reports << report } }

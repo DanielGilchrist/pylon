@@ -5,8 +5,8 @@ module Pylon::Session
     def command(
       host : String,
       remote_command : String,
-      config : String? = nil,
-      port : String? = nil,
+      config : String?,
+      port : String?,
     ) : Array(String)
       arguments = Array(String).new
 

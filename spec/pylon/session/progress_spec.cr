@@ -19,9 +19,9 @@ private def in_progress_pair(file_count : Int32, & : Array(Progress), Session(Lo
   file_count.times { |index| File.write(File.join(local_root, "file_#{index}.rb"), "body #{index}") }
 
   updates = Array(Progress).new
-  session = Session.new(
-    LocalEndpoint.new(local_root),
-    LocalEndpoint.new(remote_root),
+  session = build_session(
+    local_endpoint(local_root),
+    local_endpoint(remote_root),
     on_progress: ->(update : Progress) : Nil { updates << update },
   )
 

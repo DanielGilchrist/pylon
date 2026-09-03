@@ -15,10 +15,6 @@ module Pylon::Core
     record FallbackRule, side : Side
     record Invalid, message : String
 
-    def self.none : Preferences
-      new(Array(Rule).new)
-    end
-
     def self.build(local : Array(String), remote : Array(String)) : Preferences | Invalid
       rules = Array(Rule).new
 

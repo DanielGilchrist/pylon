@@ -4,6 +4,30 @@ require "./support/entries"
 
 include Pylon::Core
 
+def local_endpoint(root : String) : Pylon::Session::LocalEndpoint
+  Pylon::Session::LocalEndpoint.new(root, Pylon::Scan::Ignores::NONE, compression: Pylon::Compress::Zstd::DEFAULT_LEVEL)
+end
+
+def build_session(
+  local : A,
+  remote : B,
+  preferences : Preferences = Fixtures::NONE,
+  base : Entry? = nil,
+  dry_run : Bool = false,
+  push_first : Bool = false,
+  on_progress : Proc(Pylon::Session::Progress, Nil)? = nil,
+) : Pylon::Session::Session(A, B) forall A, B
+  Pylon::Session::Session.new(
+    local,
+    remote,
+    preferences: preferences,
+    base: base,
+    dry_run: dry_run,
+    push_first: push_first,
+    on_progress: on_progress,
+  )
+end
+
 def cycle!(session : Pylon::Session::Session, now_ns : Int64) : Pylon::Session::Report
   result = session.cycle(now_ns)
   return result if result.is_a?(Pylon::Session::Report)

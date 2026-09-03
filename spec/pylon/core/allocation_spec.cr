@@ -32,7 +32,7 @@ describe "allocation budgets" do
     tree = wide_tree(FILES)
 
     assert_allocates_under(16 * KIB, "reconciling two identical #{FILES} file trees") do
-      Reconciler.reconcile(tree, tree, tree)
+      Reconciler.reconcile(tree, tree, tree, Fixtures::NONE)
     end
   end
 

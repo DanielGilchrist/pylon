@@ -7,6 +7,9 @@ private def scan_with(tally : Pylon::Scan::Tally, files : Hash(String, String)) 
     MemoryFilesystem.build(files),
     Pylon::Scan::Cache.new,
     1_000_000_000_i64,
+    Pylon::Scan::Ignores::NONE,
+    baseline: nil,
+    recheck: Set(String).new,
     tally: tally,
   ).scan
 end

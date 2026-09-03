@@ -1,11 +1,10 @@
 require "../core/digests"
 require "../wire/message"
 require "../wire/delta"
-require "./staging/unrecoverable"
 
 module Pylon::Session
   struct Staging(R)
-    def initialize(@contents : Wire::Contents, @resolver : R = Unrecoverable.new) : Nil
+    def initialize(@contents : Wire::Contents, @resolver : R) : Nil
     end
 
     def content(digest : Bytes) : Bytes?

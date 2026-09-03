@@ -21,6 +21,7 @@ private def sample_cache : Pylon::Scan::Cache
   cache["app/user.rb"] = Pylon::Scan::CacheEntry.new(
     Pylon::Scan::Metadata.new(mode: 33188_u32, size: 42_u64, mtime_ns: 1_700_i64, inode: 9_u64),
     Digest::SHA256.digest("digest-a"),
+    provisional: false,
   )
 
   cache

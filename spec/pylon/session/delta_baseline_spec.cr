@@ -27,8 +27,8 @@ private def in_watched_pair(& : String, String, Session(LocalEndpoint, RemoteEnd
   pushes = ::Channel(Nil).new(16)
 
   begin
-    session = Session.new(
-      LocalEndpoint.new(local),
+    session = build_session(
+      local_endpoint(local),
       RemoteEndpoint.new(client, client, remote_configuration(remote, watch: true), pushes),
       push_first: true,
     )

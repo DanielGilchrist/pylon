@@ -7,7 +7,7 @@ module Pylon::Wire::Message
   struct ContentsRequest
     include Writable
 
-    def initialize(@digests : Array(Bytes), @budget : UInt64, @signatures : Delta::Signatures = Delta::Signatures.new) : Nil
+    def initialize(@digests : Array(Bytes), @budget : UInt64, @signatures : Delta::Signatures) : Nil
     end
 
     getter digests : Array(Bytes)

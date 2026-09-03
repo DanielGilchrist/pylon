@@ -8,8 +8,8 @@ module Pylon::Session
       @conflicts : Array(Core::Conflict),
       @local_outcomes : Array(Write::Outcome),
       @remote_outcomes : Array(Write::Outcome),
+      @troubles : Array(Core::Trouble),
       @halt : Core::Safety::Reason? = nil,
-      @troubles : Array(Core::Trouble) = Array(Core::Trouble).new,
       @local_relocations : Array(Core::Relocation) = Array(Core::Relocation).new,
       @remote_relocations : Array(Core::Relocation) = Array(Core::Relocation).new,
     ) : Nil

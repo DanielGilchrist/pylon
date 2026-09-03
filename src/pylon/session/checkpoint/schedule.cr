@@ -7,8 +7,8 @@ module Pylon::Session
     def initialize(
       @path : String,
       @build : Proc(Checkpoint),
+      @on_problem : Proc(String, Nil)?,
       @interval : Time::Span = DEFAULT_INTERVAL,
-      @on_problem : Proc(String, Nil)? = nil,
     ) : Nil
       @last = Time.instant - @interval
       @complained = false

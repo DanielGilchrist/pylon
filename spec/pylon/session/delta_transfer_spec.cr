@@ -44,7 +44,7 @@ private def in_metered_pair(& : String, String, Session(LocalEndpoint, RemoteEnd
   metered = MeteredIO.new(client)
 
   begin
-    session = Session.new(LocalEndpoint.new(local_root), RemoteEndpoint.new(metered, metered, remote_configuration(remote_root)))
+    session = build_session(local_endpoint(local_root), RemoteEndpoint.new(metered, metered, remote_configuration(remote_root)))
     yield local_root, remote_root, session, metered
   ensure
     client.close

@@ -13,7 +13,7 @@ struct Pylon::CLI
     @progress : Session::Progress? = nil
     @scan : Scan::Tally? = nil
 
-    def initialize(@io : IO, @verbose : Bool = false, @dry_run : Bool = false, @errors : IO = STDERR, *, @brand : Brand) : Nil
+    def initialize(@io : IO, @verbose : Bool, @dry_run : Bool, @errors : IO = STDERR, *, @brand : Brand) : Nil
       @announced = Set(String).new
       @announced_troubles = Set(String).new
       @spinner = Spinner.new(@io)
@@ -81,7 +81,7 @@ struct Pylon::CLI
       @io.puts
     end
 
-    def report(report : Session::Report, elapsed : Time::Span? = nil) : Nil
+    def report(report : Session::Report, elapsed : Time::Span?) : Nil
       clear_progress
 
       if (halt = report.halt)

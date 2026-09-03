@@ -11,12 +11,14 @@ remote_root = ARGV[1]
 probe = File.join(local_root, "app", "models", "cycle_probe.rb")
 
 ignores = Scan::Ignores.new(IGNORES)
-left = Pylon::Session::LocalEndpoint.new(local_root, ignores)
-right = Pylon::Session::LocalEndpoint.new(remote_root, ignores)
+left = Pylon::Session::LocalEndpoint.new(local_root, ignores, compression: Compress::Zstd::DEFAULT_LEVEL)
+right = Pylon::Session::LocalEndpoint.new(remote_root, ignores, compression: Compress::Zstd::DEFAULT_LEVEL)
 left.accelerate!
 right.accelerate!
 
-session = Pylon::Session::Session.new(left, right)
+preferences = Core::Preferences.build(Array(String).new, Array(String).new)
+raise "expected empty preferences to build" if preferences.is_a?(Core::Preferences::Invalid)
+session = Pylon::Session::Session.new(left, right, preferences: preferences, base: nil, dry_run: false, push_first: false, on_progress: nil)
 
 started = Time.instant
 session.cycle(Time.utc.to_unix_ns.to_i64)

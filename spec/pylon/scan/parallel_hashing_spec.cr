@@ -29,6 +29,10 @@ private def digests(root : String, parallelism : Int32) : Hash(String, String)
     Pylon::Disk.new(root),
     Cache.new,
     Time.utc.to_unix_ns.to_i64,
+    Ignores::NONE,
+    baseline: nil,
+    recheck: Set(String).new,
+    tally: Tally.new,
     parallelism: parallelism,
   ).scan
 

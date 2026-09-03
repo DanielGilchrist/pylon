@@ -13,7 +13,7 @@ module Pylon::Session
     @baseline : Core::Entry?
     @recheck : Set(String)
 
-    def initialize(@root : String, @ignores : Scan::Ignores = Scan::Ignores::NONE, @compression : Int32 = Compress::Zstd::DEFAULT_LEVEL) : Nil
+    def initialize(@root : String, @ignores : Scan::Ignores, @compression : Int32) : Nil
       @cache = Scan::Cache.new
       @by_digest = Hash(Bytes, Located).new
       @baseline = nil
@@ -106,7 +106,7 @@ module Pylon::Session
       found
     end
 
-    def content_source(digests : Array(Bytes), budget : UInt64, signatures : Wire::Delta::Signatures = Wire::Delta::Signatures.new) : Wire::ContentSource
+    def content_source(digests : Array(Bytes), budget : UInt64, signatures : Wire::Delta::Signatures) : Wire::ContentSource
       wanted = within(digests, budget)
 
       Wire::ContentSource::Streaming.new(

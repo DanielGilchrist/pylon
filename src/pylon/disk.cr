@@ -72,7 +72,7 @@ module Pylon
       end
     end
 
-    def stream(relative_path : String, digest : Bytes, io : IO, buffer : Bytes, codec : Compress::Codec, scratch : Bytes, hasher : Digest::SHA256 = Digest::SHA256.new) : Nil
+    def stream(relative_path : String, digest : Bytes, io : IO, buffer : Bytes, codec : Compress::Codec, scratch : Bytes, hasher : Digest::SHA256) : Nil
       Wire::Binary.write_bytes(io, digest)
       Wire::ContentKind::Full.write(io)
       hasher.reset

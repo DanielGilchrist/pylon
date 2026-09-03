@@ -10,7 +10,7 @@ module Pylon::Core
         @seen = Set(Bytes).new
       end
 
-      def required(changes : Changes, offset : Int32 = 0) : Array(Bytes)
+      def required(changes : Changes, offset : Int32) : Array(Bytes)
         @wanted.clear
         @seen.clear
 

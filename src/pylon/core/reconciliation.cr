@@ -4,5 +4,5 @@ module Pylon::Core
     local_changes : Changes,
     remote_changes : Changes,
     conflicts : Array(Conflict),
-    troubles : Array(Trouble) = Array(Trouble).new
+    troubles : Array(Trouble)
 end

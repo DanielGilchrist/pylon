@@ -36,7 +36,7 @@ module Pylon::Watch
     def self.open(
       root : String,
       ignores : Array(String),
-      signals : Channel(Nil) = Channel(Nil).new(1),
+      signals : Channel(Nil),
     ) : FSEvents | Unavailable
       case (resolved = Filesystem.realpath(root))
       in Problem

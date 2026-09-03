@@ -8,7 +8,7 @@ private def report_of(
   halt = nil,
   troubles = Array(Trouble).new,
 ) : Pylon::Session::Report
-  Pylon::Session::Report.new(conflicts, local, remote, halt, troubles)
+  Pylon::Session::Report.new(conflicts, local, remote, troubles, halt)
 end
 
 private def rendered(report : Pylon::Session::Report, verbose = false, dry_run = false, elapsed : Time::Span? = nil) : String
@@ -35,7 +35,7 @@ private def moved(from : String, to : String) : Pylon::Core::Relocation
 end
 
 private def report_with_moves(remote : Array(Pylon::Write::Outcome), moves : Array(Pylon::Core::Relocation)) : Pylon::Session::Report
-  Pylon::Session::Report.new(Array(Conflict).new, Array(Pylon::Write::Outcome).new, remote, remote_relocations: moves)
+  Pylon::Session::Report.new(Array(Conflict).new, Array(Pylon::Write::Outcome).new, remote, Array(Trouble).new, remote_relocations: moves)
 end
 
 describe Pylon::CLI::Reporter do
@@ -119,17 +119,17 @@ describe Pylon::CLI::Reporter do
   it "mentions a conflict once, not on every cycle, and says when it clears" do
     Colorize.enabled = false
     io = IO::Memory.new
-    reporter = Pylon::CLI::Reporter.new(io, brand: Pylon::Brand::DEFAULT)
+    reporter = Pylon::CLI::Reporter.new(io, false, false, brand: Pylon::Brand::DEFAULT)
     conflict = report_of(conflicts: [Conflict.new("db/structure.sql", Changes.new, Changes.new)])
 
-    reporter.report(conflict)
+    reporter.report(conflict, nil)
     first = io.to_s
     io.clear
 
-    reporter.report(conflict)
+    reporter.report(conflict, nil)
     io.to_s.should be_empty
 
-    reporter.report(report_of)
+    reporter.report(report_of, nil)
     first.should contain("conflict")
     io.to_s.should contain("conflict resolved")
   end
@@ -149,14 +149,14 @@ describe Pylon::CLI::Reporter do
   it "mentions an unsyncable path once, not on every cycle" do
     Colorize.enabled = false
     io = IO::Memory.new
-    reporter = Pylon::CLI::Reporter.new(io, brand: Pylon::Brand::DEFAULT)
+    reporter = Pylon::CLI::Reporter.new(io, false, false, brand: Pylon::Brand::DEFAULT)
     troubled = report_of(troubles: [Trouble.new("locked.rb", :local, "permission denied")])
 
-    reporter.report(troubled)
+    reporter.report(troubled, nil)
     io.to_s.should contain("cannot sync")
     io.clear
 
-    reporter.report(troubled)
+    reporter.report(troubled, nil)
     io.to_s.should be_empty
   end
 
@@ -251,7 +251,7 @@ describe Pylon::CLI::Reporter do
     output = IO::Memory.new
     errors = IO::Memory.new
 
-    Pylon::CLI::Reporter.new(output, errors: errors, brand: Pylon::Brand::DEFAULT).failed("the remote server stopped")
+    Pylon::CLI::Reporter.new(output, false, false, errors: errors, brand: Pylon::Brand::DEFAULT).failed("the remote server stopped")
 
     errors.to_s.should eq("pylon: the remote server stopped\n")
     output.to_s.should be_empty
@@ -261,7 +261,7 @@ describe Pylon::CLI::Reporter do
     Colorize.enabled = false
     output = IO::Memory.new
     errors = IO::Memory.new
-    reporter = Pylon::CLI::Reporter.new(output, errors: errors, brand: Pylon::Brand.new("Test Sync"))
+    reporter = Pylon::CLI::Reporter.new(output, false, false, errors: errors, brand: Pylon::Brand.new("Test Sync"))
 
     reporter.starting("./app", "user@host:/srv/app")
     reporter.warn("the state file was ignored")
@@ -276,7 +276,7 @@ describe Pylon::CLI::Reporter do
     output = IO::Memory.new
     errors = IO::Memory.new
 
-    Pylon::CLI::Reporter.new(output, errors: errors, brand: Pylon::Brand::DEFAULT).relay("sh: pylon: not found")
+    Pylon::CLI::Reporter.new(output, false, false, errors: errors, brand: Pylon::Brand::DEFAULT).relay("sh: pylon: not found")
 
     errors.to_s.should contain("remote sh: pylon: not found")
     output.to_s.should be_empty

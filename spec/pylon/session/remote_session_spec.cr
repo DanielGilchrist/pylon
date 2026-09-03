@@ -19,7 +19,7 @@ private def in_remote_pair(& : String, String, Session(LocalEndpoint, RemoteEndp
   serve_remote_end(socket)
 
   begin
-    session = Session.new(LocalEndpoint.new(local_root), RemoteEndpoint.new(client, client, remote_configuration(remote_root)))
+    session = build_session(local_endpoint(local_root), RemoteEndpoint.new(client, client, remote_configuration(remote_root)))
     yield local_root, remote_root, session
   ensure
     client.close

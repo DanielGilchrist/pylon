@@ -86,9 +86,9 @@ module Pylon::Session
       @endpoint : LocalEndpoint,
       @input : IO,
       @output : IO,
-      @subscriber : Watch::Any? = nil,
-      @checkpoints : Checkpoint::Schedule? = nil,
-      @log : IO = STDERR,
+      @subscriber : Watch::Any?,
+      @checkpoints : Checkpoint::Schedule?,
+      @log : IO,
       *,
       @brand : Brand,
     ) : Nil

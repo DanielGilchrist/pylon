@@ -6,7 +6,7 @@ include Pylon::Session
 
 describe Pylon::Session::SSH do
   it "builds a minimal command" do
-    SSH.command(host: "user@host", remote_command: "pylon server /srv/app")
+    SSH.command(host: "user@host", remote_command: "pylon server /srv/app", config: nil, port: nil)
       .should eq(["user@host", "pylon server /srv/app"])
   end
 
@@ -29,13 +29,13 @@ describe Pylon::Session::SSH do
   end
 
   it "omits flags that were not asked for" do
-    SSH.command(host: "h", remote_command: "c", port: "22")
+    SSH.command(host: "h", remote_command: "c", config: nil, port: "22")
       .should eq(["-p", "22", "h", "c"])
   end
 end
 
 private def opened(command : String, arguments : Array(String)) : ProcessTransport
-  case (transport = ProcessTransport.open(command, arguments))
+  case (transport = ProcessTransport.open(command, arguments) { })
   in Pylon::Problem   then fail(transport.reason)
   in ProcessTransport then transport
   end
@@ -72,7 +72,7 @@ describe Pylon::Session::ProcessTransport do
   end
 
   it "reports a command that cannot be started instead of raising" do
-    opened = ProcessTransport.open("pylon-no-such-binary", Array(String).new)
+    opened = ProcessTransport.open("pylon-no-such-binary", Array(String).new) { }
 
     fail("expected a problem, got a transport") unless opened.is_a?(Pylon::Problem)
     opened.reason.should contain("pylon-no-such-binary could not be started")

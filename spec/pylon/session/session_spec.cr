@@ -16,7 +16,7 @@ private def in_pair(& : String, String, Session(LocalEndpoint, LocalEndpoint) ->
   Dir.mkdir_p(remote_root)
 
   begin
-    session = Session.new(LocalEndpoint.new(local_root), LocalEndpoint.new(remote_root))
+    session = build_session(local_endpoint(local_root), local_endpoint(remote_root))
     yield local_root, remote_root, session
   ensure
     FileUtils.rm_rf(base)
@@ -210,7 +210,7 @@ describe "moves" do
       cycle!(session, tick)
 
       File.rename(File.join(local, "lib"), File.join(local, "moved"))
-      preview = Session.new(LocalEndpoint.new(local), LocalEndpoint.new(remote), base: session.base, dry_run: true)
+      preview = build_session(local_endpoint(local), local_endpoint(remote), base: session.base, dry_run: true)
       report = cycle!(preview, tick)
 
       report.remote_relocations.map { |relocation| {relocation.from, relocation.to} }.should eq([{"lib", "moved"}])
@@ -258,7 +258,7 @@ describe "the first cycle when there is no saved state" do
       File.write(File.join(local, "mine.rb"), "local")
       File.write(File.join(remote, "stale.rb"), "left over on the box")
 
-      session = Session.new(LocalEndpoint.new(local), LocalEndpoint.new(remote), push_first: true)
+      session = build_session(local_endpoint(local), local_endpoint(remote), push_first: true)
       cycle!(session, tick)
 
       File.exists?(File.join(remote, "mine.rb")).should be_true
@@ -272,7 +272,7 @@ describe "the first cycle when there is no saved state" do
       File.write(File.join(local, "shared.rb"), "from the local side")
       File.write(File.join(remote, "shared.rb"), "from the box")
 
-      session = Session.new(LocalEndpoint.new(local), LocalEndpoint.new(remote), push_first: true)
+      session = build_session(local_endpoint(local), local_endpoint(remote), push_first: true)
       report = cycle!(session, tick)
 
       report.conflicts.should be_empty
@@ -284,7 +284,7 @@ describe "the first cycle when there is no saved state" do
     in_pair do |local, remote, _|
       File.write(File.join(local, "mine.rb"), "local")
 
-      session = Session.new(LocalEndpoint.new(local), LocalEndpoint.new(remote), push_first: true)
+      session = build_session(local_endpoint(local), local_endpoint(remote), push_first: true)
       cycle!(session, tick)
 
       File.write(File.join(remote, "generated.rbi"), "made on the box")

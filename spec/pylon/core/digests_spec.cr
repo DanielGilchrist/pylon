@@ -9,7 +9,7 @@ describe Pylon::Core::Digests do
       Change.new("b.rb", nil, Fixtures.f2),
     ]
 
-    Digests::Collector.new.required(changes).should eq([Fixtures::D1, Fixtures::D2])
+    Digests::Collector.new.required(changes, 0).should eq([Fixtures::D1, Fixtures::D2])
   end
 
   it "walks into directories and ignores everything without content" do
@@ -24,7 +24,7 @@ describe Pylon::Core::Digests do
       Change.new("gone.rb", Fixtures.f1, nil),
     ]
 
-    Digests::Collector.new.required(changes).should eq([Fixtures::D2])
+    Digests::Collector.new.required(changes, 0).should eq([Fixtures::D2])
   end
 
   it "collects every digest in a tree" do

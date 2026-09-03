@@ -22,11 +22,11 @@ module Pylon::Session
     def initialize(
       @local : A,
       @remote : B,
-      @preferences : Core::Preferences = Core::Preferences.none,
-      @base : Core::Entry? = nil,
-      @dry_run : Bool = false,
-      @push_first : Bool = false,
-      @on_progress : Proc(Progress, Nil)? = nil,
+      @preferences : Core::Preferences,
+      @base : Core::Entry?,
+      @dry_run : Bool,
+      @push_first : Bool,
+      @on_progress : Proc(Progress, Nil)?,
     ) : Nil
     end
 
@@ -72,8 +72,8 @@ module Pylon::Session
           reconciliation.conflicts,
           Array(Write::Outcome).new,
           Array(Write::Outcome).new,
-          halt,
           reconciliation.troubles,
+          halt,
         )
       end
 

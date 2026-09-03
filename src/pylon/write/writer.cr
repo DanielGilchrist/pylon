@@ -29,8 +29,7 @@ module Pylon::Write
       @staging : S,
       @cache : Scan::Cache,
       @now_ns : Int64,
-      @ignores : Scan::Ignores = Scan::Ignores::NONE,
-      @granularity_ns : Int64 = Scan::Metadata::DEFAULT_GRANULARITY_NS,
+      @ignores : Scan::Ignores,
       @parallelism : Int32 = DEFAULT_PARALLELISM,
     ) : Nil
     end
@@ -96,7 +95,7 @@ module Pylon::Write
     end
 
     private def guard_intact(path : String, expected : Core::Syncable) : Verdict
-      verdict = Guard.check(expected, @cache[path]?, @filesystem.observe(path), @now_ns, @granularity_ns)
+      verdict = Guard.check(expected, @cache[path]?, @filesystem.observe(path), @now_ns)
       verdict = verify_content(path, expected) if verdict.inconclusive? && expected.is_a?(Core::File)
       return verdict unless verdict.proceed? && expected.is_a?(Core::Directory)
 
@@ -186,7 +185,6 @@ module Pylon::Write
         @cache[change.path]?,
         @filesystem.observe(change.path),
         @now_ns,
-        @granularity_ns,
       )
       verdict = verify_content(change.path, old) if verdict.inconclusive? && old.is_a?(Core::File)
 
@@ -269,7 +267,7 @@ module Pylon::Write
       observed = @filesystem.observe(path)
       return Verdict::Proceed if observed.nil?
 
-      verdict = Guard.check(expected, @cache[path]?, observed, @now_ns, @granularity_ns)
+      verdict = Guard.check(expected, @cache[path]?, observed, @now_ns)
       verdict = verify_content(path, expected) if verdict.inconclusive? && expected.is_a?(Core::File)
       return verdict unless verdict.proceed?
 

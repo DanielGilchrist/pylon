@@ -9,13 +9,6 @@ module Pylon::Session
   # us to encode the potential failures into the return type and force callers to handle them as
   # needed.
   class ProcessTransport
-    def self.open(command : String, arguments : Array(String)) : ProcessTransport | Problem
-      case (process = start(command, arguments, Process::Redirect::Inherit))
-      in Problem then process
-      in Process then new(process)
-      end
-    end
-
     def self.open(command : String, arguments : Array(String), &relay : String ->) : ProcessTransport | Problem
       case (process = start(command, arguments, Process::Redirect::Pipe))
       in Problem

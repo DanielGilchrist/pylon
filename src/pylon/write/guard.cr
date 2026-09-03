@@ -12,7 +12,6 @@ module Pylon::Write
       cached : Scan::CacheEntry?,
       observed : Scan::Observed | Problem | Nil,
       now_ns : Int64,
-      granularity_ns : Int64 = Scan::Metadata::DEFAULT_GRANULARITY_NS,
     ) : Verdict
       return Verdict::UnknownState if observed.is_a?(Problem)
       return observed.nil? ? Verdict::Proceed : Verdict::ModificationDetected if expected.nil?
@@ -24,7 +23,7 @@ module Pylon::Write
       in Core::SymbolicLink
         link(expected, observed)
       in Core::File
-        observed.is_a?(Scan::ObservedFile) ? file(expected, cached, observed.metadata, now_ns, granularity_ns) : Verdict::ModificationDetected
+        observed.is_a?(Scan::ObservedFile) ? file(expected, cached, observed.metadata, now_ns) : Verdict::ModificationDetected
       in Core::Untracked, Core::Problematic
         Verdict::UnknownState
       end
@@ -41,11 +40,10 @@ module Pylon::Write
       cached : Scan::CacheEntry?,
       observed : Scan::Metadata,
       now_ns : Int64,
-      granularity_ns : Int64,
     ) : Verdict
       return Verdict::UnknownState if cached.nil?
       return Verdict::Inconclusive if cached.provisional?
-      return Verdict::Inconclusive if observed.freshly_modified?(now_ns, granularity_ns)
+      return Verdict::Inconclusive if observed.freshly_modified?(now_ns, Scan::Metadata::GRANULARITY_NS)
       return Verdict::ModificationDetected unless cached.metadata.reusable?(observed)
       return Verdict::ModificationDetected unless cached.digest == expected.digest
 

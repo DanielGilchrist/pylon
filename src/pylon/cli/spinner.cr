@@ -6,13 +6,14 @@ struct Pylon::CLI
   class Spinner
     FRAMES   = {"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
     INTERVAL = 80.milliseconds
+    INDENT   = "  "
 
     HIDE_CURSOR = "\033[?25l"
     SHOW_CURSOR = "\033[?25h"
 
     @stop : Channel(Nil)? = nil
 
-    def initialize(@io : IO, @indent : String = "  ") : Nil
+    def initialize(@io : IO) : Nil
       @supply = -> : String { "" }
       @done = Channel(Nil).new
       @restores_cursor = false
@@ -61,7 +62,7 @@ struct Pylon::CLI
           when stop.receive?
             break
           when timeout(INTERVAL)
-            @io.print "\r\033[K#{@indent}#{FRAMES[frame % FRAMES.size].colorize.cyan} #{@supply.call.colorize.dark_gray}"
+            @io.print "\r\033[K#{INDENT}#{FRAMES[frame % FRAMES.size].colorize.cyan} #{@supply.call.colorize.dark_gray}"
             @io.flush
             frame += 1
           end

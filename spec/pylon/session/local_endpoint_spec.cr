@@ -14,7 +14,7 @@ private def in_endpoint(files : Hash(String, String), & : LocalEndpoint, Hash(St
     digests[name] = Digest::SHA256.digest(content).to_slice
   end
 
-  endpoint = LocalEndpoint.new(root)
+  endpoint = local_endpoint(root)
   endpoint.scan(Time.utc.to_unix_ns.to_i64)
 
   begin
@@ -27,7 +27,7 @@ end
 describe Pylon::Session::LocalEndpoint do
   it "stops adding content once a batch reaches the transfer budget" do
     in_endpoint({"a.rb" => "x" * 10, "b.rb" => "y" * 10, "c.rb" => "z" * 10}) do |endpoint, digests|
-      offered = endpoint.content_source([digests["a.rb"], digests["b.rb"], digests["c.rb"]], 15_u64)
+      offered = endpoint.content_source([digests["a.rb"], digests["b.rb"], digests["c.rb"]], 15_u64, Pylon::Wire::Delta::Signatures.new)
 
       offered.digests.should eq(Set{digests["a.rb"]})
     end
@@ -35,7 +35,7 @@ describe Pylon::Session::LocalEndpoint do
 
   it "always offers the first file even when it alone is over the budget" do
     in_endpoint({"big.rb" => "x" * 100}) do |endpoint, digests|
-      offered = endpoint.content_source([digests["big.rb"]], 1_u64)
+      offered = endpoint.content_source([digests["big.rb"]], 1_u64, Pylon::Wire::Delta::Signatures.new)
 
       offered.digests.should eq(Set{digests["big.rb"]})
     end
@@ -43,7 +43,7 @@ describe Pylon::Session::LocalEndpoint do
 
   it "fills the budget exactly when the sizes allow it" do
     in_endpoint({"a.rb" => "x" * 10, "b.rb" => "y" * 10} of String => String) do |endpoint, digests|
-      offered = endpoint.content_source([digests["a.rb"], digests["b.rb"]], 20_u64)
+      offered = endpoint.content_source([digests["a.rb"], digests["b.rb"]], 20_u64, Pylon::Wire::Delta::Signatures.new)
 
       offered.digests.should eq(Set{digests["a.rb"], digests["b.rb"]})
     end
@@ -53,7 +53,7 @@ describe Pylon::Session::LocalEndpoint do
     in_endpoint({"a.rb" => "here"}) do |endpoint, digests|
       unknown = Digest::SHA256.digest("never scanned").to_slice
 
-      offered = endpoint.content_source([unknown, digests["a.rb"]], 1_000_u64)
+      offered = endpoint.content_source([unknown, digests["a.rb"]], 1_000_u64, Pylon::Wire::Delta::Signatures.new)
 
       offered.digests.should eq(Set{digests["a.rb"]})
     end
@@ -61,7 +61,7 @@ describe Pylon::Session::LocalEndpoint do
 
   it "writes a file from its own disk when the content arrived without bytes" do
     in_endpoint({"a.rb" => "shared body"}) do |endpoint, digests|
-      changes = Pylon::Core::Changes[Change.new("copy.rb", nil, Pylon::Core::File.new(digests["a.rb"]))]
+      changes = Pylon::Core::Changes[Change.new("copy.rb", nil, Pylon::Core::File.new(digests["a.rb"], executable: false))]
 
       outcomes = endpoint.write(changes, Pylon::Wire::ContentSource::Materialised.new(Pylon::Wire::Contents.new))
 
@@ -96,7 +96,7 @@ describe Pylon::Session::LocalEndpoint do
   it "refuses recovered content whose bytes no longer match the digest" do
     in_endpoint({"a.rb" => "original"}) do |endpoint, digests|
       File.write(File.join(endpoint.root, "a.rb"), "mutated")
-      changes = Pylon::Core::Changes[Change.new("copy.rb", nil, Pylon::Core::File.new(digests["a.rb"]))]
+      changes = Pylon::Core::Changes[Change.new("copy.rb", nil, Pylon::Core::File.new(digests["a.rb"], executable: false))]
 
       outcomes = endpoint.write(changes, Pylon::Wire::ContentSource::Materialised.new(Pylon::Wire::Contents.new))
 

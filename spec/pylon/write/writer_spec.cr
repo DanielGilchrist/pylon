@@ -7,7 +7,7 @@ include Pylon::Write
 private NOW = 1_000_000_000_000_i64
 
 private def writer(target : MemoryTarget, staging : MemoryStaging, cache : Pylon::Scan::Cache) : Writer(MemoryTarget, MemoryStaging)
-  Writer.new(target, staging, cache, NOW)
+  Writer.new(target, staging, cache, NOW, Pylon::Scan::Ignores::NONE)
 end
 
 private def cache_for(target : MemoryTarget, paths : Enumerable(String)) : Pylon::Scan::Cache
@@ -17,7 +17,7 @@ private def cache_for(target : MemoryTarget, paths : Enumerable(String)) : Pylon
     node = target.nodes[path]
     next unless (metadata = target.metadata(path))
 
-    cache[path] = Pylon::Scan::CacheEntry.new(metadata, Digest::SHA256.digest(node.content))
+    cache[path] = Pylon::Scan::CacheEntry.new(metadata, Digest::SHA256.digest(node.content), provisional: false)
   end
 
   cache
@@ -30,7 +30,7 @@ describe Pylon::Write::Writer do
     digest = staging.add("hello")
 
     outcomes = writer(target, staging, Pylon::Scan::Cache.new)
-      .write(Pylon::Core::Changes[Change.new("greeting.txt", nil, Pylon::Core::File.new(digest))])
+      .write(Pylon::Core::Changes[Change.new("greeting.txt", nil, Pylon::Core::File.new(digest, executable: false))])
 
     outcomes.size.should eq(1)
     outcomes.first.applied?.should be_true
@@ -43,7 +43,7 @@ describe Pylon::Write::Writer do
     staging = MemoryStaging.new
     digest = staging.add("body")
 
-    subtree = Pylon::Core::Directory.new({"models" => Pylon::Core::Directory.new({"user.rb" => Pylon::Core::File.new(digest)})})
+    subtree = Pylon::Core::Directory.new({"models" => Pylon::Core::Directory.new({"user.rb" => Pylon::Core::File.new(digest, executable: false)})})
 
     outcome = writer(target, staging, Pylon::Scan::Cache.new)
       .write(Pylon::Core::Changes[Change.new("app", nil, subtree)]).first
@@ -87,7 +87,7 @@ describe Pylon::Write::Writer do
     incoming = staging.add("from the other side")
 
     outcome = writer(target, staging, cache)
-      .write(Pylon::Core::Changes[Change.new("notes.txt", Pylon::Core::File.new(original), Pylon::Core::File.new(incoming))]).first
+      .write(Pylon::Core::Changes[Change.new("notes.txt", Pylon::Core::File.new(original, executable: false), Pylon::Core::File.new(incoming, executable: false))]).first
 
     outcome.applied?.should be_false
     outcome.skipped.should eq(ModificationDetected.new)
@@ -106,7 +106,7 @@ describe Pylon::Write::Writer do
     incoming = staging.add("from the other side")
 
     outcome = writer(target, staging, cache)
-      .write(Pylon::Core::Changes[Change.new("notes.txt", Pylon::Core::File.new(original), Pylon::Core::File.new(incoming))]).first
+      .write(Pylon::Core::Changes[Change.new("notes.txt", Pylon::Core::File.new(original, executable: false), Pylon::Core::File.new(incoming, executable: false))]).first
 
     outcome.applied?.should be_false
     outcome.skipped.should eq(ModificationDetected.new)
@@ -122,7 +122,7 @@ describe Pylon::Write::Writer do
     incoming = staging.add("from the other side")
 
     outcome = writer(target, staging, cache)
-      .write(Pylon::Core::Changes[Change.new("notes.txt", Pylon::Core::File.new(original), Pylon::Core::File.new(incoming))]).first
+      .write(Pylon::Core::Changes[Change.new("notes.txt", Pylon::Core::File.new(original, executable: false), Pylon::Core::File.new(incoming, executable: false))]).first
 
     outcome.applied?.should be_true
     String.new(target.nodes["notes.txt"].content).should eq("from the other side")
@@ -135,7 +135,7 @@ describe Pylon::Write::Writer do
     incoming = staging.add("replacement")
 
     outcome = writer(target, staging, Pylon::Scan::Cache.new)
-      .write(Pylon::Core::Changes[Change.new("notes.txt", Pylon::Core::File.new(digest), Pylon::Core::File.new(incoming))]).first
+      .write(Pylon::Core::Changes[Change.new("notes.txt", Pylon::Core::File.new(digest, executable: false), Pylon::Core::File.new(incoming, executable: false))]).first
 
     outcome.skipped.should eq(UnknownState.new)
     target.operations.should be_empty
@@ -148,7 +148,7 @@ describe Pylon::Write::Writer do
     staging = MemoryStaging.new
 
     outcome = writer(target, staging, cache).write(Pylon::Core::Changes[
-      Change.new("script.sh", Pylon::Core::File.new(digest), Pylon::Core::File.new(digest, executable: true)),
+      Change.new("script.sh", Pylon::Core::File.new(digest, executable: false), Pylon::Core::File.new(digest, executable: true)),
     ]).first
 
     outcome.applied?.should be_true
@@ -163,12 +163,12 @@ describe Pylon::Write::Writer do
     target.writable = false
 
     outcome = writer(target, MemoryStaging.new, cache).write(Pylon::Core::Changes[
-      Change.new("script.sh", Pylon::Core::File.new(digest), Pylon::Core::File.new(digest, executable: true)),
+      Change.new("script.sh", Pylon::Core::File.new(digest, executable: false), Pylon::Core::File.new(digest, executable: true)),
     ]).first
 
     outcome.applied?.should be_false
     outcome.skipped.should eq(WriteFailed.new("the target is read-only"))
-    outcome.entry.should eq(Pylon::Core::File.new(digest))
+    outcome.entry.should eq(Pylon::Core::File.new(digest, executable: false))
   end
 
   it "replaces a file with a single write and never clears the path first" do
@@ -179,7 +179,7 @@ describe Pylon::Write::Writer do
     incoming = staging.add("after")
 
     outcome = writer(target, staging, cache)
-      .write(Pylon::Core::Changes[Change.new("notes.txt", Pylon::Core::File.new(original), Pylon::Core::File.new(incoming))]).first
+      .write(Pylon::Core::Changes[Change.new("notes.txt", Pylon::Core::File.new(original, executable: false), Pylon::Core::File.new(incoming, executable: false))]).first
 
     outcome.applied?.should be_true
     target.operations.should eq(["write notes.txt"])
@@ -193,9 +193,9 @@ describe Pylon::Write::Writer do
     staging = MemoryStaging.new
     incoming = staging.add("now a file")
 
-    old = Pylon::Core::Directory.new({"user.rb" => Pylon::Core::File.new(digest)})
+    old = Pylon::Core::Directory.new({"user.rb" => Pylon::Core::File.new(digest, executable: false)})
     outcome = writer(target, staging, cache)
-      .write(Pylon::Core::Changes[Change.new("app", old, Pylon::Core::File.new(incoming))]).first
+      .write(Pylon::Core::Changes[Change.new("app", old, Pylon::Core::File.new(incoming, executable: false))]).first
 
     outcome.applied?.should be_true
     target.operations.should eq(["remove app", "write app"])
@@ -207,7 +207,7 @@ describe Pylon::Write::Writer do
     cache = cache_for(target, ["gone.txt"])
 
     outcome = writer(target, MemoryStaging.new, cache)
-      .write(Pylon::Core::Changes[Change.new("gone.txt", Pylon::Core::File.new(digest), nil)]).first
+      .write(Pylon::Core::Changes[Change.new("gone.txt", Pylon::Core::File.new(digest, executable: false), nil)]).first
 
     outcome.applied?.should be_true
     outcome.entry.should be_nil
@@ -222,7 +222,7 @@ describe Pylon::Write::Writer do
 
     target.seed_file("docs/fresh.md", "created after the scan")
 
-    old = Pylon::Core::Directory.new({"known.md" => Pylon::Core::File.new(digest)})
+    old = Pylon::Core::Directory.new({"known.md" => Pylon::Core::File.new(digest, executable: false)})
     outcome = writer(target, MemoryStaging.new, cache)
       .write(Pylon::Core::Changes[Change.new("docs", old, nil)]).first
 
@@ -239,7 +239,7 @@ describe Pylon::Write::Writer do
 
     target.seed_file("docs/notes.md", "edited by hand", inode: 2_u64, mtime_ns: 9_000_i64)
 
-    old = Pylon::Core::Directory.new({"notes.md" => Pylon::Core::File.new(digest)})
+    old = Pylon::Core::Directory.new({"notes.md" => Pylon::Core::File.new(digest, executable: false)})
     outcome = writer(target, MemoryStaging.new, cache)
       .write(Pylon::Core::Changes[Change.new("docs", old, nil)]).first
 
@@ -258,7 +258,7 @@ describe Pylon::Write::Writer do
     target.seed_file("docs/guides/fresh.md", "created after the scan")
 
     old = Pylon::Core::Directory.new({
-      "guides" => Pylon::Core::Directory.new({"setup.md" => Pylon::Core::File.new(digest)}),
+      "guides" => Pylon::Core::Directory.new({"setup.md" => Pylon::Core::File.new(digest, executable: false)}),
     })
     outcome = writer(target, MemoryStaging.new, cache)
       .write(Pylon::Core::Changes[Change.new("docs", old, nil)]).first
@@ -276,7 +276,7 @@ describe Pylon::Write::Writer do
 
     target.seed_file("docs/.DS_Store", "junk")
 
-    old = Pylon::Core::Directory.new({"known.md" => Pylon::Core::File.new(digest)})
+    old = Pylon::Core::Directory.new({"known.md" => Pylon::Core::File.new(digest, executable: false)})
     outcome = writer(target, MemoryStaging.new, cache)
       .write(Pylon::Core::Changes[Change.new("docs", old, nil)]).first
 
@@ -292,7 +292,7 @@ describe Pylon::Write::Writer do
 
     target.nodes.delete("docs/known.md")
 
-    old = Pylon::Core::Directory.new({"known.md" => Pylon::Core::File.new(digest)})
+    old = Pylon::Core::Directory.new({"known.md" => Pylon::Core::File.new(digest, executable: false)})
     outcome = writer(target, MemoryStaging.new, cache)
       .write(Pylon::Core::Changes[Change.new("docs", old, nil)]).first
 
@@ -308,15 +308,15 @@ describe Pylon::Write::Writer do
     incoming = staging.add("content")
 
     changes = Pylon::Core::Changes.new
-    changes << Change.new("Readme.md", Pylon::Core::File.new(old_digest), nil)
-    changes << Change.new("README.md", nil, Pylon::Core::File.new(incoming))
+    changes << Change.new("Readme.md", Pylon::Core::File.new(old_digest, executable: false), nil)
+    changes << Change.new("README.md", nil, Pylon::Core::File.new(incoming, executable: false))
 
     20.times do |index|
       digest = staging.add("filler #{index}")
-      changes << Change.new("filler#{index}.rb", nil, Pylon::Core::File.new(digest))
+      changes << Change.new("filler#{index}.rb", nil, Pylon::Core::File.new(digest, executable: false))
     end
 
-    outcomes = Writer.new(target, staging, cache, NOW, parallelism: 4).write(changes)
+    outcomes = Writer.new(target, staging, cache, NOW, Pylon::Scan::Ignores::NONE, parallelism: 4).write(changes)
 
     outcomes.count(&.applied?).should eq(changes.size)
     target.operations.index("remove Readme.md").should_not be_nil
@@ -333,7 +333,7 @@ describe Pylon::Write::Writer do
     missing = Digest::SHA256.digest("never staged".to_slice)
 
     outcome = writer(target, staging, Pylon::Scan::Cache.new)
-      .write(Pylon::Core::Changes[Change.new("ghost.txt", nil, Pylon::Core::File.new(missing))]).first
+      .write(Pylon::Core::Changes[Change.new("ghost.txt", nil, Pylon::Core::File.new(missing, executable: false))]).first
 
     outcome.applied?.should be_false
     outcome.skipped.should eq(StagedContentMissing.new)
@@ -348,7 +348,7 @@ describe Pylon::Write::Writer do
     digest = staging.add("hello")
 
     outcome = writer(target, staging, Pylon::Scan::Cache.new)
-      .write(Pylon::Core::Changes[Change.new("greeting.txt", nil, Pylon::Core::File.new(digest))]).first
+      .write(Pylon::Core::Changes[Change.new("greeting.txt", nil, Pylon::Core::File.new(digest, executable: false))]).first
 
     outcome.applied?.should be_false
     outcome.skipped.should eq(WriteFailed.new("the target is read-only"))
@@ -363,7 +363,7 @@ describe Pylon::Write::Writer do
     target.writable = false
 
     outcome = writer(target, staging, cache)
-      .write(Pylon::Core::Changes[Change.new("stuck", Pylon::Core::File.new(digest), nil)]).first
+      .write(Pylon::Core::Changes[Change.new("stuck", Pylon::Core::File.new(digest, executable: false), nil)]).first
 
     outcome.applied?.should be_false
     outcome.skipped.should eq(WriteFailed.new("the target is read-only"))
@@ -378,8 +378,8 @@ describe Pylon::Write::Writer do
     absent = Digest::SHA256.digest("absent".to_slice)
 
     subtree = Pylon::Core::Directory.new({
-      "kept.rb" => Pylon::Core::File.new(present),
-      "lost.rb" => Pylon::Core::File.new(absent),
+      "kept.rb" => Pylon::Core::File.new(present, executable: false),
+      "lost.rb" => Pylon::Core::File.new(absent, executable: false),
     })
 
     outcome = writer(target, staging, Pylon::Scan::Cache.new)
@@ -401,8 +401,8 @@ private def seeded_tree(target : MemoryTarget) : {Pylon::Core::Directory, Pylon:
   cache = cache_for(target, ["lib/a.rb", "lib/deep/b.rb"])
 
   tree = Pylon::Core::Directory.new({
-    "a.rb" => Pylon::Core::File.new(a),
-    "deep" => Pylon::Core::Directory.new({"b.rb" => Pylon::Core::File.new(b)}),
+    "a.rb" => Pylon::Core::File.new(a, executable: false),
+    "deep" => Pylon::Core::Directory.new({"b.rb" => Pylon::Core::File.new(b, executable: false)}),
   })
 
   {tree, cache}
@@ -434,7 +434,7 @@ describe "relocations" do
     cache = cache_for(target, ["old.rb"])
 
     outcomes = writer(target, MemoryStaging.new, cache)
-      .write(Pylon::Core::Changes.new, [Pylon::Core::Relocation.new("old.rb", "new.rb", Pylon::Core::File.new(digest))])
+      .write(Pylon::Core::Changes.new, [Pylon::Core::Relocation.new("old.rb", "new.rb", Pylon::Core::File.new(digest, executable: false))])
 
     target.operations.should eq(["rename old.rb new.rb"])
     outcomes.all?(&.applied?).should be_true
@@ -519,7 +519,7 @@ describe "relocations" do
     digest = staging.add("fresh")
 
     writer(target, staging, cache).write(
-      Pylon::Core::Changes[Change.new("fresh.rb", nil, Pylon::Core::File.new(digest))],
+      Pylon::Core::Changes[Change.new("fresh.rb", nil, Pylon::Core::File.new(digest, executable: false))],
       [Pylon::Core::Relocation.new("lib", "moved", tree)],
     )
 

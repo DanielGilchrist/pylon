@@ -3,7 +3,7 @@ require "../problem"
 module Pylon::Scan
   struct Metadata
     NANOSECONDS_PER_SECOND = 1_000_000_000_i64
-    DEFAULT_GRANULARITY_NS = 1_000_000_000_i64
+    GRANULARITY_NS         = 1_000_000_000_i64
 
     enum Kind
       Directory
