@@ -22,7 +22,7 @@ private def in_watched_pair(& : String, String, Session(LocalEndpoint, RemoteEnd
   Dir.mkdir_p(remote)
 
   signals = ::Channel(Nil).new(16)
-  watcher = Pylon::Watch::Watcher.open(remote, Array(String).new, signals)
+  watcher = Pylon::Watch::Watcher.open(remote, Array(String).new, signals, Pylon::Brand::DEFAULT)
 
   if watcher.is_a?(Pylon::Watch::Unavailable)
     FileUtils.rm_rf(base)
@@ -33,7 +33,7 @@ private def in_watched_pair(& : String, String, Session(LocalEndpoint, RemoteEnd
   endpoint.accelerate!
 
   client, socket = UNIXSocket.pair
-  server = Server.new(endpoint, socket, socket, watcher)
+  server = Server.new(endpoint, socket, socket, watcher, brand: Pylon::Brand::DEFAULT)
   spawn { server.run }
 
   pushes = ::Channel(Nil).new(16)
@@ -41,7 +41,7 @@ private def in_watched_pair(& : String, String, Session(LocalEndpoint, RemoteEnd
   begin
     session = Session.new(
       LocalEndpoint.new(local),
-      RemoteEndpoint.new(client, client, pushes),
+      RemoteEndpoint.new(client, client, pushes, brand: Pylon::Brand::DEFAULT),
       push_first: true,
     )
     yield local, remote, session, pushes

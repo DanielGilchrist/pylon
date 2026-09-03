@@ -34,7 +34,7 @@ describe Pylon::Watch::Inotify do
     root = File.tempname("pylon-inotify")
     Dir.mkdir_p(File.join(root, "log"))
 
-    watcher = Inotify.open(root, ["log"])
+    watcher = Inotify.open(root, ["log"], brand: Pylon::Brand::DEFAULT)
     watcher.should be_a(Inotify)
     next unless watcher.is_a?(Inotify)
 
@@ -67,7 +67,7 @@ describe Pylon::Watch::Inotify do
     Dir.mkdir_p(root)
     File.write(File.join(root, "kept.rb"), "before")
 
-    watcher = Inotify.open(root, Array(String).new)
+    watcher = Inotify.open(root, Array(String).new, brand: Pylon::Brand::DEFAULT)
     watcher.should be_a(Inotify)
     next unless watcher.is_a?(Inotify)
 
@@ -93,7 +93,7 @@ describe Pylon::Watch::Inotify do
     File.write(File.join(staging, "incoming", "top.rb"), "puts 1")
     File.write(File.join(staging, "incoming", "sub", "inner.rb"), "puts 2")
 
-    watcher = Inotify.open(root, Array(String).new)
+    watcher = Inotify.open(root, Array(String).new, brand: Pylon::Brand::DEFAULT)
     watcher.should be_a(Inotify)
     next unless watcher.is_a?(Inotify)
 
@@ -114,7 +114,7 @@ describe Pylon::Watch::Inotify do
     root = File.tempname("pylon-inotify-late")
     Dir.mkdir_p(root)
 
-    watcher = Inotify.open(root, Array(String).new)
+    watcher = Inotify.open(root, Array(String).new, brand: Pylon::Brand::DEFAULT)
     watcher.should be_a(Inotify)
     next unless watcher.is_a?(Inotify)
 

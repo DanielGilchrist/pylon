@@ -1,6 +1,7 @@
 {% skip_file unless flag?(:linux) %}
 
 require "sync"
+require "../brand"
 require "../core/paths"
 require "../fibers"
 require "../filesystem"
@@ -27,6 +28,8 @@ module Pylon::Watch
       root : String,
       ignores : Array(String),
       signals : Channel(Nil) = Channel(Nil).new(1),
+      *,
+      brand : Brand,
     ) : Inotify | Unavailable
       descriptor = LibInotify.inotify_init1(LibInotify::IN_CLOEXEC)
       return Unavailable.new("inotify could not be initialised: #{Errno.value}") if descriptor < 0
@@ -39,7 +42,7 @@ module Pylon::Watch
         return Unavailable.new("the wake pipe could not be created: #{failed}")
       end
 
-      watcher = new(descriptor, wake[0], wake[1], root, Scan::Ignores.new(ignores), signals)
+      watcher = new(descriptor, wake[0], wake[1], root, Scan::Ignores.new(ignores), signals, brand)
       return watcher if watcher.watching?
 
       watcher.close
@@ -53,6 +56,7 @@ module Pylon::Watch
       @root : String,
       @ignores : Scan::Ignores,
       @signals : Channel(Nil),
+      @brand : Brand,
     ) : Nil
       @descriptor = descriptor
       @wake_read = wake_read
@@ -116,7 +120,7 @@ module Pylon::Watch
       if wd < 0
         unless @missed || relative.empty?
           @missed = true
-          STDERR.puts("pylon: some directories could not be watched (inotify watch limit?), changes in them will not be noticed")
+          STDERR.puts(@brand.prefix("some directories could not be watched (inotify watch limit?), changes in them will not be noticed"))
         end
 
         return

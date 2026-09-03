@@ -88,7 +88,7 @@ module Pylon::Wire
         when 5
           entry = Core::Problematic.new(reader.required_string)
         else
-          reader.fail("unknown entry kind in message, both sides must run the same pylon version") unless reader.failed?
+          reader.fail("unknown entry kind in message, both sides must run the same version") unless reader.failed?
           return
         end
 
@@ -216,7 +216,7 @@ module Pylon::Wire
       when 4 then Write::DryRun.new
       when 5 then Write::WriteFailed.new(reader.required_string)
       else
-        reader.fail("unknown skip reason in message, both sides must run the same pylon version") unless reader.failed?
+        reader.fail("unknown skip reason in message, both sides must run the same version") unless reader.failed?
         nil
       end
     end

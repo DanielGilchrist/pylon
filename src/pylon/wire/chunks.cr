@@ -80,7 +80,7 @@ module Pylon::Wire
 
         case ContentKind.from_value?(reader.byte)
         in Nil
-          reader.fail("an unknown content kind arrived, both sides must run the same pylon version")
+          reader.fail("an unknown content kind arrived, both sides must run the same version")
         in .full?
           content = read_all(reader, codec, scratch)
           next if content.nil?

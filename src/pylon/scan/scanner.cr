@@ -145,7 +145,7 @@ module Pylon::Scan
           size_mib = (observed.size / MEBIBYTE).round(1)
           limit_mib = Wire::MAX_CONTENT_BYTES // MEBIBYTE
           survey.nodes[path] = SurveyedProblem.new(
-            "the file is #{size_mib} MiB and pylon only syncs files up to #{limit_mib} MiB",
+            "the file is #{size_mib} MiB and the limit is #{limit_mib} MiB",
           )
           return
         end

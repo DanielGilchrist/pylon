@@ -23,8 +23,8 @@ module Pylon::Session
       reader = Wire::Reader.new(io)
 
       magic = reader.take(MAGIC.bytesize)
-      return Damaged.new("not a pylon state file") if reader.failed? || String.new(magic) != MAGIC
-      return Damaged.new("written by a different pylon version") if reader.u32 != VERSION
+      return Damaged.new("not a sync state file") if reader.failed? || String.new(magic) != MAGIC
+      return Damaged.new("written by a different version") if reader.u32 != VERSION
       return Damaged.new("unknown digest algorithm") if reader.string? != DIGEST
 
       base = Wire::Binary.read_entry(reader)

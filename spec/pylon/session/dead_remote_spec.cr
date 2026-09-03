@@ -16,7 +16,7 @@ describe "a remote that is not there" do
     socket.close
     client.close
 
-    session = Session.new(LocalEndpoint.new(root), RemoteEndpoint.new(client, client))
+    session = Session.new(LocalEndpoint.new(root), RemoteEndpoint.new(client, client, brand: Pylon::Brand::DEFAULT))
 
     begin
       session.cycle(Time.utc.to_unix_ns.to_i64).should be_a(Stopped)

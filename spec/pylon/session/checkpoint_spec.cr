@@ -74,7 +74,7 @@ describe Pylon::Session::Checkpoint do
       loaded.should be_a(Checkpoint::Damaged)
       next unless loaded.is_a?(Checkpoint::Damaged)
 
-      loaded.reason.should eq("not a pylon state file")
+      loaded.reason.should eq("not a sync state file")
     end
   end
 
@@ -100,7 +100,7 @@ describe Pylon::Session::Checkpoint do
       loaded.should be_a(Checkpoint::Damaged)
       next unless loaded.is_a?(Checkpoint::Damaged)
 
-      loaded.reason.should eq("written by a different pylon version")
+      loaded.reason.should eq("written by a different version")
     end
   end
 

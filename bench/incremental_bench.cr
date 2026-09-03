@@ -71,7 +71,7 @@ transport =
   end
 
 left = Session::LocalEndpoint.new(local_root, compression: level)
-right = Session::RemoteEndpoint.new(transport.reader, transport.writer)
+right = Session::RemoteEndpoint.new(transport.reader, transport.writer, brand: Pylon::Brand::DEFAULT)
 session = Session::Session.new(left, right, push_first: true)
 
 started = Time.instant

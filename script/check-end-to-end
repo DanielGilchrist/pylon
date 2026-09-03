@@ -41,7 +41,7 @@ check() {
   fi
 }
 
-"$PYLON" sync "$WORK/a" "user@host:$WORK/b" --state "$WORK/state" --watch \
+"$PYLON" sync "$WORK/a" "user@host:$WORK/b" --state "$WORK/state" --watch --brand "Test Sync" \
   --remote-command "$PYLON serve --state $WORK/rstate" > "$WORK/log" 2>&1 &
 PID=$!
 disown 2>/dev/null || true
@@ -50,6 +50,7 @@ sleep 5
 check "initial push landed"        401 "$(find "$WORK/b" -type f | wc -l | tr -d ' ')"
 check "local tree intact"          401 "$(find "$WORK/a" -type f | wc -l | tr -d ' ')"
 check "box only file removed"      0   "$(find "$WORK/b" -name old.rb | wc -l | tr -d ' ')"
+check "runs under the given brand" yes "$(grep -q 'Test Sync' "$WORK/log" && echo yes || echo no)"
 
 echo "class New; end" > "$WORK/a/app/models/new_model.rb"
 sleep 2

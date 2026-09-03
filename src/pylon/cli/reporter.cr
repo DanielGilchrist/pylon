@@ -1,4 +1,5 @@
 require "colorize"
+require "../brand"
 require "../scan/tally"
 require "../session/session"
 require "./spinner"
@@ -12,7 +13,7 @@ struct Pylon::CLI
     @progress : Session::Progress? = nil
     @scan : Scan::Tally? = nil
 
-    def initialize(@io : IO, @verbose : Bool = false, @dry_run : Bool = false, @errors : IO = STDERR) : Nil
+    def initialize(@io : IO, @verbose : Bool = false, @dry_run : Bool = false, @errors : IO = STDERR, *, @brand : Brand) : Nil
       @announced = Set(String).new
       @announced_troubles = Set(String).new
       @spinner = Spinner.new(@io)
@@ -27,7 +28,7 @@ struct Pylon::CLI
 
     def starting(local : String, remote : String) : Nil
       @io.puts
-      @io.puts "#{"pylon".colorize.bold} #{File.basename(local).colorize.cyan} #{"→".colorize.dark_gray} #{remote.colorize.cyan}"
+      @io.puts "#{@brand.name.colorize.bold} #{File.basename(local).colorize.cyan} #{"→".colorize.dark_gray} #{remote.colorize.cyan}"
 
       if @io.tty?
         @spinner.show { scan_status }
@@ -97,13 +98,13 @@ struct Pylon::CLI
 
     def failed(message : String) : Nil
       clear_progress
-      @errors.puts("pylon: #{message}")
+      @errors.puts(@brand.prefix(message))
     end
 
     def warn(message : String) : Nil
       interrupted = @spinner.active?
       clear_progress
-      @errors.puts("pylon: #{message}")
+      @errors.puts(@brand.prefix(message))
       @spinner.resume if interrupted
     end
 

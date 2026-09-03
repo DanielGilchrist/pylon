@@ -15,11 +15,11 @@ private def in_remote_pair(& : String, String, Session(LocalEndpoint, RemoteEndp
   Dir.mkdir_p(remote_root)
 
   client, socket = UNIXSocket.pair
-  server = Server.new(LocalEndpoint.new(remote_root), socket, socket)
+  server = Server.new(LocalEndpoint.new(remote_root), socket, socket, brand: Pylon::Brand::DEFAULT)
   spawn { server.run }
 
   begin
-    session = Session.new(LocalEndpoint.new(local_root), RemoteEndpoint.new(client, client))
+    session = Session.new(LocalEndpoint.new(local_root), RemoteEndpoint.new(client, client, brand: Pylon::Brand::DEFAULT))
     yield local_root, remote_root, session
   ensure
     client.close

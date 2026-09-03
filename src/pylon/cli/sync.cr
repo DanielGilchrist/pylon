@@ -1,4 +1,5 @@
 require "kebab"
+require "../brand"
 require "../scan/ignores"
 require "../session/local_endpoint"
 require "../session/checkpoint/schedule"
@@ -8,6 +9,7 @@ require "../session/runner"
 require "../session/session"
 require "../session/ssh"
 require "../watch/watcher"
+require "./brand_converter"
 require "./reporter"
 require "./target"
 
@@ -58,21 +60,24 @@ struct Pylon::CLI
     @[Kebab::Option(short: 'v', description: "Explain every skipped path")]
     getter? verbose : Bool = false
 
+    @[Kebab::Option(converter: BrandConverter, description: "Name to show in output instead of pylon")]
+    getter brand : Brand = Brand::DEFAULT
+
     def run : Nil
+      reporter = Reporter.new(STDOUT, verbose?, dry_run?, brand: brand)
       target = Target.parse(remote)
 
       if target.is_a?(Target::Invalid)
-        abort_with(target.message)
+        fail_with(reporter, target.message)
       end
 
       preferences = Core::Preferences.build(prefer_local, prefer_remote)
 
       if preferences.is_a?(Core::Preferences::Invalid)
-        abort_with(preferences.message)
+        fail_with(reporter, preferences.message)
       end
 
       ignores = Scan::Ignores.new(ignore)
-      reporter = Reporter.new(STDOUT, verbose?, dry_run?)
       restored = restore(reporter)
 
       transport = Session::ProcessTransport.open(
@@ -98,7 +103,7 @@ struct Pylon::CLI
         reporter.starting(local, remote) unless dry_run?
 
         signals = Channel(Nil).new(16)
-        remote_endpoint = Session::RemoteEndpoint.new(transport.reader, transport.writer, signals)
+        remote_endpoint = Session::RemoteEndpoint.new(transport.reader, transport.writer, signals, brand: brand)
         session = Session::Session.new(
           left,
           remote_endpoint,
@@ -142,7 +147,7 @@ struct Pylon::CLI
         return
       end
 
-      subscriber = Watch::Watcher.open(local, ignore, signals)
+      subscriber = Watch::Watcher.open(local, ignore, signals, brand)
 
       if subscriber.is_a?(Watch::Unavailable)
         fail_with(reporter, "watching is unavailable for #{local}: #{subscriber.reason}")
@@ -202,11 +207,6 @@ struct Pylon::CLI
       end
     end
 
-    private def abort_with(message : String) : NoReturn
-      STDERR.puts("pylon: #{message}")
-      exit(1)
-    end
-
     private def fail_with(reporter : Reporter, message : String) : NoReturn
       reporter.failed(message)
       exit(1)
@@ -216,6 +216,7 @@ struct Pylon::CLI
       parts = [remote_command, Process.quote(remote_path)]
       parts << "--compression" << compression.to_s
       ignore.each { |pattern| parts << "--ignore" << Process.quote(pattern) }
+      parts << "--brand" << Process.quote(brand.name)
       parts.join(' ')
     end
   end

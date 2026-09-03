@@ -1,4 +1,5 @@
 require "sync"
+require "../brand"
 require "../fibers"
 require "../watch/watcher"
 require "../core/applier"
@@ -19,6 +20,8 @@ module Pylon::Session
       @subscriber : Watch::Any? = nil,
       @checkpoints : Checkpoint::Schedule? = nil,
       @log : IO = STDERR,
+      *,
+      @brand : Brand,
     ) : Nil
       @lock = Sync::Mutex.new
       @stopping = false
@@ -45,7 +48,7 @@ module Pylon::Session
 
     private def greet : Bool
       if (problem = Wire::Greeting.write(@output))
-        @log.puts("pylon: the greeting could not be sent, stopping: #{problem.reason}")
+        @log.puts(@brand.prefix("the greeting could not be sent, stopping: #{problem.reason}"))
         return false
       end
 
@@ -61,7 +64,7 @@ module Pylon::Session
           break if message.is_a?(Wire::Closed)
 
           if message.is_a?(Wire::Invalid)
-            @log.puts("pylon: stopped reading requests: #{message.reason}")
+            @log.puts(@brand.prefix("stopped reading requests: #{message.reason}"))
             break
           end
 
@@ -119,7 +122,7 @@ module Pylon::Session
         failed
       end
 
-      @log.puts("pylon: a tree update could not be sent: #{problem.reason}") if problem
+      @log.puts(@brand.prefix("a tree update could not be sent: #{problem.reason}")) if problem
     end
 
     private def drain : Nil
@@ -173,7 +176,7 @@ module Pylon::Session
         end
 
       if problem
-        @log.puts("pylon: a response could not be sent, stopping: #{problem.reason}")
+        @log.puts(@brand.prefix("a response could not be sent, stopping: #{problem.reason}"))
         return false
       end
 

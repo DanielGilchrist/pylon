@@ -19,7 +19,7 @@ private def cycle_against(script : IO::Memory) : Report | Fault
   Dir.mkdir_p(root)
 
   begin
-    session = Session.new(LocalEndpoint.new(root), RemoteEndpoint.new(script, IO::Memory.new))
+    session = Session.new(LocalEndpoint.new(root), RemoteEndpoint.new(script, IO::Memory.new, brand: Pylon::Brand::DEFAULT))
     session.cycle(Time.utc.to_unix_ns.to_i64)
   ensure
     FileUtils.rm_rf(root)

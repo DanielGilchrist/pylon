@@ -1,3 +1,4 @@
+require "../brand"
 require "../core/applier"
 require "../fibers"
 require "../wire/message"
@@ -14,7 +15,7 @@ module Pylon::Session
     @tree : Core::Entry? = nil
     @unapplied = Core::Changes.new
 
-    def initialize(@input : IO, @output : IO, @signals : Channel(Nil)? = nil) : Nil
+    def initialize(@input : IO, @output : IO, @signals : Channel(Nil)? = nil, *, @brand : Brand) : Nil
       @scanned = Channel(Wire::Message::ScanResponse).new(1)
       @contents = Channel(Wire::Message::ContentsResponse).new(1)
       @signatures = Channel(Wire::Message::SignaturesResponse).new(1)
@@ -96,12 +97,12 @@ module Pylon::Session
         @greeting.close
       in Wire::Greeting::Incompatible
         stop_with(Incompatible.new(
-          "the remote pylon uses wire protocol version #{greeting.version} but this one uses #{Wire::PROTOCOL}. Update the remote binary",
+          "the remote #{@brand.name} uses wire protocol version #{greeting.version} but this one uses #{Wire::PROTOCOL}. Update the remote binary",
         ))
         return
       in Wire::Greeting::Foreign
         stop_with(Incompatible.new(
-          "the remote did not identify itself as a pylon server. It may be an outdated pylon binary or the wrong command",
+          "the remote did not identify itself as #{@brand.name}. It may be running an outdated binary or the wrong command",
         ))
         return
       in Wire::Greeting::Unreachable

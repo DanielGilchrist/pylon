@@ -53,7 +53,7 @@ module Pylon::Wire
         byte
       in UInt8
         tag = Tag.from_value?(byte)
-        return Invalid.new("unknown message tag #{byte}, both sides must run the same pylon version") if tag.nil?
+        return Invalid.new("unknown message tag #{byte}, both sides must run the same version") if tag.nil?
 
         reader = Reader.new(io)
         reader.result(decode(tag, reader))

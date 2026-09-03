@@ -35,13 +35,13 @@ private def in_counted_pair(& : String, String, Session(LocalEndpoint, RemoteEnd
   Dir.mkdir_p(remote_root)
 
   client, socket = UNIXSocket.pair
-  server = Server.new(LocalEndpoint.new(remote_root), socket, socket)
+  server = Server.new(LocalEndpoint.new(remote_root), socket, socket, brand: Pylon::Brand::DEFAULT)
   spawn { server.run }
 
   counting = CountingIO.new(client)
 
   begin
-    session = Session.new(LocalEndpoint.new(local_root), RemoteEndpoint.new(client, counting))
+    session = Session.new(LocalEndpoint.new(local_root), RemoteEndpoint.new(client, counting, brand: Pylon::Brand::DEFAULT))
     yield local_root, remote_root, session, counting
   ensure
     client.close

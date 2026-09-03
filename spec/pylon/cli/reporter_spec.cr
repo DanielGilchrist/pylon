@@ -14,7 +14,7 @@ end
 private def rendered(report : Pylon::Session::Report, verbose = false, dry_run = false, elapsed : Time::Span? = nil) : String
   Colorize.enabled = false
   io = IO::Memory.new
-  Pylon::CLI::Reporter.new(io, verbose, dry_run).report(report, elapsed)
+  Pylon::CLI::Reporter.new(io, verbose, dry_run, brand: Pylon::Brand::DEFAULT).report(report, elapsed)
   io.to_s
 end
 
@@ -119,7 +119,7 @@ describe Pylon::CLI::Reporter do
   it "mentions a conflict once, not on every cycle, and says when it clears" do
     Colorize.enabled = false
     io = IO::Memory.new
-    reporter = Pylon::CLI::Reporter.new(io)
+    reporter = Pylon::CLI::Reporter.new(io, brand: Pylon::Brand::DEFAULT)
     conflict = report_of(conflicts: [Conflict.new("db/structure.sql", Changes.new, Changes.new)])
 
     reporter.report(conflict)
@@ -149,7 +149,7 @@ describe Pylon::CLI::Reporter do
   it "mentions an unsyncable path once, not on every cycle" do
     Colorize.enabled = false
     io = IO::Memory.new
-    reporter = Pylon::CLI::Reporter.new(io)
+    reporter = Pylon::CLI::Reporter.new(io, brand: Pylon::Brand::DEFAULT)
     troubled = report_of(troubles: [Trouble.new("locked.rb", :local, "permission denied")])
 
     reporter.report(troubled)
@@ -251,10 +251,24 @@ describe Pylon::CLI::Reporter do
     output = IO::Memory.new
     errors = IO::Memory.new
 
-    Pylon::CLI::Reporter.new(output, errors: errors).failed("the remote server stopped")
+    Pylon::CLI::Reporter.new(output, errors: errors, brand: Pylon::Brand::DEFAULT).failed("the remote server stopped")
 
     errors.to_s.should eq("pylon: the remote server stopped\n")
     output.to_s.should be_empty
+  end
+
+  it "signs its output with the given name instead of pylon" do
+    Colorize.enabled = false
+    output = IO::Memory.new
+    errors = IO::Memory.new
+    reporter = Pylon::CLI::Reporter.new(output, errors: errors, brand: Pylon::Brand.new("Test Sync"))
+
+    reporter.starting("./app", "user@host:/srv/app")
+    reporter.warn("the state file was ignored")
+    reporter.failed("the remote server stopped")
+
+    output.to_s.should contain("Test Sync app → user@host:/srv/app")
+    errors.to_s.should eq("Test Sync: the state file was ignored\nTest Sync: the remote server stopped\n")
   end
 
   it "passes a remote line through to the error stream" do
@@ -262,7 +276,7 @@ describe Pylon::CLI::Reporter do
     output = IO::Memory.new
     errors = IO::Memory.new
 
-    Pylon::CLI::Reporter.new(output, errors: errors).relay("sh: pylon: not found")
+    Pylon::CLI::Reporter.new(output, errors: errors, brand: Pylon::Brand::DEFAULT).relay("sh: pylon: not found")
 
     errors.to_s.should contain("remote sh: pylon: not found")
     output.to_s.should be_empty

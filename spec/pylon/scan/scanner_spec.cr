@@ -159,7 +159,7 @@ describe Pylon::Scan::Scanner do
     root = scan(filesystem).root
 
     flagged = Fixtures.problem!(Fixtures.dig!(root, "README.md"))
-    flagged.problem.should contain("only syncs files up to")
+    flagged.problem.should contain("the limit is")
     filesystem.reads.should_not contain("README.md")
   end
 
