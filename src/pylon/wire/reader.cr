@@ -126,12 +126,21 @@ module Pylon::Wire
       in Int32
       end
 
-      read do |io|
+      value = read do |io|
         String.new(size) do |buffer|
           io.read_fully(Slice.new(buffer, size))
           {size, 0}
         end
       end
+
+      return if value.nil?
+
+      if value.includes?('\0')
+        fail("a string in the message contains a NUL byte")
+        return
+      end
+
+      value
     end
 
     def required_string : String

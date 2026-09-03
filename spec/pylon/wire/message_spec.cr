@@ -56,4 +56,11 @@ describe Pylon::Wire::Message::Configure do
     received.should be_a(Invalid)
     received.reason.should contain("root") if received.is_a?(Invalid)
   end
+
+  it "refuses a NUL byte in a path before it can reach a syscall" do
+    received = round_trip(configuration(root: "/srv/app\0"))
+
+    received.should be_a(Invalid)
+    received.reason.should eq("a string in the message contains a NUL byte") if received.is_a?(Invalid)
+  end
 end

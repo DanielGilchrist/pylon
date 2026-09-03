@@ -213,6 +213,13 @@ describe Pylon::Wire::Binary do
     fails_to_decode(io.to_slice, &.string?).should be_true
   end
 
+  it "refuses a string carrying a NUL byte so it can never reach a syscall" do
+    io = IO::Memory.new
+    Binary.write_string(io, "tmp\0")
+
+    fails_to_decode(io.to_slice, &.string?).should be_true
+  end
+
   it "accepts a field of exactly the frame limit" do
     content = Bytes.new(Pylon::Wire::MAX_FIELD_BYTES) { 'x'.ord.to_u8 }
     io = IO::Memory.new
