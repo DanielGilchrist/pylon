@@ -4,6 +4,7 @@ require "../../spec_helper"
 require "../../../src/pylon/session/local_endpoint"
 require "../../../src/pylon/session/remote_endpoint"
 require "../../../src/pylon/session/session"
+require "../../support/remote_end"
 
 include Pylon::Session
 
@@ -16,7 +17,7 @@ describe "a remote that is not there" do
     socket.close
     client.close
 
-    session = Session.new(LocalEndpoint.new(root), RemoteEndpoint.new(client, client, brand: Pylon::Brand::DEFAULT))
+    session = Session.new(LocalEndpoint.new(root), RemoteEndpoint.new(client, client, remote_configuration(root)))
 
     begin
       session.cycle(Time.utc.to_unix_ns.to_i64).should be_a(Stopped)

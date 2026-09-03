@@ -11,6 +11,7 @@ require "./message/write_request"
 require "./message/write_response"
 require "./message/tree_update"
 require "./message/tree_delta"
+require "./message/configure"
 require "../wire"
 require "./closed"
 require "./greeting"
@@ -38,7 +39,8 @@ module Pylon::Wire
                 WriteRequest |
                 WriteResponse |
                 TreeUpdate |
-                TreeDelta
+                TreeDelta |
+                Configure
 
     def write(io : IO, message : Any) : Problem?
       message.write(io)
@@ -79,6 +81,7 @@ module Pylon::Wire
       in .write_response?      then WriteResponse.new(Chunks.read_outcomes(reader))
       in .tree_update?         then TreeUpdate.new(reader.u32, Chunks.read_entry(reader))
       in .tree_delta?          then TreeDelta.new(reader.u32, Chunks.read_changes(reader))
+      in .configure?           then read_configure(reader)
       end
     end
 
@@ -95,6 +98,24 @@ module Pylon::Wire
       reader.repeat(count) { pairs << SignaturesRequest::Pair.new(reader.digest, reader.digest) }
 
       SignaturesRequest.new(pairs)
+    end
+
+    private def read_configure(reader : Reader) : Configure
+      root = reader.required_string
+      reader.fail("the root path is empty") if root.empty?
+
+      count = reader.count
+      ignores = Array(String).new(Wire.capacity_hint(count))
+      reader.repeat(count) { ignores << reader.required_string }
+
+      compression = reader.i32
+      brand = reader.required_string
+      reader.fail("the brand is blank") if brand.blank?
+
+      state = reader.string?
+      watch = reader.bool
+
+      Configure.new(root: root, ignores: ignores, compression: compression, brand: Brand.new(brand), state: state, watch: watch)
     end
   end
 end

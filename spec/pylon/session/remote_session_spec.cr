@@ -4,6 +4,7 @@ require "../../spec_helper"
 require "../../../src/pylon/session/server"
 require "../../../src/pylon/session/remote_endpoint"
 require "../../../src/pylon/session/session"
+require "../../support/remote_end"
 
 include Pylon::Session
 
@@ -15,11 +16,10 @@ private def in_remote_pair(& : String, String, Session(LocalEndpoint, RemoteEndp
   Dir.mkdir_p(remote_root)
 
   client, socket = UNIXSocket.pair
-  server = Server.new(LocalEndpoint.new(remote_root), socket, socket, brand: Pylon::Brand::DEFAULT)
-  spawn { server.run }
+  serve_remote_end(socket)
 
   begin
-    session = Session.new(LocalEndpoint.new(local_root), RemoteEndpoint.new(client, client, brand: Pylon::Brand::DEFAULT))
+    session = Session.new(LocalEndpoint.new(local_root), RemoteEndpoint.new(client, client, remote_configuration(remote_root)))
     yield local_root, remote_root, session
   ensure
     client.close

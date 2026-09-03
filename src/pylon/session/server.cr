@@ -1,6 +1,8 @@
 require "sync"
 require "../brand"
 require "../fibers"
+require "../problem"
+require "../scan/ignores"
 require "../watch/watcher"
 require "../core/applier"
 require "../core/differ"
@@ -13,7 +15,73 @@ module Pylon::Session
     @sent : Core::Entry? = nil
     @pushed : Channel(Nil)? = nil
 
-    def initialize(
+    def self.accept(input : IO, output : IO, log : IO) : Server | Problem
+      if (problem = Wire::Greeting.write(output))
+        return Problem.new("the greeting could not be sent: #{problem.reason}")
+      end
+
+      case (message = Wire::Message.read(input))
+      in Wire::Closed
+        Problem.new("the client went away before configuring this side")
+      in Wire::Invalid
+        Problem.new("the configuration could not be read: #{message.reason}")
+      in Wire::Message::Configure
+        configured(message, input, output, log)
+      in Wire::Message::Failure,
+         Wire::Message::ScanRequest,
+         Wire::Message::ScanResponse,
+         Wire::Message::ContentsRequest,
+         Wire::Message::ContentsResponse,
+         Wire::Message::SignaturesRequest,
+         Wire::Message::SignaturesResponse,
+         Wire::Message::WriteRequest,
+         Wire::Message::WriteResponse,
+         Wire::Message::TreeUpdate,
+         Wire::Message::TreeDelta
+
+        refusal = "the first message must configure this side, not a #{message.class.name}"
+        Wire::Message.write(output, Wire::Message::Failure.new(refusal))
+        Problem.new(refusal)
+      end
+    end
+
+    private def self.configured(configure : Wire::Message::Configure, input : IO, output : IO, log : IO) : Server
+      brand = configure.brand
+      endpoint = LocalEndpoint.new(configure.root, Scan::Ignores.new(configure.ignores), compression: configure.compression)
+
+      if (state = configure.state)
+        case (restored = Checkpoint.load(state))
+        in Checkpoint then endpoint.cache = restored.local_cache
+        in Checkpoint::Absent
+        in Checkpoint::Damaged
+          log.puts(brand.prefix("ignoring the sync state at #{state} (#{restored.reason}), scanning from scratch"))
+        end
+      end
+
+      subscriber = nil
+
+      if configure.watch?
+        case (opened = Watch::Watcher.open(configure.root, configure.ignores, Channel(Nil).new(1), brand))
+        in Watch::Any
+          subscriber = opened
+          endpoint.accelerate!
+        in Watch::Unavailable
+          log.puts(brand.prefix("watching is unavailable on this side (#{opened.reason}), every cycle will rescan"))
+        end
+      end
+
+      checkpoints = configure.state.try do |path|
+        Checkpoint::Schedule.new(
+          path,
+          -> : Checkpoint { Checkpoint.new(nil, endpoint.cache) },
+          on_problem: ->(problem : String) : Nil { log.puts(brand.prefix(problem)) },
+        )
+      end
+
+      new(endpoint, input, output, subscriber, checkpoints, log, brand: brand)
+    end
+
+    private def initialize(
       @endpoint : LocalEndpoint,
       @input : IO,
       @output : IO,
@@ -31,8 +99,6 @@ module Pylon::Session
     READ_AHEAD = 1
 
     def run : Nil
-      return unless greet
-
       announce
       requests = receive_ahead
 
@@ -44,15 +110,7 @@ module Pylon::Session
       wake
       @pushed.try(&.receive?)
       @checkpoints.try(&.save)
-    end
-
-    private def greet : Bool
-      if (problem = Wire::Greeting.write(@output))
-        @log.puts(@brand.prefix("the greeting could not be sent, stopping: #{problem.reason}"))
-        return false
-      end
-
-      true
+      @subscriber.try(&.close)
     end
 
     private def receive_ahead : Channel(Wire::Message::Any)
@@ -166,9 +224,11 @@ module Pylon::Session
            Wire::Message::TreeDelta,
            Wire::Message::ContentsResponse,
            Wire::Message::SignaturesResponse,
-           Wire::Message::WriteResponse
+           Wire::Message::WriteResponse,
+           Wire::Message::Configure
+
           @lock.synchronize do
-            failure = Wire::Message::Failure.new("the client sent a #{request.class.name}, which only servers send")
+            failure = Wire::Message::Failure.new("the client sent a #{request.class.name} where a request was expected")
             Wire::Message.write(@output, failure)
           end
 

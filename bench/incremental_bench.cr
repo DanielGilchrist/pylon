@@ -59,9 +59,9 @@ opened =
     end
 
     rate = ENV["BULK_RATE_BYTES"]? || "0"
-    Session::ProcessTransport.open(proxy, [latency || "0", rate, binary, "serve", remote_root, "--compression", level.to_s])
+    Session::ProcessTransport.open(proxy, [latency || "0", rate, binary, "remote"])
   else
-    Session::ProcessTransport.open(binary, ["serve", remote_root, "--compression", level.to_s])
+    Session::ProcessTransport.open(binary, ["remote"])
   end
 
 transport =
@@ -71,7 +71,7 @@ transport =
   end
 
 left = Session::LocalEndpoint.new(local_root, compression: level)
-right = Session::RemoteEndpoint.new(transport.reader, transport.writer, brand: Pylon::Brand::DEFAULT)
+right = Session::RemoteEndpoint.new(transport.reader, transport.writer, Pylon::Wire::Message::Configure.new(root: remote_root, ignores: Array(String).new, compression: level, brand: Pylon::Brand::DEFAULT, state: nil, watch: false))
 session = Session::Session.new(left, right, push_first: true)
 
 started = Time.instant

@@ -11,5 +11,6 @@ module Pylon::Wire::Message
     TreeDelta
     SignaturesRequest
     SignaturesResponse
+    Configure
   end
 end

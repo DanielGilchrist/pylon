@@ -1,4 +1,3 @@
-require "../brand"
 require "../core/applier"
 require "../fibers"
 require "../wire/message"
@@ -15,7 +14,7 @@ module Pylon::Session
     @tree : Core::Entry? = nil
     @unapplied = Core::Changes.new
 
-    def initialize(@input : IO, @output : IO, @signals : Channel(Nil)? = nil, *, @brand : Brand) : Nil
+    def initialize(@input : IO, @output : IO, @configure : Wire::Message::Configure, @signals : Channel(Nil)? = nil) : Nil
       @scanned = Channel(Wire::Message::ScanResponse).new(1)
       @contents = Channel(Wire::Message::ContentsResponse).new(1)
       @signatures = Channel(Wire::Message::SignaturesResponse).new(1)
@@ -94,15 +93,20 @@ module Pylon::Session
     private def listen : Nil
       case (greeting = Wire::Greeting.read(@input))
       in Wire::Greeting::Compatible
+        if (problem = Wire::Message.write(@output, @configure))
+          stop_with(Stopped.new("the configuration could not be sent: #{problem.reason}"))
+          return
+        end
+
         @greeting.close
       in Wire::Greeting::Incompatible
         stop_with(Incompatible.new(
-          "the remote #{@brand.name} uses wire protocol version #{greeting.version} but this one uses #{Wire::PROTOCOL}. Update the remote binary",
+          "the remote #{@configure.brand.name} uses wire protocol version #{greeting.version} but this one uses #{Wire::PROTOCOL}. Update the remote binary",
         ))
         return
       in Wire::Greeting::Foreign
         stop_with(Incompatible.new(
-          "the remote did not identify itself as #{@brand.name}. It may be running an outdated binary or the wrong command",
+          "the remote did not identify itself as #{@configure.brand.name}. It may be running an outdated binary or the wrong command",
         ))
         return
       in Wire::Greeting::Unreachable
@@ -144,7 +148,11 @@ module Pylon::Session
         in Wire::Message::Failure
           stop_with(Misbehaved.new(message.message))
           return
-        in Wire::Message::ScanRequest, Wire::Message::ContentsRequest, Wire::Message::SignaturesRequest, Wire::Message::WriteRequest
+        in Wire::Message::ScanRequest,
+           Wire::Message::ContentsRequest,
+           Wire::Message::SignaturesRequest,
+           Wire::Message::WriteRequest,
+           Wire::Message::Configure
           stop_with(Misbehaved.new("the server sent a #{message.class.name}, which only clients send"))
           return
         end

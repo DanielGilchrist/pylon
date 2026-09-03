@@ -14,6 +14,7 @@ module Pylon::Wire
     def write(io : IO) : Problem?
       io.write(IDENTITY.to_slice)
       io.write_bytes(PROTOCOL, FORMAT)
+      io.flush
       nil
     rescue error : IO::Error
       Problem.new(error.message || "the greeting could not be written")

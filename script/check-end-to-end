@@ -42,7 +42,7 @@ check() {
 }
 
 "$PYLON" sync "$WORK/a" "user@host:$WORK/b" --state "$WORK/state" --watch --brand "Test Sync" \
-  --remote-command "$PYLON serve --state $WORK/rstate" > "$WORK/log" 2>&1 &
+  --remote-binary "$PYLON" --remote-state "$WORK/rstate" > "$WORK/log" 2>&1 &
 PID=$!
 disown 2>/dev/null || true
 sleep 5

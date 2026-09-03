@@ -9,6 +9,7 @@ require "../session/runner"
 require "../session/session"
 require "../session/ssh"
 require "../watch/watcher"
+require "../wire/message"
 require "./brand_converter"
 require "./reporter"
 require "./target"
@@ -18,8 +19,8 @@ struct Pylon::CLI
   struct Sync
     include Kebab::Parseable
 
-    DEFAULT_REMOTE_COMMAND = "pylon serve"
-    DEFAULT_COMPRESSION    = 9
+    DEFAULT_REMOTE_BINARY = "pylon"
+    DEFAULT_COMPRESSION   = 9
 
     @[Kebab::Argument(description: "Local directory")]
     getter local : String
@@ -36,11 +37,14 @@ struct Pylon::CLI
     @[Kebab::Option(description: "SSH port")]
     getter port : String?
 
-    @[Kebab::Option(description: "Command that starts the remote server")]
-    getter remote_command : String = DEFAULT_REMOTE_COMMAND
+    @[Kebab::Option(description: "Path of the binary on the remote host")]
+    getter remote_binary : String = DEFAULT_REMOTE_BINARY
 
     @[Kebab::Option(description: "Where to keep sync state")]
     getter state : String?
+
+    @[Kebab::Option(description: "Where the remote host keeps its sync state")]
+    getter remote_state : String?
 
     @[Kebab::Option(description: "zstd level for content sent over the link, both directions")]
     getter compression : Int32 = DEFAULT_COMPRESSION
@@ -84,7 +88,7 @@ struct Pylon::CLI
         "ssh",
         Session::SSH.command(
           host: target.host,
-          remote_command: server_command(target.path),
+          remote_command: "#{remote_binary} remote",
           config: config,
           port: port,
         ),
@@ -103,7 +107,7 @@ struct Pylon::CLI
         reporter.starting(local, remote) unless dry_run?
 
         signals = Channel(Nil).new(16)
-        remote_endpoint = Session::RemoteEndpoint.new(transport.reader, transport.writer, signals, brand: brand)
+        remote_endpoint = Session::RemoteEndpoint.new(transport.reader, transport.writer, configuration(target.path), signals)
         session = Session::Session.new(
           left,
           remote_endpoint,
@@ -187,7 +191,7 @@ struct Pylon::CLI
     private def report_fault(reporter : Reporter, fault : Session::Fault, target : Target) : NoReturn
       case fault
       in Session::Stopped
-        fail_with(reporter, "#{fault.explain}. Check that #{remote_command.inspect} exists on #{target.host}")
+        fail_with(reporter, "#{fault.explain}. Check that #{remote_binary.inspect} exists on #{target.host}")
       in Session::Incompatible, Session::Misbehaved
         fail_with(reporter, fault.explain)
       end
@@ -212,12 +216,15 @@ struct Pylon::CLI
       exit(1)
     end
 
-    private def server_command(remote_path : String) : String
-      parts = [remote_command, Process.quote(remote_path)]
-      parts << "--compression" << compression.to_s
-      ignore.each { |pattern| parts << "--ignore" << Process.quote(pattern) }
-      parts << "--brand" << Process.quote(brand.name)
-      parts.join(' ')
+    private def configuration(remote_root : String) : Wire::Message::Configure
+      Wire::Message::Configure.new(
+        root: remote_root,
+        ignores: ignore,
+        compression: compression,
+        brand: brand,
+        state: remote_state,
+        watch: watch?,
+      )
     end
   end
 end

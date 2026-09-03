@@ -18,7 +18,7 @@ end
 level = (ENV["BULK_COMPRESSION"]? || "1").to_i
 ignore = ENV["BULK_IGNORE"]? || ".git"
 
-serve_arguments = ["serve", remote_root, "--compression", level.to_s, "--ignore", ignore]
+remote_arguments = ["remote"]
 
 opened =
   if (latency = ENV["BULK_LATENCY_MS"]?) || ENV["BULK_RATE_BYTES"]?
@@ -30,9 +30,9 @@ opened =
     end
 
     rate = ENV["BULK_RATE_BYTES"]? || "0"
-    Session::ProcessTransport.open(proxy, [latency || "0", rate, binary] + serve_arguments)
+    Session::ProcessTransport.open(proxy, [latency || "0", rate, binary] + remote_arguments)
   else
-    Session::ProcessTransport.open(binary, serve_arguments)
+    Session::ProcessTransport.open(binary, remote_arguments)
   end
 
 transport =
@@ -42,7 +42,7 @@ transport =
   end
 
 left = Session::LocalEndpoint.new(local_root, Scan::Ignores.new([ignore]), compression: level)
-right = Session::RemoteEndpoint.new(transport.reader, transport.writer, brand: Pylon::Brand::DEFAULT)
+right = Session::RemoteEndpoint.new(transport.reader, transport.writer, Pylon::Wire::Message::Configure.new(root: remote_root, ignores: [ignore], compression: level, brand: Pylon::Brand::DEFAULT, state: nil, watch: false))
 session = Session::Session.new(left, right, push_first: true)
 
 started = Time.instant

@@ -4,7 +4,7 @@ require "../../spec_helper"
 require "../../../src/pylon/session/server"
 require "../../../src/pylon/session/remote_endpoint"
 require "../../../src/pylon/session/session"
-require "../../../src/pylon/watch/watcher"
+require "../../support/remote_end"
 
 include Pylon::Session
 
@@ -21,32 +21,19 @@ private def in_watched_pair(& : String, String, Session(LocalEndpoint, RemoteEnd
   Dir.mkdir_p(local)
   Dir.mkdir_p(remote)
 
-  signals = ::Channel(Nil).new(16)
-  watcher = Pylon::Watch::Watcher.open(remote, Array(String).new, signals, Pylon::Brand::DEFAULT)
-
-  if watcher.is_a?(Pylon::Watch::Unavailable)
-    FileUtils.rm_rf(base)
-    pending! "no filesystem watcher available (#{watcher.reason})"
-  end
-
-  endpoint = LocalEndpoint.new(remote)
-  endpoint.accelerate!
-
   client, socket = UNIXSocket.pair
-  server = Server.new(endpoint, socket, socket, watcher, brand: Pylon::Brand::DEFAULT)
-  spawn { server.run }
+  serve_remote_end(socket)
 
   pushes = ::Channel(Nil).new(16)
 
   begin
     session = Session.new(
       LocalEndpoint.new(local),
-      RemoteEndpoint.new(client, client, pushes, brand: Pylon::Brand::DEFAULT),
+      RemoteEndpoint.new(client, client, remote_configuration(remote, watch: true), pushes),
       push_first: true,
     )
     yield local, remote, session, pushes
   ensure
-    watcher.close
     client.close
     socket.close
     FileUtils.rm_rf(base)

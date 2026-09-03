@@ -36,10 +36,10 @@ It lists methods nothing reaches from those entrypoints. It always exits 0, so r
 - `scan/` turns a directory into an `Entry` tree. `Scanner` reuses untouched subtrees via a baseline plus recheck set, `Cache` holds per-path metadata and digests, `Ignores` filters paths.
 - `write/` applies changes to a filesystem. `Guard` refuses a write when the on-disk state no longer matches the cache, `Outcome` reports what happened per path.
 - `wire/` the binary protocol. `Message` is the frame union, `Binary` encodes and decodes, `Chunks` moves zstd-compressed content, `ContentSource` supplies content to send.
-- `session/` orchestration. `Session` runs the cycle, `Server` is the remote side (`pylon serve` over ssh stdin/stdout), `LocalEndpoint` and `RemoteEndpoint` give both sides one interface, `Checkpoint` persists the base and caches between runs.
+- `session/` orchestration. `Session` runs the cycle, `Server` is the remote side (`pylon remote` over ssh stdin/stdout, configured by the client's first message), `LocalEndpoint` and `RemoteEndpoint` give both sides one interface, `Checkpoint` persists the base and caches between runs.
 - `watch/` file watchers, inotify on linux, FSEvents on mac.
 - `compress/` zstd through hand-rolled lib bindings, `Identity` is the no-op codec for specs.
-- `cli/` the `sync` and `serve` commands plus terminal reporting.
+- `cli/` the `sync` and `remote` commands plus terminal reporting.
 - `disk.cr` the real filesystem, specs substitute in-memory fakes.
 
 ## Comments

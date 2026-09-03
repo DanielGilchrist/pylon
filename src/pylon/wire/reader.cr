@@ -50,6 +50,10 @@ module Pylon::Wire
       number(UInt64)
     end
 
+    def i32 : Int32
+      number(Int32)
+    end
+
     def i64 : Int64
       number(Int64)
     end

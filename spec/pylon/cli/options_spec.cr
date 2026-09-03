@@ -1,17 +1,10 @@
 require "../../spec_helper"
 require "../../../src/pylon/cli/sync"
-require "../../../src/pylon/cli/serve"
+require "../../../src/pylon/cli/remote"
 
 private def parse_sync(extra : Array(String) = Array(String).new) : Pylon::CLI::Sync
   parsed = Pylon::CLI::Sync.parse(["./here", "user@host:/there"] + extra)
   raise "the sync command did not parse: #{parsed.inspect}" unless parsed.is_a?(Pylon::CLI::Sync)
-
-  parsed
-end
-
-private def parse_serve(extra : Array(String) = Array(String).new) : Pylon::CLI::Serve
-  parsed = Pylon::CLI::Serve.parse(["./here"] + extra)
-  raise "the serve command did not parse: #{parsed.inspect}" unless parsed.is_a?(Pylon::CLI::Serve)
 
   parsed
 end
@@ -25,9 +18,17 @@ describe Pylon::CLI::Sync do
     parsed.verbose?.should be_false
     parsed.ignore.should be_empty
     parsed.state.should be_nil
-    parsed.remote_command.should eq(Pylon::CLI::Sync::DEFAULT_REMOTE_COMMAND)
+    parsed.remote_binary.should eq(Pylon::CLI::Sync::DEFAULT_REMOTE_BINARY)
+    parsed.remote_state.should be_nil
     parsed.compression.should eq(Pylon::CLI::Sync::DEFAULT_COMPRESSION)
     parsed.brand.should eq(Pylon::Brand::DEFAULT)
+  end
+
+  it "takes the remote binary and state paths for the far side" do
+    parsed = parse_sync(["--remote-binary", "/home/me/pylon", "--remote-state", "/home/me/.state"])
+
+    parsed.remote_binary.should eq("/home/me/pylon")
+    parsed.remote_state.should eq("/home/me/.state")
   end
 
   it "goes by another brand when given one" do
@@ -73,9 +74,8 @@ describe Pylon::CLI::Sync do
   end
 end
 
-describe Pylon::CLI::Serve do
-  it "goes by pylon unless told otherwise" do
-    parse_serve.brand.should eq(Pylon::Brand::DEFAULT)
-    parse_serve(["--brand", "Test Sync"]).brand.should eq(Pylon::Brand.new("Test Sync"))
+describe Pylon::CLI::Remote do
+  it "takes nothing on the command line because the client configures it" do
+    Pylon::CLI::Remote.parse(Array(String).new).should be_a(Pylon::CLI::Remote)
   end
 end

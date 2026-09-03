@@ -3,6 +3,7 @@ require "../../spec_helper"
 require "../../../src/pylon/session/local_endpoint"
 require "../../../src/pylon/session/remote_endpoint"
 require "../../../src/pylon/session/session"
+require "../../support/remote_end"
 
 include Pylon::Session
 
@@ -19,7 +20,7 @@ private def cycle_against(script : IO::Memory) : Report | Fault
   Dir.mkdir_p(root)
 
   begin
-    session = Session.new(LocalEndpoint.new(root), RemoteEndpoint.new(script, IO::Memory.new, brand: Pylon::Brand::DEFAULT))
+    session = Session.new(LocalEndpoint.new(root), RemoteEndpoint.new(script, IO::Memory.new, remote_configuration(root)))
     session.cycle(Time.utc.to_unix_ns.to_i64)
   ensure
     FileUtils.rm_rf(root)
