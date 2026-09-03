@@ -7,10 +7,10 @@ module Pylon::Wire::Message
 
     record Pair, wanted : Bytes, base : Bytes
 
-    getter pairs : Array(Pair)
-
     def initialize(@pairs : Array(Pair)) : Nil
     end
+
+    getter pairs : Array(Pair)
 
     def tag : Tag
       Tag::SignaturesRequest

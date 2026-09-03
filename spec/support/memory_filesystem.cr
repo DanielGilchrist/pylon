@@ -15,11 +15,6 @@ struct MemoryFilesystem
     statable : Bool = true,
     reported_size : UInt64? = nil
 
-  getter reads = Array(String).new
-
-  def initialize(@nodes : Hash(String, Node)) : Nil
-  end
-
   def self.build(files : Hash(String, String)) : MemoryFilesystem
     nodes = {"" => Node.new(kind: Pylon::Scan::Metadata::Kind::Directory)}
     inode = 1_u64
@@ -45,6 +40,11 @@ struct MemoryFilesystem
 
     new(nodes)
   end
+
+  def initialize(@nodes : Hash(String, Node)) : Nil
+  end
+
+  getter reads = Array(String).new
 
   def with(path : String, **changes) : MemoryFilesystem
     nodes = @nodes.dup

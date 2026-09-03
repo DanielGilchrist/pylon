@@ -16,38 +16,10 @@ module Pylon::Scan
     DEFAULT_GRANULARITY_NS = Metadata::DEFAULT_GRANULARITY_NS
     DEFAULT_PARALLELISM    = System.cpu_count.to_i * 2
 
-    @next_cache : Cache
-    @dirty : Set(String)
-
-    private record PendingFile, path : String, size : Int64
-
-    private record SurveyedDirectory
-    private record SurveyedFile, metadata : Metadata
-    private record SurveyedLink, target : String | Problem
-    private record SurveyedUntracked
-    private record SurveyedProblem, reason : String
-
     private alias Surveyed = SurveyedDirectory | SurveyedFile | SurveyedLink | SurveyedUntracked | SurveyedProblem
 
-    private class Survey
-      getter nodes = Hash(String, Surveyed).new
-      getter children = Hash(String, Array(String)).new
-      getter pending = Array(PendingFile).new
-      getter reused = Hash(String, Bytes | Problem).new
-      getter carried = Hash(String, Core::Entry).new
-
-      @by_inode : Hash(UInt64, CacheEntry)? = nil
-
-      def by_inode(cache : Cache) : Hash(UInt64, CacheEntry)
-        @by_inode ||= index_inodes(cache)
-      end
-
-      private def index_inodes(cache : Cache) : Hash(UInt64, CacheEntry)
-        indexed = Hash(UInt64, CacheEntry).new(initial_capacity: cache.size)
-        cache.each_value { |entry| indexed[entry.metadata.inode] = entry }
-        indexed
-      end
-    end
+    @next_cache : Cache
+    @dirty : Set(String)
 
     def initialize(
       @filesystem : F,
@@ -274,6 +246,34 @@ module Pylon::Scan
         Core::Untracked.new
       in SurveyedProblem
         Core::Problematic.new(node.reason)
+      end
+    end
+
+    private record PendingFile, path : String, size : Int64
+
+    private record SurveyedDirectory
+    private record SurveyedFile, metadata : Metadata
+    private record SurveyedLink, target : String | Problem
+    private record SurveyedUntracked
+    private record SurveyedProblem, reason : String
+
+    private class Survey
+      @by_inode : Hash(UInt64, CacheEntry)? = nil
+
+      getter nodes = Hash(String, Surveyed).new
+      getter children = Hash(String, Array(String)).new
+      getter pending = Array(PendingFile).new
+      getter reused = Hash(String, Bytes | Problem).new
+      getter carried = Hash(String, Core::Entry).new
+
+      def by_inode(cache : Cache) : Hash(UInt64, CacheEntry)
+        @by_inode ||= index_inodes(cache)
+      end
+
+      private def index_inodes(cache : Cache) : Hash(UInt64, CacheEntry)
+        indexed = Hash(UInt64, CacheEntry).new(initial_capacity: cache.size)
+        cache.each_value { |entry| indexed[entry.metadata.inode] = entry }
+        indexed
       end
     end
   end

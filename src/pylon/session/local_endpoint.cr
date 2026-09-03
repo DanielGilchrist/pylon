@@ -10,14 +10,6 @@ require "./local_endpoint/settled_signatures"
 
 module Pylon::Session
   class LocalEndpoint
-    private record Wanted, digest : Bytes, path : String, size : UInt64
-    private record Located, path : String, size : UInt64
-
-    getter root : String
-    property cache : Scan::Cache
-    property on_stream : Proc(UInt64, Nil)? = nil
-    getter tally = Scan::Tally.new
-
     @baseline : Core::Entry?
     @recheck : Set(String)
 
@@ -29,6 +21,11 @@ module Pylon::Session
       @accelerated = false
       @disk = Disk.new(@root)
     end
+
+    getter root : String
+    property cache : Scan::Cache
+    property on_stream : Proc(UInt64, Nil)? = nil
+    getter tally = Scan::Tally.new
 
     def accelerate! : Nil
       @accelerated = true
@@ -141,6 +138,38 @@ module Pylon::Session
       )
     end
 
+    def known_size(path : String) : UInt64?
+      @cache[path]?.try(&.metadata.size)
+    end
+
+    def payload_size(changes : Core::Changes) : UInt64?
+      changes.sum(0_u64) do |change|
+        entry = change.new
+        next 0_u64 unless entry.is_a?(Core::File)
+
+        cached = @cache[change.path]?
+        return if cached.nil?
+
+        cached.metadata.size
+      end
+    end
+
+    def write(changes : Core::Changes, source : Wire::ContentSource, relocations : Array(Core::Relocation) = Array(Core::Relocation).new) : Array(Write::Outcome)
+      Write::Writer.new(@disk, Staging.new(source.contents, self), @cache, Time.utc.to_unix_ns.to_i64, @ignores).write(changes, relocations)
+    end
+
+    def recovered_content(digest : Bytes) : Bytes?
+      located = @by_digest[digest]?
+      return if located.nil?
+
+      verified_read(located.path, digest)
+    end
+
+    def write_begin(changes : Core::Changes, source : Wire::ContentSource, relocations : Array(Core::Relocation)) : PendingWrite
+      outcomes = write(changes, source, relocations)
+      PendingWrite.new(Proc(Array(Write::Outcome) | Fault).new { outcomes })
+    end
+
     private def compute_patch(want : Wanted, signatures : Wire::Delta::Signatures) : Wire::Patch?
       based = signatures[want.digest]?
       return if based.nil?
@@ -203,37 +232,10 @@ module Pylon::Session
       wanted
     end
 
-    def known_size(path : String) : UInt64?
-      @cache[path]?.try(&.metadata.size)
-    end
-
-    def payload_size(changes : Core::Changes) : UInt64?
-      changes.sum(0_u64) do |change|
-        entry = change.new
-        next 0_u64 unless entry.is_a?(Core::File)
-
-        cached = @cache[change.path]?
-        return if cached.nil?
-
-        cached.metadata.size
-      end
-    end
-
     private def index(cache : Scan::Cache) : Hash(Bytes, Located)
       by_digest = Hash(Bytes, Located).new(initial_capacity: cache.size)
       cache.each { |path, entry| by_digest[entry.digest] = Located.new(path, entry.metadata.size) }
       by_digest
-    end
-
-    def write(changes : Core::Changes, source : Wire::ContentSource, relocations : Array(Core::Relocation) = Array(Core::Relocation).new) : Array(Write::Outcome)
-      Write::Writer.new(@disk, Staging.new(source.contents, self), @cache, Time.utc.to_unix_ns.to_i64, @ignores).write(changes, relocations)
-    end
-
-    def recovered_content(digest : Bytes) : Bytes?
-      located = @by_digest[digest]?
-      return if located.nil?
-
-      verified_read(located.path, digest)
     end
 
     private def verified_read(path : String, digest : Bytes) : Bytes?
@@ -245,9 +247,7 @@ module Pylon::Session
       end
     end
 
-    def write_begin(changes : Core::Changes, source : Wire::ContentSource, relocations : Array(Core::Relocation)) : PendingWrite
-      outcomes = write(changes, source, relocations)
-      PendingWrite.new(Proc(Array(Write::Outcome) | Fault).new { outcomes })
-    end
+    private record Wanted, digest : Bytes, path : String, size : UInt64
+    private record Located, path : String, size : UInt64
   end
 end

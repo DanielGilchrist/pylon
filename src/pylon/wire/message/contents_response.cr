@@ -7,14 +7,14 @@ module Pylon::Wire::Message
   struct ContentsResponse
     include Writable
 
-    getter source : ContentSource
-
     def initialize(@source : ContentSource) : Nil
     end
 
     def initialize(contents : Contents) : Nil
       @source = ContentSource::Materialised.new(contents)
     end
+
+    getter source : ContentSource
 
     def contents : Contents
       source.contents

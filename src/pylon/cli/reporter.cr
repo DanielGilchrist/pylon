@@ -37,19 +37,6 @@ struct Pylon::CLI
       end
     end
 
-    private def scan_status : String
-      scan = @scan
-      return "connecting and scanning both sides" if scan.nil?
-
-      if scan.finished?
-        "waiting for the remote scan · #{scan.files} files here"
-      elsif scan.hashed_bytes.zero?
-        "scanning · #{scan.files} files"
-      else
-        "scanning · #{scan.files} files · #{mebibytes(scan.hashed_bytes.to_u64)} MiB hashed"
-      end
-    end
-
     def progress(update : Session::Progress) : Nil
       if update.confirmed.zero?
         @streamed = 0
@@ -65,35 +52,6 @@ struct Pylon::CLI
       @streamed += 1
       @streamed_bytes += bytes
       refresh
-    end
-
-    private def refresh : Nil
-      update = @progress
-      return if update.nil?
-
-      case update.direction
-      in .to_remote?
-        sent = Math.max(@streamed, update.confirmed)
-        @spinner.show("↑ sending #{sent}/#{update.total}#{throughput}")
-      in .to_local?
-        @spinner.show("↓ receiving #{update.confirmed}/#{update.total}")
-      end
-    end
-
-    private def throughput : String
-      return "" if @streamed_bytes.zero?
-
-      sent = mebibytes(@streamed_bytes)
-      total = @progress.try(&.total_bytes)
-      volume = total ? "#{sent}/#{mebibytes(total)}" : sent
-      elapsed = (Time.instant - @started).total_seconds
-      rate = elapsed > 0.5 ? " at #{(@streamed_bytes / (1024.0 * 1024.0) / elapsed).round(1)} MiB/s" : ""
-
-      " · #{volume} MiB#{rate}"
-    end
-
-    private def mebibytes(bytes : UInt64) : String
-      (bytes / (1024.0 * 1024.0)).round(1).to_s
     end
 
     def failed(message : String) : Nil
@@ -160,6 +118,48 @@ struct Pylon::CLI
       end
 
       @io.puts
+    end
+
+    private def scan_status : String
+      scan = @scan
+      return "connecting and scanning both sides" if scan.nil?
+
+      if scan.finished?
+        "waiting for the remote scan · #{scan.files} files here"
+      elsif scan.hashed_bytes.zero?
+        "scanning · #{scan.files} files"
+      else
+        "scanning · #{scan.files} files · #{mebibytes(scan.hashed_bytes.to_u64)} MiB hashed"
+      end
+    end
+
+    private def refresh : Nil
+      update = @progress
+      return if update.nil?
+
+      case update.direction
+      in .to_remote?
+        sent = Math.max(@streamed, update.confirmed)
+        @spinner.show("↑ sending #{sent}/#{update.total}#{throughput}")
+      in .to_local?
+        @spinner.show("↓ receiving #{update.confirmed}/#{update.total}")
+      end
+    end
+
+    private def throughput : String
+      return "" if @streamed_bytes.zero?
+
+      sent = mebibytes(@streamed_bytes)
+      total = @progress.try(&.total_bytes)
+      volume = total ? "#{sent}/#{mebibytes(total)}" : sent
+      elapsed = (Time.instant - @started).total_seconds
+      rate = elapsed > 0.5 ? " at #{(@streamed_bytes / (1024.0 * 1024.0) / elapsed).round(1)} MiB/s" : ""
+
+      " · #{volume} MiB#{rate}"
+    end
+
+    private def mebibytes(bytes : UInt64) : String
+      (bytes / (1024.0 * 1024.0)).round(1).to_s
     end
 
     # A conflict persists until someone acts on it, so say it once rather than

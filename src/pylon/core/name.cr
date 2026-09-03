@@ -2,8 +2,6 @@ require "./malformed"
 
 module Pylon::Core
   struct Name
-    getter value : String
-
     def self.parse(raw : String) : Name | Malformed
       problem = self.problem(raw)
       problem ? Malformed.new(raw, problem) : new(raw)
@@ -21,5 +19,7 @@ module Pylon::Core
 
     protected def initialize(@value : String) : Nil
     end
+
+    getter value : String
   end
 end

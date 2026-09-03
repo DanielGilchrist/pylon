@@ -2,6 +2,9 @@ require "../problem"
 
 module Pylon::Scan
   struct Metadata
+    NANOSECONDS_PER_SECOND = 1_000_000_000_i64
+    DEFAULT_GRANULARITY_NS = 1_000_000_000_i64
+
     enum Kind
       Directory
       File
@@ -17,9 +20,6 @@ module Pylon::Scan
         end
       end
     end
-
-    NANOSECONDS_PER_SECOND = 1_000_000_000_i64
-    DEFAULT_GRANULARITY_NS = 1_000_000_000_i64
 
     def self.of(path : String) : Metadata | Problem | Nil
       stat = uninitialized LibC::Stat
@@ -56,13 +56,13 @@ module Pylon::Scan
       {% raise "pylon only knows the stat layout on linux and macos" %}
     {% end %}
 
+    def initialize(@mode : UInt32, @size : UInt64, @mtime_ns : Int64, @inode : UInt64) : Nil
+    end
+
     getter mode : UInt32
     getter size : UInt64
     getter mtime_ns : Int64
     getter inode : UInt64
-
-    def initialize(@mode : UInt32, @size : UInt64, @mtime_ns : Int64, @inode : UInt64) : Nil
-    end
 
     def kind : Kind
       Kind.from_mode(mode)

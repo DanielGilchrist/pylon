@@ -9,9 +9,6 @@ module Pylon::Session
   # us to encode the potential failures into the return type and force callers to handle them as
   # needed.
   class ProcessTransport
-    getter reader : IO
-    getter writer : IO
-
     def self.open(command : String, arguments : Array(String)) : ProcessTransport | Problem
       case (process = start(command, arguments, Process::Redirect::Inherit))
       in Problem then process
@@ -52,6 +49,9 @@ module Pylon::Session
       @reader = @process.output
       @writer = @process.input
     end
+
+    getter reader : IO
+    getter writer : IO
 
     def close : Process::Status
       release_writer

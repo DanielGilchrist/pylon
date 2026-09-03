@@ -1,20 +1,8 @@
 module Pylon::Core
+  alias Syncable = Directory | File | SymbolicLink
+  alias Entry = Syncable | Untracked | Problematic
+
   struct Directory
-    getter contents : Hash(String, Entry)
-    getter? contains_problematic : Bool
-
-    def initialize(contents : Hash(String, V) = Hash(String, Entry).new) : Nil forall V
-      if contents.is_a?(Hash(String, Entry))
-        @contents = contents
-      else
-        widened = Hash(String, Entry).new(initial_capacity: contents.size)
-        contents.each { |name, child| widened[name] = child }
-        @contents = widened
-      end
-
-      @contains_problematic = Directory.contains_problematic?(@contents)
-    end
-
     protected def self.contains_problematic?(contents : Hash(String, Entry)) : Bool
       contents.each_value do |child|
         case child
@@ -28,6 +16,21 @@ module Pylon::Core
 
       false
     end
+
+    def initialize(contents : Hash(String, V) = Hash(String, Entry).new) : Nil forall V
+      if contents.is_a?(Hash(String, Entry))
+        @contents = contents
+      else
+        widened = Hash(String, Entry).new(initial_capacity: contents.size)
+        contents.each { |name, child| widened[name] = child }
+        @contents = widened
+      end
+
+      @contains_problematic = Directory.contains_problematic?(@contents)
+    end
+
+    getter contents : Hash(String, Entry)
+    getter? contains_problematic : Bool
 
     def syncable : Directory
       return self if contents.empty?
@@ -63,10 +66,10 @@ module Pylon::Core
   end
 
   struct File
-    getter digest : Bytes
-
     def initialize(@digest : Bytes, @executable : Bool = false) : Nil
     end
+
+    getter digest : Bytes
 
     def executable? : Bool
       @executable
@@ -78,10 +81,10 @@ module Pylon::Core
   end
 
   struct SymbolicLink
-    getter target : String
-
     def initialize(@target : String) : Nil
     end
+
+    getter target : String
 
     def syncable : SymbolicLink
       self
@@ -95,16 +98,13 @@ module Pylon::Core
   end
 
   struct Problematic
-    getter problem : String
-
     def initialize(@problem : String) : Nil
     end
+
+    getter problem : String
 
     def syncable : Nil
       nil
     end
   end
-
-  alias Syncable = Directory | File | SymbolicLink
-  alias Entry = Syncable | Untracked | Problematic
 end

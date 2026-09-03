@@ -19,8 +19,6 @@ module Pylon::Session
     # bother if the batch is under a certain size.
     DELTA_WAIT_BYTES = 256_u64 * 1024
 
-    getter base : Core::Entry?
-
     def initialize(
       @local : A,
       @remote : B,
@@ -31,6 +29,8 @@ module Pylon::Session
       @on_progress : Proc(Progress, Nil)? = nil,
     ) : Nil
     end
+
+    getter base : Core::Entry?
 
     def cycle(now_ns : Int64) : Report | Fault
       {% if flag?(:timing) %}

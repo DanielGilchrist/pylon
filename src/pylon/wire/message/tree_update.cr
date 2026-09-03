@@ -5,11 +5,11 @@ module Pylon::Wire::Message
   struct TreeUpdate
     include Writable
 
-    getter sequence : UInt32
-    getter root : Core::Entry?
-
     def initialize(@sequence : UInt32, @root : Core::Entry?) : Nil
     end
+
+    getter sequence : UInt32
+    getter root : Core::Entry?
 
     def tag : Tag
       Tag::TreeUpdate

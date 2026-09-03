@@ -2,6 +2,10 @@ require "../filesystem/pattern"
 
 module Pylon::Core
   struct Preferences
+    FALLBACK = "."
+
+    alias Rule = GlobRule | FallbackRule
+
     enum Side
       Local
       Remote
@@ -9,12 +13,7 @@ module Pylon::Core
 
     record GlobRule, side : Side, pattern : Filesystem::Pattern
     record FallbackRule, side : Side
-
-    alias Rule = GlobRule | FallbackRule
-
     record Invalid, message : String
-
-    FALLBACK = "."
 
     def self.none : Preferences
       new(Array(Rule).new)

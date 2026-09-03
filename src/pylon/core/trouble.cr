@@ -5,11 +5,11 @@ module Pylon::Core
       Remote
     end
 
+    def initialize(@path : String, @side : Side, @reason : String) : Nil
+    end
+
     getter path : String
     getter side : Side
     getter reason : String
-
-    def initialize(@path : String, @side : Side, @reason : String) : Nil
-    end
   end
 end

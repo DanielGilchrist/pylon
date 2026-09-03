@@ -11,6 +11,12 @@ module Pylon::Core
       end
     end
 
+    def self.[](*changes : Change) : Changes
+      collected = new(initial_capacity: changes.size)
+      changes.each { |change| collected << change }
+      collected
+    end
+
     private def self.widen(path : String, old : Entry?, new : Entry?, into : Changes) : Nil
       if !new.is_a?(Directory) || new.contents.empty?
         into << Change.new(path, old, new)
@@ -26,12 +32,6 @@ module Pylon::Core
 
     def initialize : Nil
       @changes = Array(Change).new
-    end
-
-    def self.[](*changes : Change) : Changes
-      collected = new(initial_capacity: changes.size)
-      changes.each { |change| collected << change }
-      collected
     end
 
     def initialize(*, initial_capacity : Int32) : Nil

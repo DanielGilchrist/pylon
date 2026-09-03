@@ -11,14 +11,14 @@ module Pylon::Core
     end
 
     private struct State
+      def initialize(@preferences : Preferences) : Nil
+      end
+
       getter base_changes = Changes.new
       getter local_changes = Changes.new
       getter remote_changes = Changes.new
       getter conflicts = Array(Conflict).new
       getter troubles = Array(Trouble).new
-
-      def initialize(@preferences : Preferences) : Nil
-      end
 
       def result : Reconciliation
         Reconciliation.new(base_changes, local_changes, remote_changes, conflicts, troubles)

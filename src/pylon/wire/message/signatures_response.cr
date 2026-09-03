@@ -6,10 +6,10 @@ module Pylon::Wire::Message
   struct SignaturesResponse
     include Writable
 
-    getter signatures : Delta::Signatures
-
     def initialize(@signatures : Delta::Signatures) : Nil
     end
+
+    getter signatures : Delta::Signatures
 
     def tag : Tag
       Tag::SignaturesResponse

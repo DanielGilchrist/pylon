@@ -22,8 +22,6 @@ module Pylon::Watch
 
     READ_BUFFER_BYTES = 64 * 1024
 
-    getter signals : Channel(Nil)
-
     def self.open(
       root : String,
       ignores : Array(String),
@@ -76,6 +74,8 @@ module Pylon::Watch
       @context = Fibers.isolated(:inotify) { listen }
     end
 
+    getter signals : Channel(Nil)
+
     def drain : Dirty
       @lock.synchronize do
         dirty = @fresh ? Everything.new : Touched.new(@dirty.to_a)
@@ -97,6 +97,10 @@ module Pylon::Watch
       LibC.close(@wake_write)
     end
 
+    def watching? : Bool
+      @paths.has_value?("")
+    end
+
     private def watch_tree(relative : String) : Nil
       return if @ignores.ignore?(relative)
 
@@ -108,10 +112,6 @@ module Pylon::Watch
 
         watch_tree(child)
       end
-    end
-
-    def watching? : Bool
-      @paths.has_value?("")
     end
 
     private def add_watch(relative : String) : Nil

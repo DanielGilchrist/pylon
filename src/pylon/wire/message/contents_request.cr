@@ -7,12 +7,12 @@ module Pylon::Wire::Message
   struct ContentsRequest
     include Writable
 
+    def initialize(@digests : Array(Bytes), @budget : UInt64, @signatures : Delta::Signatures = Delta::Signatures.new) : Nil
+    end
+
     getter digests : Array(Bytes)
     getter budget : UInt64
     getter signatures : Delta::Signatures
-
-    def initialize(@digests : Array(Bytes), @budget : UInt64, @signatures : Delta::Signatures = Delta::Signatures.new) : Nil
-    end
 
     def tag : Tag
       Tag::ContentsRequest

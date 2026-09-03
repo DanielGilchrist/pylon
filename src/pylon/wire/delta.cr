@@ -7,14 +7,14 @@ module Pylon::Wire
   module Delta
     extend self
 
-    alias Signatures = Hash(Bytes, Based)
-
     STRONG_BYTES        =   8
     MINIMUM_BLOCK       = 512
     MAXIMUM_BLOCK       = 128 * 1024
     MINIMUM_CONTENT     = 1024
     LARGEST_DELTA_FILE  = 64_u64 * 1024 * 1024
     SMALLEST_DELTA_FILE = 8_u64 * 1024
+
+    alias Signatures = Hash(Bytes, Based)
 
     {% if flag?(:timing) %}
       class_property deltas_sent = 0

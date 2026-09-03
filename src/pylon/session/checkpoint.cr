@@ -36,16 +36,16 @@ module Pylon::Session
       new(base: base, local_cache: local_cache, remote_cache: remote_cache)
     end
 
-    getter base : Core::Entry?
-    getter local_cache : Scan::Cache
-    getter remote_cache : Scan::Cache
-
     def initialize(
       @base : Core::Entry? = nil,
       @local_cache : Scan::Cache = Scan::Cache.new,
       @remote_cache : Scan::Cache = Scan::Cache.new,
     ) : Nil
     end
+
+    getter base : Core::Entry?
+    getter local_cache : Scan::Cache
+    getter remote_cache : Scan::Cache
 
     def save(path : String) : Damaged?
       if (blocked = Filesystem.ensure_directory(File.dirname(path)))

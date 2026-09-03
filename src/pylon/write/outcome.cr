@@ -2,6 +2,8 @@ require "../core/change"
 require "../core/entry"
 
 module Pylon::Write
+  alias Skipped = ModificationDetected | UnknownState | StagedContentMissing | DryRun | WriteFailed
+
   record ModificationDetected do
     def explain : String
       "modification detected"
@@ -31,8 +33,6 @@ module Pylon::Write
       reason
     end
   end
-
-  alias Skipped = ModificationDetected | UnknownState | StagedContentMissing | DryRun | WriteFailed
 
   record Outcome,
     path : String,

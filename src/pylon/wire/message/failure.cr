@@ -6,10 +6,10 @@ module Pylon::Wire::Message
   struct Failure
     include Writable
 
-    getter message : String
-
     def initialize(@message : String) : Nil
     end
+
+    getter message : String
 
     def tag : Tag
       Tag::Failure

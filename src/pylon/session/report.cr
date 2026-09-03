@@ -4,14 +4,6 @@ require "../write/writer"
 
 module Pylon::Session
   struct Report
-    getter conflicts : Array(Core::Conflict)
-    getter local_outcomes : Array(Write::Outcome)
-    getter remote_outcomes : Array(Write::Outcome)
-    getter halt : Core::Safety::Reason?
-    getter troubles : Array(Core::Trouble)
-    getter local_relocations : Array(Core::Relocation)
-    getter remote_relocations : Array(Core::Relocation)
-
     def initialize(
       @conflicts : Array(Core::Conflict),
       @local_outcomes : Array(Write::Outcome),
@@ -22,6 +14,14 @@ module Pylon::Session
       @remote_relocations : Array(Core::Relocation) = Array(Core::Relocation).new,
     ) : Nil
     end
+
+    getter conflicts : Array(Core::Conflict)
+    getter local_outcomes : Array(Write::Outcome)
+    getter remote_outcomes : Array(Write::Outcome)
+    getter halt : Core::Safety::Reason?
+    getter troubles : Array(Core::Trouble)
+    getter local_relocations : Array(Core::Relocation)
+    getter remote_relocations : Array(Core::Relocation)
 
     def halted? : Bool
       !halt.nil?

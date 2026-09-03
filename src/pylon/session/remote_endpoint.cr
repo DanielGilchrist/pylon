@@ -8,8 +8,6 @@ require "./remote_endpoint/pending_signatures"
 
 module Pylon::Session
   class RemoteEndpoint
-    getter exchanges = 0
-
     @fault : Fault? = nil
     @tree : Core::Entry? = nil
     @unapplied = Core::Changes.new
@@ -25,6 +23,8 @@ module Pylon::Session
 
       Fibers.detach(:endpoint_listen) { listen }
     end
+
+    getter exchanges = 0
 
     def scan(now_ns : Int64) : Core::Entry? | Fault
       return settled_tree if @known

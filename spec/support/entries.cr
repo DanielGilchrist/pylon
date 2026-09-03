@@ -5,13 +5,6 @@ require "../../src/pylon/scan/metadata"
 module Fixtures
   include Pylon::Core
 
-  def self.built(local : Array(String) = Array(String).new, remote : Array(String) = Array(String).new) : Preferences
-    case (preferences = Preferences.build(local, remote))
-    in Preferences          then preferences
-    in Preferences::Invalid then raise "the fixture preferences are not a valid glob: #{preferences.message}"
-    end
-  end
-
   D1 = Digest::SHA256.digest("d1")
   D2 = Digest::SHA256.digest("d2")
 
@@ -22,6 +15,13 @@ module Fixtures
   NO_PREFERENCES    = [Preferences.none]
   PREFERRING_LOCAL  = [LOCAL_WINS]
   PREFERRING_REMOTE = [REMOTE_WINS]
+
+  def self.built(local : Array(String) = Array(String).new, remote : Array(String) = Array(String).new) : Preferences
+    case (preferences = Preferences.build(local, remote))
+    in Preferences          then preferences
+    in Preferences::Invalid then raise "the fixture preferences are not a valid glob: #{preferences.message}"
+    end
+  end
 
   def self.f1 : Entry
     Pylon::Core::File.new(D1)

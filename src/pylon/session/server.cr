@@ -12,8 +12,7 @@ require "./checkpoint/schedule"
 
 module Pylon::Session
   class Server
-    @sent : Core::Entry? = nil
-    @pushed : Channel(Nil)? = nil
+    READ_AHEAD = 1
 
     def self.accept(input : IO, output : IO, log : IO) : Server | Problem
       if (problem = Wire::Greeting.write(output))
@@ -38,7 +37,6 @@ module Pylon::Session
          Wire::Message::WriteResponse,
          Wire::Message::TreeUpdate,
          Wire::Message::TreeDelta
-
         refusal = "the first message must configure this side, not a #{message.class.name}"
         Wire::Message.write(output, Wire::Message::Failure.new(refusal))
         Problem.new(refusal)
@@ -81,6 +79,9 @@ module Pylon::Session
       new(endpoint, input, output, subscriber, checkpoints, log, brand: brand)
     end
 
+    @sent : Core::Entry? = nil
+    @pushed : Channel(Nil)? = nil
+
     private def initialize(
       @endpoint : LocalEndpoint,
       @input : IO,
@@ -95,8 +96,6 @@ module Pylon::Session
       @stopping = false
       @sequence = 0_u32
     end
-
-    READ_AHEAD = 1
 
     def run : Nil
       announce
@@ -226,7 +225,6 @@ module Pylon::Session
            Wire::Message::SignaturesResponse,
            Wire::Message::WriteResponse,
            Wire::Message::Configure
-
           @lock.synchronize do
             failure = Wire::Message::Failure.new("the client sent a #{request.class.name} where a request was expected")
             Wire::Message.write(@output, failure)

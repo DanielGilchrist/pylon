@@ -7,8 +7,6 @@ module Pylon::Core
     ROOT                = new("")
     PATH_SEPARATOR_BYTE = '/'.ord.to_u8
 
-    getter value : String
-
     def self.parse(raw : String) : RelativePath | Malformed
       return ROOT if raw.empty?
       return Malformed.new(raw, "contains a NUL byte") if raw.includes?('\0')
@@ -32,5 +30,7 @@ module Pylon::Core
 
     protected def initialize(@value : String) : Nil
     end
+
+    getter value : String
   end
 end

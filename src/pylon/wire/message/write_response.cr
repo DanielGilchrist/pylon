@@ -7,10 +7,10 @@ module Pylon::Wire::Message
   struct WriteResponse
     include Writable
 
-    getter outcomes : Array(Write::Outcome)
-
     def initialize(@outcomes : Array(Write::Outcome)) : Nil
     end
+
+    getter outcomes : Array(Write::Outcome)
 
     def tag : Tag
       Tag::WriteResponse

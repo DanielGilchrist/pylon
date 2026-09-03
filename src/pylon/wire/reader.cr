@@ -8,11 +8,11 @@ module Pylon::Wire
   class Reader
     record Oversized, claimed : UInt32
 
-    getter? failed = false
-    getter reason = ""
-
     def initialize(@io : IO) : Nil
     end
+
+    getter? failed = false
+    getter reason = ""
 
     def fail(reason : String) : Nil
       return if @failed

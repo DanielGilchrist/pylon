@@ -9,11 +9,11 @@ require "../../support/remote_end"
 include Pylon::Session
 
 private class MeteredIO < IO
-  getter written = 0_i64
-  getter consumed = 0_i64
-
   def initialize(@inner : IO) : Nil
   end
+
+  getter written = 0_i64
+  getter consumed = 0_i64
 
   def read(slice : Bytes) : Int32
     filled = @inner.read(slice)

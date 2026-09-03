@@ -6,10 +6,10 @@ module Pylon::Wire::Message
   struct ScanRequest
     include Writable
 
-    getter now_ns : Int64
-
     def initialize(@now_ns : Int64) : Nil
     end
+
+    getter now_ns : Int64
 
     def tag : Tag
       Tag::ScanRequest

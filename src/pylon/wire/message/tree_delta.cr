@@ -6,11 +6,11 @@ module Pylon::Wire::Message
   struct TreeDelta
     include Writable
 
-    getter sequence : UInt32
-    getter changes : Core::Changes
-
     def initialize(@sequence : UInt32, @changes : Core::Changes) : Nil
     end
+
+    getter sequence : UInt32
+    getter changes : Core::Changes
 
     def tag : Tag
       Tag::TreeDelta

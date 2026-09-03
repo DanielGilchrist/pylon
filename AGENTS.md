@@ -10,7 +10,8 @@ Primary goals are **correctness**, then **performance**. Never trade the first f
 crystal spec                                        # the spec suite
 script/check-end-to-end                             # real binaries over a stub ssh
 crystal tool format                                 # formats in place, run before committing
-lib/ameba/bin/ameba                                 # lint, config lives in .ameba.yml
+bin/ameba                                           # lint, config lives in .ameba.yml, custom rules in lint/
+crystal spec lint/spec                              # specs for the custom ameba rules
 crystal build --no-codegen bench/<file>.cr          # bench/ is NOT compiled by crystal spec, check after renames
 crystal build --release -o bin/pylon src/pylon.cr   # mac binary
 ./build-linux.sh                                    # static linux binaries, needs docker
@@ -18,7 +19,7 @@ crystal build --release -o bin/pylon src/pylon.cr   # mac binary
 
 Run the specs, the end-to-end script, the formatter and ameba before considering a change done. The end-to-end script catches client/server mismatches that in-process specs cannot, because the server is a separate process. Ameba must finish with zero failures, NEVER disable lint rules, if a rule genuinely conflicts with the principles below, raise it rather than silencing it yourself.
 
-If `lib/ameba/bin/ameba` does not exist (fresh clone), build it with: `cd lib/ameba && shards build`.
+If `bin/ameba` does not exist (fresh clone), build it with `shards build ameba`. Rebuild it after touching anything under `lint/`.
 
 After a change that deletes or renames code, run
 

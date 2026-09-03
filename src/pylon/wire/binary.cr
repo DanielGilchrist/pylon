@@ -53,11 +53,6 @@ module Pylon::Wire
       end
     end
 
-    private record OpenDirectory,
-      name : String,
-      contents : Hash(String, Core::Entry),
-      remaining : UInt32
-
     def read_entry(reader : Reader) : Core::Entry?
       stack = nil
       name = ""
@@ -312,5 +307,10 @@ module Pylon::Wire
         io.write(block.strong)
       end
     end
+
+    private record OpenDirectory,
+      name : String,
+      contents : Hash(String, Core::Entry),
+      remaining : UInt32
   end
 end

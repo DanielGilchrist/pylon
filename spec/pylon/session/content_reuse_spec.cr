@@ -9,10 +9,10 @@ require "../../support/remote_end"
 include Pylon::Session
 
 private class CountingIO < IO
-  getter written = 0_i64
-
   def initialize(@inner : IO) : Nil
   end
+
+  getter written = 0_i64
 
   def read(slice : Bytes) : Int32
     @inner.read(slice)

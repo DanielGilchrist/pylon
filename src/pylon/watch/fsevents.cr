@@ -14,14 +14,6 @@ module Pylon::Watch
   class FSEvents
     include Walk
 
-    private record Unresolved
-
-    enum Start
-      Running
-      CreateFailed
-      StartFailed
-    end
-
     LATENCY_SECONDS   = 0.01
     STOP_POLL_SECONDS =  0.5
 
@@ -35,7 +27,11 @@ module Pylon::Watch
       Box(FSEvents).unbox(info).consume(count, paths, flags)
     end
 
-    getter signals : Channel(Nil)
+    enum Start
+      Running
+      CreateFailed
+      StartFailed
+    end
 
     def self.open(
       root : String,
@@ -69,6 +65,8 @@ module Pylon::Watch
       @done = Channel(Nil).new
       @context = Fibers.isolated(:fs_events) { watch }
     end
+
+    getter signals : Channel(Nil)
 
     def started : Start?
       started = @started
@@ -201,5 +199,7 @@ module Pylon::Watch
     private def absolute(relative : String) : String
       relative.empty? ? @root : File.join(@root, relative)
     end
+
+    private record Unresolved
   end
 end

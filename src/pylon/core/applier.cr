@@ -6,23 +6,6 @@ module Pylon::Core
   module Applier
     extend self
 
-    private class Pending
-      getter value : Entry?
-      getter? assigned = false
-      getter children : Hash(String, Pending)? = nil
-
-      def child(name : String) : Pending
-        children = (@children ||= Hash(String, Pending).new)
-        children[name] ||= Pending.new
-      end
-
-      def assign(entry : Entry?) : Nil
-        @value = entry
-        @assigned = true
-        @children.try(&.clear)
-      end
-    end
-
     def apply(base : Entry?, changes : Changes) : Entry?
       return base if changes.empty?
 
@@ -65,6 +48,23 @@ module Pylon::Core
       return current if contents.empty? && !current.is_a?(Directory)
 
       Directory.new(contents)
+    end
+
+    private class Pending
+      getter value : Entry?
+      getter? assigned = false
+      getter children : Hash(String, Pending)? = nil
+
+      def child(name : String) : Pending
+        children = (@children ||= Hash(String, Pending).new)
+        children[name] ||= Pending.new
+      end
+
+      def assign(entry : Entry?) : Nil
+        @value = entry
+        @assigned = true
+        @children.try(&.clear)
+      end
     end
   end
 end

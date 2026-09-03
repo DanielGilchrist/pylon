@@ -126,28 +126,6 @@ module Pylon::Wire
       read_packed(reader, "the outcomes payload") { |inner| Binary.read_outcomes(inner) } || Array(Write::Outcome).new
     end
 
-    private def write_packed(io : IO, & : IO ->) : Nil
-      packed = IO::Memory.new
-      yield packed
-      write_all(io, packed.to_slice, Compress::Zstd.new, scratch)
-    end
-
-    private def read_packed(reader : Reader, payload : String, & : Reader -> T) : T? forall T
-      packed = read_all(reader, Compress::Zstd.new, scratch)
-      return if reader.failed?
-
-      if packed.nil?
-        reader.fail("#{payload} arrived invalidated")
-        return
-      end
-
-      inner = Reader.new(IO::Memory.new(packed))
-      value = yield inner
-      reader.fail(inner.reason) if inner.failed?
-
-      value
-    end
-
     def read_all(reader : Reader, codec : Compress::Codec, scratch : Bytes, limit : Int32 = Wire::MAX_CONTENT_BYTES) : Bytes?
       content = Bytes.empty
       filled = 0
@@ -199,6 +177,28 @@ module Pylon::Wire
       return unless reader.bool
 
       content[0, filled]
+    end
+
+    private def write_packed(io : IO, & : IO ->) : Nil
+      packed = IO::Memory.new
+      yield packed
+      write_all(io, packed.to_slice, Compress::Zstd.new, scratch)
+    end
+
+    private def read_packed(reader : Reader, payload : String, & : Reader -> T) : T? forall T
+      packed = read_all(reader, Compress::Zstd.new, scratch)
+      return if reader.failed?
+
+      if packed.nil?
+        reader.fail("#{payload} arrived invalidated")
+        return
+      end
+
+      inner = Reader.new(IO::Memory.new(packed))
+      value = yield inner
+      reader.fail(inner.reason) if inner.failed?
+
+      value
     end
 
     private def pack(codec : Compress::Codec, source : Bytes, scratch : Bytes) : Bytes

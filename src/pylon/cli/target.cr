@@ -1,10 +1,10 @@
 struct Pylon::CLI
   struct Target
     struct Invalid
-      getter message : String
-
       def initialize(@message : String) : Nil
       end
+
+      getter message : String
     end
 
     def self.parse(specification : String) : Target | Invalid
@@ -27,10 +27,10 @@ struct Pylon::CLI
       new(host, path)
     end
 
-    getter host : String
-    getter path : String
-
     def initialize(@host : String, @path : String) : Nil
     end
+
+    getter host : String
+    getter path : String
   end
 end

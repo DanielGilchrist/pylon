@@ -7,6 +7,8 @@ module Pylon
   module Fibers
     extend self
 
+    WORKER_THREADS = System.cpu_count.to_i * 2
+
     enum Name
       Spinner
       EndpointListen
@@ -18,6 +20,8 @@ module Pylon
       Inotify
       FSEvents
     end
+
+    @@parallel_contexts = Hash(Name, Fiber::ExecutionContext::Parallel).new
 
     def future(&block : -> T) : Channel(T | Exception) forall T
       results = Channel(T | Exception).new(1)
@@ -43,10 +47,6 @@ module Pylon
     def isolated(name : Name, &block : ->) : Fiber::ExecutionContext::Isolated
       Fiber::ExecutionContext::Isolated.new(name.to_s) { exit_on_exception(block) }
     end
-
-    WORKER_THREADS = System.cpu_count.to_i * 2
-
-    @@parallel_contexts = Hash(Name, Fiber::ExecutionContext::Parallel).new
 
     def parallel(name : Name, workers : Int32, &block : Int32 ->) : Nil
       context = parallel_context(name)

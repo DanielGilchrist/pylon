@@ -13,38 +13,21 @@ class MemoryTarget
     inode : UInt64 = 0_u64,
     mtime_ns : Int64 = 0_i64
 
-  getter operations = Array(String).new
-  getter nodes : Hash(String, Node)
-  property? writable = true
-  property? renamable = true
-
   def initialize(@nodes = {"" => Node.new(kind: Pylon::Scan::Metadata::Kind::Directory)}) : Nil
     @next_inode = 100_u64
     @lock = Sync::Mutex.new
   end
+
+  getter operations = Array(String).new
+  getter nodes : Hash(String, Node)
+  property? writable = true
+  property? renamable = true
 
   def metadata(path : String) : Pylon::Scan::Metadata?
     node = @lock.synchronize { @nodes[path]? }
     return if node.nil?
 
     metadata_for(node)
-  end
-
-  private def metadata_for(node : Node) : Pylon::Scan::Metadata
-    mode =
-      case node.kind
-      in Pylon::Scan::Metadata::Kind::Directory    then LibC::S_IFDIR | 0o755
-      in Pylon::Scan::Metadata::Kind::File         then LibC::S_IFREG | (node.executable ? 0o755 : 0o644)
-      in Pylon::Scan::Metadata::Kind::SymbolicLink then LibC::S_IFLNK | 0o777
-      in Pylon::Scan::Metadata::Kind::Untracked    then LibC::S_IFIFO | 0o644
-      end
-
-    Pylon::Scan::Metadata.new(
-      mode: mode.to_u32,
-      size: node.content.size.to_u64,
-      mtime_ns: node.mtime_ns,
-      inode: node.inode,
-    )
   end
 
   def observe(path : String) : Pylon::Scan::Observed | Pylon::Write::Problem | Nil
@@ -72,24 +55,6 @@ class MemoryTarget
 
     names.each { |name| yield name }
     nil
-  end
-
-  private def children_of(path : String) : Array(String)?
-    return if @nodes[path]?.nil?
-
-    prefix = path.empty? ? "" : "#{path}/"
-    names = Array(String).new
-
-    @nodes.each_key do |key|
-      next if key == path || !key.starts_with?(prefix)
-
-      name = key[prefix.size..]
-      next if name.empty? || name.includes?('/')
-
-      names << name
-    end
-
-    names
   end
 
   def create_directory(path : String) : Pylon::Write::Problem?
@@ -185,6 +150,41 @@ class MemoryTarget
 
   def seed_directory(path : String) : Nil
     @nodes[path] = Node.new(kind: Pylon::Scan::Metadata::Kind::Directory, inode: take_inode)
+  end
+
+  private def metadata_for(node : Node) : Pylon::Scan::Metadata
+    mode =
+      case node.kind
+      in Pylon::Scan::Metadata::Kind::Directory    then LibC::S_IFDIR | 0o755
+      in Pylon::Scan::Metadata::Kind::File         then LibC::S_IFREG | (node.executable ? 0o755 : 0o644)
+      in Pylon::Scan::Metadata::Kind::SymbolicLink then LibC::S_IFLNK | 0o777
+      in Pylon::Scan::Metadata::Kind::Untracked    then LibC::S_IFIFO | 0o644
+      end
+
+    Pylon::Scan::Metadata.new(
+      mode: mode.to_u32,
+      size: node.content.size.to_u64,
+      mtime_ns: node.mtime_ns,
+      inode: node.inode,
+    )
+  end
+
+  private def children_of(path : String) : Array(String)?
+    return if @nodes[path]?.nil?
+
+    prefix = path.empty? ? "" : "#{path}/"
+    names = Array(String).new
+
+    @nodes.each_key do |key|
+      next if key == path || !key.starts_with?(prefix)
+
+      name = key[prefix.size..]
+      next if name.empty? || name.includes?('/')
+
+      names << name
+    end
+
+    names
   end
 
   private def read_only : Pylon::Write::Problem

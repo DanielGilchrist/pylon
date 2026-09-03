@@ -20,3 +20,5 @@ development_dependencies:
 targets:
   pylon:
     main: src/pylon.cr
+  ameba:
+    main: lint/ameba.cr

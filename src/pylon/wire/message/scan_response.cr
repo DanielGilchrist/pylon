@@ -6,10 +6,10 @@ module Pylon::Wire::Message
   struct ScanResponse
     include Writable
 
-    getter root : Core::Entry?
-
     def initialize(@root : Core::Entry?) : Nil
     end
+
+    getter root : Core::Entry?
 
     def tag : Tag
       Tag::ScanResponse

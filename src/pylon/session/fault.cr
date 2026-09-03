@@ -1,4 +1,6 @@
 module Pylon::Session
+  alias Fault = Stopped | Incompatible | Misbehaved
+
   record Stopped, detail : String? = nil do
     def explain : String
       reason = @detail
@@ -13,6 +15,4 @@ module Pylon::Session
       "the remote server misbehaved: #{@detail}"
     end
   end
-
-  alias Fault = Stopped | Incompatible | Misbehaved
 end
