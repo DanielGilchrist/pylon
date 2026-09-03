@@ -1,17 +1,9 @@
 require "../../spec_helper"
 require "../../../src/pylon/cli/sync"
-require "../../../src/pylon/cli/local"
 
 private def parse_sync(extra : Array(String) = Array(String).new) : Pylon::CLI::Sync
   parsed = Pylon::CLI::Sync.parse(["./here", "user@host:/there"] + extra)
   raise "the sync command did not parse: #{parsed.inspect}" unless parsed.is_a?(Pylon::CLI::Sync)
-
-  parsed
-end
-
-private def parse_local(extra : Array(String) = Array(String).new) : Pylon::CLI::Local
-  parsed = Pylon::CLI::Local.parse(["./one", "./two"] + extra)
-  raise "the local command did not parse: #{parsed.inspect}" unless parsed.is_a?(Pylon::CLI::Local)
 
   parsed
 end
@@ -58,25 +50,5 @@ describe Pylon::CLI::Sync do
     parsed.ignore.should eq(["node_modules", ".git"])
     parsed.prefer_local.should eq(["*.log"])
     parsed.prefer_remote.should eq(["."])
-  end
-end
-
-describe Pylon::CLI::Local do
-  it "syncs once, writing and explaining nothing extra, by default" do
-    parsed = parse_local
-
-    parsed.watch?.should be_false
-    parsed.dry_run?.should be_false
-    parsed.verbose?.should be_false
-    parsed.state.should be_nil
-    parsed.compression.should eq(Pylon::Compress::Zstd::DEFAULT_LEVEL)
-  end
-
-  it "turns on watching, dry runs and verbosity from their short flags" do
-    parsed = parse_local(["-w", "-n", "-v"])
-
-    parsed.watch?.should be_true
-    parsed.dry_run?.should be_true
-    parsed.verbose?.should be_true
   end
 end

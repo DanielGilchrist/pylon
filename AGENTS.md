@@ -39,7 +39,7 @@ It lists methods nothing reaches from those entrypoints. It always exits 0, so r
 - `session/` orchestration. `Session` runs the cycle, `Server` is the remote side (`pylon serve` over ssh stdin/stdout), `LocalEndpoint` and `RemoteEndpoint` give both sides one interface, `Checkpoint` persists the base and caches between runs.
 - `watch/` file watchers, inotify on linux, FSEvents on mac.
 - `compress/` zstd through hand-rolled lib bindings, `Identity` is the no-op codec for specs.
-- `cli/` the `sync`, `serve` and `local` commands plus terminal reporting.
+- `cli/` the `sync` and `serve` commands plus terminal reporting.
 - `disk.cr` the real filesystem, specs substitute in-memory fakes.
 
 ## Comments
