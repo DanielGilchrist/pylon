@@ -6,6 +6,7 @@ require "../write/writer"
 require "../wire/message"
 require "./staging"
 require "./pending_write"
+require "./settled_contents"
 require "./local_endpoint/settled_signatures"
 
 module Pylon::Session
@@ -104,6 +105,10 @@ module Pylon::Session
       end
 
       found
+    end
+
+    def content_begin(digests : Array(Bytes), budget : UInt64, signatures : Wire::Delta::Signatures) : SettledContents
+      SettledContents.new(content_source(digests, budget, signatures))
     end
 
     def content_source(digests : Array(Bytes), budget : UInt64, signatures : Wire::Delta::Signatures) : Wire::ContentSource

@@ -79,7 +79,7 @@ module Pylon::Wire
       in .signatures_response? then SignaturesResponse.new(Binary.read_signatures(reader))
       in .write_request?       then WriteRequest.new(Chunks.read_changes(reader), Chunks.read_relocations(reader), Chunks.read_contents(reader))
       in .write_response?      then WriteResponse.new(Chunks.read_outcomes(reader))
-      in .tree_update?         then TreeUpdate.new(reader.u32, Chunks.read_entry(reader))
+      in .tree_update?         then read_tree_update(reader)
       in .tree_delta?          then TreeDelta.new(reader.u32, Chunks.read_changes(reader))
       in .configure?           then read_configure(reader)
       end
@@ -98,6 +98,13 @@ module Pylon::Wire
       reader.repeat(count) { pairs << SignaturesRequest::Pair.new(reader.digest, reader.digest) }
 
       SignaturesRequest.new(pairs)
+    end
+
+    private def read_tree_update(reader : Reader) : TreeUpdate
+      sequence = reader.u32
+      live = reader.bool
+
+      TreeUpdate.new(sequence, Chunks.read_entry(reader), live: live)
     end
 
     private def read_configure(reader : Reader) : Configure

@@ -21,6 +21,30 @@ private def configuration(root : String = "/srv/app", brand : String = "Test Syn
   )
 end
 
+describe Pylon::Wire::Message::TreeUpdate do
+  it "round trips a live tree the server will keep updating" do
+    root = Pylon::Core::Directory.new({"a.rb" => Pylon::Core::File.new(Bytes.new(DIGEST_BYTES, 7_u8), executable: false)})
+    received = round_trip(Message::TreeUpdate.new(3_u32, root, live: true))
+
+    received.should be_a(Message::TreeUpdate)
+    next unless received.is_a?(Message::TreeUpdate)
+
+    received.sequence.should eq(3_u32)
+    received.root.should eq(root)
+    received.live?.should be_true
+  end
+
+  it "round trips a one-off tree from a server that cannot watch" do
+    received = round_trip(Message::TreeUpdate.new(1_u32, nil, live: false))
+
+    received.should be_a(Message::TreeUpdate)
+    next unless received.is_a?(Message::TreeUpdate)
+
+    received.root.should be_nil
+    received.live?.should be_false
+  end
+end
+
 describe Pylon::Wire::Message::Configure do
   it "round trips everything the client decides for the remote end" do
     received = round_trip(configuration)

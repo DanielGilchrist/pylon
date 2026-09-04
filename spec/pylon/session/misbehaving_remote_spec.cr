@@ -15,12 +15,12 @@ private def scripted_server(& : IO ->) : IO::Memory
   script
 end
 
-private def cycle_against(script : IO::Memory) : Report | Fault
+private def cycle_against(script : IO::Memory, watch : Bool = false) : Report | Fault
   root = File.join(Dir.tempdir, "pylon-misbehaving-#{Random::Secure.hex(8)}")
   Dir.mkdir_p(root)
 
   begin
-    session = build_session(local_endpoint(root), RemoteEndpoint.new(script, IO::Memory.new, remote_configuration(root)))
+    session = build_session(local_endpoint(root), RemoteEndpoint.new(script, IO::Memory.new, remote_configuration(root, watch: watch)))
     session.cycle(Time.utc.to_unix_ns.to_i64)
   ensure
     FileUtils.rm_rf(root)
@@ -50,6 +50,14 @@ describe "a remote that misbehaves" do
 
     fault.should be_a(Misbehaved)
     fault.explain.should contain("nothing was waiting for") if fault.is_a?(Fault)
+  end
+
+  it "stops instead of waiting forever for a first tree the server never pushes" do
+    script = scripted_server { }
+
+    fault = cycle_against(script, watch: true)
+
+    fault.should be_a(Stopped)
   end
 
   it "stops when the server sends a message only clients send" do

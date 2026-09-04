@@ -1,7 +1,7 @@
 require "./wire/patch"
 
 module Pylon::Wire
-  PROTOCOL = 5_u32
+  PROTOCOL = 6_u32
   IDENTITY = "PYLON"
 
   FORMAT            = IO::ByteFormat::LittleEndian

@@ -76,7 +76,7 @@ module Pylon::Session
         )
       end
 
-      new(endpoint, input, output, subscriber, checkpoints, log, brand: brand)
+      new(endpoint, input, output, subscriber, checkpoints, log, brand: brand, watch: configure.watch?)
     end
 
     @sent : Core::Entry? = nil
@@ -91,6 +91,7 @@ module Pylon::Session
       @log : IO,
       *,
       @brand : Brand,
+      @watch : Bool,
     ) : Nil
       @lock = Sync::Mutex.new
       @stopping = false
@@ -135,10 +136,13 @@ module Pylon::Session
     end
 
     private def announce : Nil
+      return unless @watch
+
+      push
+
       subscriber = @subscriber
       return if subscriber.nil?
 
-      push
       pushed = Channel(Nil).new
       @pushed = pushed
 
@@ -170,7 +174,7 @@ module Pylon::Session
 
         failed =
           if @sent.nil?
-            Wire::Message.write(@output, Wire::Message::TreeUpdate.new(@sequence, current))
+            Wire::Message.write(@output, Wire::Message::TreeUpdate.new(@sequence, current, live: !@subscriber.nil?))
           else
             Wire::Message.write(@output, Wire::Message::TreeDelta.new(@sequence, Core::Differ.diff(@sent, current)))
           end

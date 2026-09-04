@@ -19,6 +19,10 @@ module Pylon::Session
     # bother if the batch is under a certain size.
     DELTA_WAIT_BYTES = 256_u64 * 1024
 
+    {% if flag?(:timing) %}
+      @reused = 0
+    {% end %}
+
     def initialize(
       @local : A,
       @remote : B,
@@ -187,27 +191,17 @@ module Pylon::Session
 
       changes = changes.deletes_last(candidates)
 
-      reused = 0
-
       {% if flag?(:timing) %}
+        @reused = 0
         Wire::Delta.reset_tallies
       {% end %}
 
       notify(direction, outcomes, total, total_bytes)
 
+      pending_contents = source.content_begin(wanted_from(changes, offset, collector, target_holds), TRANSFER_BUDGET, signatures)
+
       while offset < changes.size
-        wanted = collector.required(changes, offset)
-        {% if flag?(:timing) %}
-          before_reject = wanted.size
-        {% end %}
-
-        wanted.reject! { |digest| target_holds.includes?(digest) }
-
-        {% if flag?(:timing) %}
-          reused += before_reject - wanted.size
-        {% end %}
-
-        provided = source.content_source(wanted, TRANSFER_BUDGET, signatures)
+        provided = pending_contents.await
         return provided if provided.is_a?(Fault)
 
         taken = split(changes, offset, provided.digests, target_holds)
@@ -219,6 +213,10 @@ module Pylon::Session
 
         batch = changes.batch(offset, taken)
         offset += taken
+
+        if offset < changes.size
+          pending_contents = source.content_begin(wanted_from(changes, offset, collector, target_holds), TRANSFER_BUDGET, signatures)
+        end
 
         if pending_signatures && worth_waiting_for_signature?(batch, source, candidates) && (fault = pending_signatures.settle_into(signatures))
           return fault
@@ -258,11 +256,27 @@ module Pylon::Session
 
       {% if flag?(:timing) %}
         if total > 0
-          STDERR.puts("  transfer #{direction}: changes=#{total} reused=#{reused} candidates=#{candidates.size} signatures=#{signatures.size} deltas=#{Wire::Delta.deltas_sent} (#{(Wire::Delta.delta_bytes / 1_048_576.0).round(2)} MiB ops) fulls=#{Wire::Delta.fulls_sent} (#{(Wire::Delta.full_bytes / 1_048_576.0).round(2)} MiB raw)")
+          STDERR.puts("  transfer #{direction}: changes=#{total} reused=#{@reused} candidates=#{candidates.size} signatures=#{signatures.size} deltas=#{Wire::Delta.deltas_sent} (#{(Wire::Delta.delta_bytes / 1_048_576.0).round(2)} MiB ops) fulls=#{Wire::Delta.fulls_sent} (#{(Wire::Delta.full_bytes / 1_048_576.0).round(2)} MiB raw)")
         end
       {% end %}
 
       outcomes
+    end
+
+    private def wanted_from(changes : Core::Changes, offset : Int32, collector : Core::Digests::Collector, target_holds : Set(Bytes)) : Array(Bytes)
+      wanted = collector.required(changes, offset)
+
+      {% if flag?(:timing) %}
+        before_reject = wanted.size
+      {% end %}
+
+      wanted.reject! { |digest| target_holds.includes?(digest) }
+
+      {% if flag?(:timing) %}
+        @reused += before_reject - wanted.size
+      {% end %}
+
+      wanted
     end
 
     private def worth_waiting_for_signature?(batch : Core::Changes, source : A | B, candidates : Set(Bytes)) : Bool

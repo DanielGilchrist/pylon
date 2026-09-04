@@ -4,6 +4,8 @@ require "../wire/message"
 require "./fault"
 require "./pending_write"
 require "./session"
+require "./settled_contents"
+require "./remote_endpoint/pending_contents"
 require "./remote_endpoint/pending_signatures"
 
 module Pylon::Session
@@ -18,6 +20,7 @@ module Pylon::Session
       @signatures = Channel(Wire::Message::SignaturesResponse).new(1)
       @written = Channel(Wire::Message::WriteResponse).new(Session::WRITE_WINDOW)
       @greeting = Channel(Nil).new
+      @initial = Channel(Nil).new
       @known = false
       @sequence = 0_u32
 
@@ -28,6 +31,7 @@ module Pylon::Session
 
     def scan(now_ns : Int64) : Core::Entry? | Fault
       return settled_tree if @known
+      return initial_tree if @configure.watch? && !@initial.closed?
 
       reply = exchange(Wire::Message::ScanRequest.new(now_ns), @scanned)
       return reply if reply.is_a?(Fault)
@@ -44,13 +48,10 @@ module Pylon::Session
       PendingSignatures.new(self, transmit(Wire::Message::SignaturesRequest.new(pairs)))
     end
 
-    def content_source(digests : Array(Bytes), budget : UInt64, signatures : Wire::Delta::Signatures) : Wire::ContentSource | Fault
-      return Wire::ContentSource::Materialised.new(Wire::Contents.new) if digests.empty?
+    def content_begin(digests : Array(Bytes), budget : UInt64, signatures : Wire::Delta::Signatures) : PendingContents | SettledContents
+      return SettledContents.new(Wire::ContentSource::Materialised.new(Wire::Contents.new)) if digests.empty?
 
-      reply = exchange(Wire::Message::ContentsRequest.new(digests, budget, signatures), @contents)
-      return reply if reply.is_a?(Fault)
-
-      Wire::ContentSource::Materialised.new(reply.contents)
+      PendingContents.new(self, transmit(Wire::Message::ContentsRequest.new(digests, budget, signatures)))
     end
 
     def known_size(path : String) : UInt64?
@@ -66,6 +67,13 @@ module Pylon::Session
       PendingWrite.new(Proc(Array(Write::Outcome) | Fault).new { receive_written })
     end
 
+    protected def receive_contents : Wire::ContentSource | Fault
+      reply = receive(@contents)
+      return reply if reply.is_a?(Fault)
+
+      Wire::ContentSource::Materialised.new(reply.contents)
+    end
+
     protected def receive_signatures : Wire::Delta::Signatures | Fault
       reply = receive(@signatures)
       return reply if reply.is_a?(Fault)
@@ -79,6 +87,16 @@ module Pylon::Session
 
       reply.outcomes.each { |outcome| @unapplied << Core::Change.new(outcome.path, nil, outcome.entry) }
       reply.outcomes
+    end
+
+    private def initial_tree : Core::Entry? | Fault
+      @initial.receive?
+
+      if (fault = @fault)
+        return fault
+      end
+
+      settled_tree
     end
 
     private def settled_tree : Core::Entry?
@@ -126,8 +144,8 @@ module Pylon::Session
           @unapplied.clear
           @tree = message.root
           @sequence = message.sequence
-          @known = true
-          signal
+          @known = message.live?
+          @initial.close
         in Wire::Message::TreeDelta
           if message.sequence == @sequence + 1
             @tree = Core::Applier.apply(settled_tree, message.changes)
@@ -176,6 +194,7 @@ module Pylon::Session
       @signatures.close
       @written.close
       @greeting.close
+      @initial.close
     end
 
     private def signal : Nil
