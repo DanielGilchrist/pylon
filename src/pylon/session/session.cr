@@ -51,10 +51,8 @@ module Pylon::Session
         alloc_scanned = GC.stats.total_bytes
       {% end %}
 
-      # With no saved state the local side is the source of truth: adopting
-      # the remote tree as the base makes this first cycle push only.
       if @push_first
-        @base = remote_root if @base.nil?
+        @base = remote_root
         @push_first = false
       end
 

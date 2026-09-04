@@ -252,7 +252,7 @@ describe "safety halts" do
   end
 end
 
-describe "the first cycle when there is no saved state" do
+describe "the first cycle of a session" do
   it "pushes local files up and removes ones only the remote had" do
     in_pair do |local, remote, _|
       File.write(File.join(local, "mine.rb"), "local")
@@ -294,13 +294,24 @@ describe "the first cycle when there is no saved state" do
     end
   end
 
-  it "still pulls remote files down when state already exists" do
-    in_pair do |local, remote, session|
+  it "overwrites remote changes made while no session was running even with saved state" do
+    in_pair do |local, remote, _|
+      File.write(File.join(local, "shared.rb"), "as last synced")
+      File.write(File.join(remote, "shared.rb"), "as last synced")
+
+      warm_up = build_session(local_endpoint(local), local_endpoint(remote), push_first: true)
+      cycle!(warm_up, tick)
+
+      File.write(File.join(remote, "shared.rb"), "replaced on the box")
       File.write(File.join(remote, "from_box.rb"), "box")
 
-      cycle!(session, tick)
+      session = build_session(local_endpoint(local), local_endpoint(remote), base: warm_up.base, push_first: true)
+      report = cycle!(session, tick)
 
-      File.exists?(File.join(local, "from_box.rb")).should be_true
+      report.conflicts.should be_empty
+      File.read(File.join(remote, "shared.rb")).should eq("as last synced")
+      File.exists?(File.join(remote, "from_box.rb")).should be_false
+      File.exists?(File.join(local, "from_box.rb")).should be_false
     end
   end
 end

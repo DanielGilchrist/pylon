@@ -114,7 +114,7 @@ struct Pylon::CLI
           preferences: preferences,
           base: restored.base,
           dry_run: dry_run?,
-          push_first: restored.base.nil?,
+          push_first: true,
           on_progress: ->(update : Session::Progress) : Nil { reporter.progress(update) },
         )
 
