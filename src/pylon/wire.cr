@@ -1,7 +1,8 @@
 require "./wire/patch"
+require "./wire/prefixed"
 
 module Pylon::Wire
-  PROTOCOL = 6_u32
+  PROTOCOL = 7_u32
   IDENTITY = "PYLON"
 
   FORMAT            = IO::ByteFormat::LittleEndian
@@ -10,7 +11,7 @@ module Pylon::Wire
   MAX_CONTENT_BYTES = 256 * 1024 * 1024
   CAPACITY_HINT_CAP = 4096
 
-  alias Payload = Bytes | Patch
+  alias Payload = Bytes | Patch | Prefixed
   alias Contents = Hash(Bytes, Payload)
 
   def self.capacity_hint(count : UInt32) : Int32

@@ -24,10 +24,30 @@ private def in_endpoint(files : Hash(String, String), & : LocalEndpoint, Hash(St
   end
 end
 
+private SHARED = "x" * 2048
+
+describe "resolving a patch base" do
+  it "reads the base from the file being patched when another holder of the digest has changed" do
+    in_endpoint({"a.bin" => SHARED, "b.bin" => SHARED}) do |endpoint, digests|
+      File.write(File.join(endpoint.root, "a.bin"), "rewritten already")
+
+      String.new(endpoint.base_content(digests["b.bin"], "b.bin") || Bytes.empty).should eq(SHARED)
+    end
+  end
+
+  it "reads the base from the file being patched whichever holder the digest index chose" do
+    in_endpoint({"a.bin" => SHARED, "b.bin" => SHARED}) do |endpoint, digests|
+      File.write(File.join(endpoint.root, "b.bin"), "rewritten already")
+
+      String.new(endpoint.base_content(digests["a.bin"], "a.bin") || Bytes.empty).should eq(SHARED)
+    end
+  end
+end
+
 describe Pylon::Session::LocalEndpoint do
   it "stops adding content once a batch reaches the transfer budget" do
     in_endpoint({"a.rb" => "x" * 10, "b.rb" => "y" * 10, "c.rb" => "z" * 10}) do |endpoint, digests|
-      offered = endpoint.content_source([digests["a.rb"], digests["b.rb"], digests["c.rb"]], 15_u64, Pylon::Wire::Delta::Signatures.new)
+      offered = endpoint.content_source([digests["a.rb"], digests["b.rb"], digests["c.rb"]], 15_u64, Pylon::Wire::Delta::Signatures.new, Pylon::Wire::Prefixed::Bases.new)
 
       offered.digests.should eq(Set{digests["a.rb"]})
     end
@@ -35,7 +55,7 @@ describe Pylon::Session::LocalEndpoint do
 
   it "always offers the first file even when it alone is over the budget" do
     in_endpoint({"big.rb" => "x" * 100}) do |endpoint, digests|
-      offered = endpoint.content_source([digests["big.rb"]], 1_u64, Pylon::Wire::Delta::Signatures.new)
+      offered = endpoint.content_source([digests["big.rb"]], 1_u64, Pylon::Wire::Delta::Signatures.new, Pylon::Wire::Prefixed::Bases.new)
 
       offered.digests.should eq(Set{digests["big.rb"]})
     end
@@ -43,7 +63,7 @@ describe Pylon::Session::LocalEndpoint do
 
   it "fills the budget exactly when the sizes allow it" do
     in_endpoint({"a.rb" => "x" * 10, "b.rb" => "y" * 10} of String => String) do |endpoint, digests|
-      offered = endpoint.content_source([digests["a.rb"], digests["b.rb"]], 20_u64, Pylon::Wire::Delta::Signatures.new)
+      offered = endpoint.content_source([digests["a.rb"], digests["b.rb"]], 20_u64, Pylon::Wire::Delta::Signatures.new, Pylon::Wire::Prefixed::Bases.new)
 
       offered.digests.should eq(Set{digests["a.rb"], digests["b.rb"]})
     end
@@ -53,7 +73,7 @@ describe Pylon::Session::LocalEndpoint do
     in_endpoint({"a.rb" => "here"}) do |endpoint, digests|
       unknown = Digest::SHA256.digest("never scanned").to_slice
 
-      offered = endpoint.content_source([unknown, digests["a.rb"]], 1_000_u64, Pylon::Wire::Delta::Signatures.new)
+      offered = endpoint.content_source([unknown, digests["a.rb"]], 1_000_u64, Pylon::Wire::Delta::Signatures.new, Pylon::Wire::Prefixed::Bases.new)
 
       offered.digests.should eq(Set{digests["a.rb"]})
     end

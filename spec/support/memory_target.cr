@@ -207,7 +207,7 @@ class MemoryStaging
     digest
   end
 
-  def content(digest : Bytes) : Bytes?
+  def content(digest : Bytes, path : String) : Bytes?
     @contents[digest]?
   end
 end

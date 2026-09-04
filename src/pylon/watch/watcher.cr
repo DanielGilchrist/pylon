@@ -1,4 +1,5 @@
 require "../brand"
+require "../platform"
 require "../watch"
 require "./unavailable"
 
@@ -7,11 +8,10 @@ module Pylon::Watch
     extend self
 
     def open(root : String, ignores : Array(String), signals : Channel(Nil), brand : Brand) : Any | Unavailable
-      {% if flag?(:linux) %}
-        Inotify.open(root, ignores, signals, brand: brand)
-      {% elsif flag?(:darwin) %}
-        FSEvents.open(root, ignores, signals)
-      {% end %}
+      Platform.select do
+        macos { FSEvents.open(root, ignores, signals) }
+        linux { Inotify.open(root, ignores, signals, brand: brand) }
+      end
     end
   end
 end

@@ -4,6 +4,7 @@ require "../fibers"
 require "../core/paths"
 require "../core/entry"
 require "../missing"
+require "../platform"
 require "../scan/ignores"
 require "../scan/snapshot"
 require "./grouping"
@@ -16,11 +17,10 @@ module Pylon::Write
   struct Writer(F, S)
     # APFS contends on staged writes past ~4 workers, 2 was the measured as being the most optimal.
     # ext4 on Linux didn't seem to have the same problem so just leaving it to scale by CPU count for now.
-    {% if flag?(:darwin) %}
-      DEFAULT_PARALLELISM = 2
-    {% else %}
-      DEFAULT_PARALLELISM = System.cpu_count.to_i * 2
-    {% end %}
+    DEFAULT_PARALLELISM = Platform.select do
+      macos { 2 }
+      linux { System.cpu_count.to_i * 2 }
+    end
 
     PARALLEL_THRESHOLD = 16
 
@@ -324,7 +324,7 @@ module Pylon::Write
 
         Core::Directory.new(contents)
       in Core::File
-        content = @staging.content(entry.digest)
+        content = @staging.content(entry.digest, path)
         return if content.nil?
 
         @filesystem.write_file(path, content, entry.executable?) || entry

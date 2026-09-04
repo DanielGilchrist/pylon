@@ -92,3 +92,24 @@ describe Pylon::Wire::Chunks do
     reader.reason.should contain("invalidated")
   end
 end
+
+describe "prefixed payloads in the contents framing" do
+  it "round trips the base digest and the frame without recompressing it" do
+    frame = Random.new(41).random_bytes(70_000)
+    base = Bytes.new(Pylon::Wire::DIGEST_BYTES, 7_u8)
+    digest = Bytes.new(Pylon::Wire::DIGEST_BYTES, 9_u8)
+    contents = Pylon::Wire::Contents{digest => Pylon::Wire::Prefixed.new(base, frame)}
+
+    io = IO::Memory.new
+    Pylon::Wire::Chunks.write_contents(io, contents)
+    io.rewind
+    decoded = Pylon::Wire::Chunks.read_contents(Pylon::Wire::Reader.new(io))
+
+    payload = decoded[digest]?
+    payload.should be_a(Pylon::Wire::Prefixed)
+    next unless payload.is_a?(Pylon::Wire::Prefixed)
+
+    payload.base.should eq(base)
+    payload.frame.should eq(frame)
+  end
+end

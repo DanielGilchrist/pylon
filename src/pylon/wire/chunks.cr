@@ -1,4 +1,5 @@
 require "digest/sha256"
+require "../compress/identity"
 require "../compress/zstd"
 require "./binary"
 require "./content_kind"
@@ -11,7 +12,7 @@ module Pylon::Wire
     CHUNK_BYTES = 64 * 1024
 
     def scratch : Bytes
-      Bytes.new(Compress::Zstd.new.bound(CHUNK_BYTES))
+      Bytes.new(Compress::Zstd.bound(CHUNK_BYTES))
     end
 
     def write_chunk(io : IO, source : Bytes, codec : Compress::Codec, scratch : Bytes) : Nil
@@ -96,6 +97,12 @@ module Pylon::Wire
           next if ops.nil?
 
           contents[digest] = Patch.new(base, ops)
+        in .prefixed?
+          base = reader.digest
+          frame = read_all(reader, Compress::Identity.new, scratch)
+          next if frame.nil?
+
+          contents[digest] = Prefixed.new(base, frame)
         end
       end
 
@@ -118,6 +125,10 @@ module Pylon::Wire
           ContentKind::Patch.write(io)
           Binary.write_bytes(io, payload.base)
           write_all(io, payload.ops, codec, scratch)
+        in Prefixed
+          ContentKind::Prefixed.write(io)
+          Binary.write_bytes(io, payload.base)
+          write_all(io, payload.frame, Compress::Identity.new, scratch)
         end
       end
     end

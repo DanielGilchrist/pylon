@@ -43,6 +43,21 @@ It lists methods nothing reaches from those entrypoints. It always exits 0, so r
 - `cli/` the `sync` and `remote` commands plus terminal reporting.
 - `disk.cr` the real filesystem, specs substitute in-memory fakes.
 
+## Platforms
+
+pylon currently only supports macos and linux. Platform-specific code goes through `Platform.select`, which must define both a `macos do ... end` and `linux do ... end` block.
+
+```crystal
+DEFAULT_PARALLELISM = Platform.select do
+  macos { 2 }
+  linux { System.cpu_count.to_i * 2 }
+end
+```
+
+Code that exists on one platform only lives in a file that starts with `{% skip_file unless flag?(:darwin) %}` for example (e.g. lib bindings).
+
+Branches in platform support should be explicit preferably using `raise` to display a compile error for the unsupported platform for that case.
+
 ## Comments
 
 Code must explain itself. If it needs a comment saying *what* it does, rewrite the code. The only comments allowed explain *why*, and **only humans write them**. As an LLM you never add a comment, ever - not a doc comment, not a "why" comment, nothing. Comments in the code examples below are teaching notes for this document, not licence to write them in source.

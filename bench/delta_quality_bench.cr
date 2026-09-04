@@ -1,3 +1,4 @@
+require "../src/pylon/compress/prefix"
 require "../src/pylon/compress/zstd"
 require "../src/pylon/wire/delta"
 
@@ -57,6 +58,9 @@ paths = listing.to_s.split('\0').reject(&.empty?)
 
 catalogue = Catalogue.new(repo)
 codec = Compress::Zstd.new(level)
+prefix = Compress::Prefix.new
+prefixed = 0_i64
+prefixed_time = Time::Span.zero
 scratch_old = File.tempname("delta-old")
 scratch_new = File.tempname("delta-new")
 
@@ -108,6 +112,12 @@ paths.each do |path|
   patched = patch_from_size(scratch_old, scratch_new, level)
   patch_from += patched
 
+  started = Time.instant
+  frame = prefix.compress(new, old, Bytes.new(Compress::Zstd.bound(new.size)))
+  prefixed_time += Time.instant - started
+  abort("prefix compression failed: #{frame.message}") if frame.is_a?(Compress::Error)
+  prefixed += frame.size
+
   offenders << {path, full_packed, rsync_cost, patched}
 end
 
@@ -135,6 +145,7 @@ puts "raw new content:       #{mib(raw)} MiB"
 puts "full zstd-#{level}:           #{mib(full)} MiB upstream"
 puts "rsync delta (current): #{mib(rsync_ops)} MiB upstream (#{rsync_gave_up} gave up, #{mib(rsync_gave_up_bytes)} MiB of that is full sends) + #{mib(rsync_signatures)} MiB signatures downstream"
 puts "zstd --patch-from:     #{mib(patch_from)} MiB upstream, no signatures"
+puts "pylon prefix codec:    #{mib(prefixed + below_gate_bytes)} MiB upstream, #{prefixed_time.total_seconds.round(2)}s of compression"
 puts
 puts "largest rsync costs (path, full, rsync, patch-from in KiB):"
 offenders.sort_by! { |_, _, rsync, _| -rsync }

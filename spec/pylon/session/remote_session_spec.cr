@@ -68,6 +68,29 @@ describe "a session over the wire protocol" do
     end
   end
 
+  it "patches many files that shared one base in a single parallel batch" do
+    in_remote_pair do |local, remote, session|
+      shared = Random.new(61).random_bytes(64 * 1024)
+      count = Pylon::Write::Writer::PARALLEL_THRESHOLD + 4
+      count.times { |index| File.write(File.join(local, "shared_#{index}.bin"), shared) }
+      cycle!(session, tick)
+
+      count.times do |index|
+        edited = shared.dup
+        edited[index] ^= 0xFF_u8
+        File.write(File.join(local, "shared_#{index}.bin"), edited)
+      end
+
+      report = cycle!(session, tick)
+
+      report.remote_outcomes.reject(&.applied?).map(&.path).should be_empty
+      count.times do |index|
+        File.read(File.join(remote, "shared_#{index}.bin")).to_slice[index].should eq(shared[index] ^ 0xFF_u8)
+      end
+      cycle!(session, tick).quiet?.should be_true
+    end
+  end
+
   it "settles after one cycle" do
     in_remote_pair do |local, _, session|
       File.write(File.join(local, "a.rb"), "a")

@@ -3,6 +3,7 @@ require "../brand"
 require "../scan/ignores"
 require "../session/local_endpoint"
 require "../session/checkpoint/schedule"
+require "../session/content_store"
 require "../session/process_transport"
 require "../session/remote_endpoint"
 require "../session/runner"
@@ -101,6 +102,7 @@ struct Pylon::CLI
       begin
         left = Session::LocalEndpoint.new(local, ignores, compression: compression)
         left.cache = restored.local_cache
+        left.store = open_store(reporter)
         left.on_stream = ->(bytes : UInt64) : Nil { reporter.streamed(bytes) }
 
         reporter.observe(left.tally)
@@ -194,6 +196,18 @@ struct Pylon::CLI
         fail_with(reporter, "#{fault.explain}. Check that #{remote_binary.inspect} exists on #{target.host}")
       in Session::Incompatible, Session::Misbehaved
         fail_with(reporter, fault.explain)
+      end
+    end
+
+    private def open_store(reporter : Reporter) : Session::ContentStore?
+      path = state
+      return if path.nil?
+
+      case (opened = Session::ContentStore.open("#{path}.content"))
+      in Session::ContentStore then opened
+      in Session::ContentStore::Unavailable
+        reporter.warn("modified files will not be sent as patches against retained copies: #{opened.reason}")
+        nil
       end
     end
 

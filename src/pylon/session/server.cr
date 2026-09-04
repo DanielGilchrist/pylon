@@ -168,9 +168,17 @@ module Pylon::Session
 
     private def push : Nil
       problem = @lock.synchronize do
+        {% if flag?(:timing) %}
+          started = Time.instant
+        {% end %}
+
         drain
         current = @endpoint.scan(Time.utc.to_unix_ns.to_i64)
         @sequence += 1
+
+        {% if flag?(:timing) %}
+          scanned = Time.instant
+        {% end %}
 
         failed =
           if @sent.nil?
@@ -178,6 +186,14 @@ module Pylon::Session
           else
             Wire::Message.write(@output, Wire::Message::TreeDelta.new(@sequence, Core::Differ.diff(@sent, current)))
           end
+
+        {% if flag?(:timing) %}
+          STDERR.puts("server push: scan=%.1fms send=%.1fms files=%d" % [
+            (scanned - started).total_milliseconds,
+            (Time.instant - scanned).total_milliseconds,
+            @endpoint.cache.size,
+          ])
+        {% end %}
 
         @sent = current if failed.nil?
         failed
@@ -205,7 +221,8 @@ module Pylon::Session
           end
         in Wire::Message::ContentsRequest
           @lock.synchronize do
-            response = Wire::Message::ContentsResponse.new(@endpoint.content_source(request.digests, request.budget, request.signatures))
+            source = @endpoint.content_source(request.digests, request.budget, request.signatures, Wire::Prefixed::Bases.new)
+            response = Wire::Message::ContentsResponse.new(source)
             Wire::Message.write(@output, response)
           end
         in Wire::Message::SignaturesRequest

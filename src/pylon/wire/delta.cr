@@ -21,12 +21,16 @@ module Pylon::Wire
       class_property delta_bytes = 0_i64
       class_property fulls_sent = 0
       class_property full_bytes = 0_i64
+      class_property prefixed_sent = 0
+      class_property prefixed_bytes = 0_i64
 
       def self.reset_tallies : Nil
         @@deltas_sent = 0
         @@delta_bytes = 0_i64
         @@fulls_sent = 0
         @@full_bytes = 0_i64
+        @@prefixed_sent = 0
+        @@prefixed_bytes = 0_i64
       end
     {% end %}
 

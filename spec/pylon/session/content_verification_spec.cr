@@ -22,7 +22,7 @@ describe "content verification against the advertised digest" do
       endpoint, digest = stale_digest_source(root)
 
       wire = IO::Memory.new
-      endpoint.content_source([digest], 1_u64 * 1024 * 1024, Pylon::Wire::Delta::Signatures.new).write(wire)
+      endpoint.content_source([digest], 1_u64 * 1024 * 1024, Pylon::Wire::Delta::Signatures.new, Pylon::Wire::Prefixed::Bases.new).write(wire)
       wire.rewind
 
       contents = Pylon::Wire::Chunks.read_contents(Pylon::Wire::Reader.new(wire))
@@ -45,7 +45,7 @@ describe "content verification against the advertised digest" do
       File.delete(File.join(root, "racy.rb"))
 
       wire = IO::Memory.new
-      endpoint.content_source([digest], 1_u64 * 1024 * 1024, Pylon::Wire::Delta::Signatures.new).write(wire)
+      endpoint.content_source([digest], 1_u64 * 1024 * 1024, Pylon::Wire::Delta::Signatures.new, Pylon::Wire::Prefixed::Bases.new).write(wire)
       wire.rewind
 
       contents = Pylon::Wire::Chunks.read_contents(Pylon::Wire::Reader.new(wire))
@@ -63,7 +63,7 @@ describe "content verification against the advertised digest" do
     begin
       endpoint, digest = stale_digest_source(root)
 
-      contents = endpoint.content_source([digest], 1_u64 * 1024 * 1024, Pylon::Wire::Delta::Signatures.new).contents
+      contents = endpoint.content_source([digest], 1_u64 * 1024 * 1024, Pylon::Wire::Delta::Signatures.new, Pylon::Wire::Prefixed::Bases.new).contents
       contents.has_key?(digest).should be_false
     ensure
       FileUtils.rm_rf(root)

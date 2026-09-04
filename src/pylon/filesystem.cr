@@ -2,6 +2,8 @@ require "file_utils"
 require "./problem"
 require "./missing"
 require "./filesystem/pattern"
+require "./filesystem/lib_clone"
+require "./platform"
 
 module Pylon
   # stdlibs filesystem APIs (`File`, `Dir`, `FileUtils`) report failures (a vanished path,
@@ -99,6 +101,21 @@ module Pylon
       nil
     rescue error : ::File::Error
       problem(error)
+    end
+
+    def clone(from : String, to : String) : Problem?
+      Platform.select do
+        macos do
+          return if LibClone.clonefile(from.check_no_null_byte, to.check_no_null_byte, LibClone::NOFOLLOW) == 0
+
+          Problem.new("could not be cloned (#{Errno.value})")
+        end
+
+        linux do
+          # TODO: Implement using FICLONE ioctl
+          Problem.new("file cloning is not implemented for Linux yet.")
+        end
+      end
     end
 
     private def problem(error : IO::Error) : Problem

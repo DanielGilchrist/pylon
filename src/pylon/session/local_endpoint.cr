@@ -1,10 +1,16 @@
 require "digest/sha256"
+require "../compress/identity"
+require "../compress/prefix"
+require "../core/applier"
+require "../core/digests"
 require "../scan/scanner"
+require "../wire/prefixed"
 require "../watch/dirty"
 require "../disk"
 require "../write/writer"
 require "../wire/message"
 require "./staging"
+require "./content_store"
 require "./pending_write"
 require "./settled_contents"
 require "./local_endpoint/settled_signatures"
@@ -26,6 +32,7 @@ module Pylon::Session
     getter root : String
     property cache : Scan::Cache
     property on_stream : Proc(UInt64, Nil)? = nil
+    property store : ContentStore? = nil
     getter tally = Scan::Tally.new
 
     def accelerate! : Nil
@@ -107,11 +114,38 @@ module Pylon::Session
       found
     end
 
-    def content_begin(digests : Array(Bytes), budget : UInt64, signatures : Wire::Delta::Signatures) : SettledContents
-      SettledContents.new(content_source(digests, budget, signatures))
+    def retained?(digest : Bytes) : Bool
+      store = @store
+      return false if store.nil?
+
+      store.retained?(digest)
     end
 
-    def content_source(digests : Array(Bytes), budget : UInt64, signatures : Wire::Delta::Signatures) : Wire::ContentSource
+    def mirror(remote : Core::Entry?, outcomes : Array(Write::Outcome)) : Nil
+      store = @store
+      return if store.nil?
+
+      holdings = Core::Digests.all(Core::Applier.apply(remote, Write::Outcome.changes(outcomes)))
+      retentions = Array(ContentStore::Retention).new
+
+      holdings.each do |digest|
+        next if store.retained?(digest)
+
+        located = @by_digest[digest]?
+        next if located.nil?
+
+        retentions << ContentStore::Retention.new(File.join(@root, located.path), digest)
+      end
+
+      store.retain(retentions)
+      store.prune(holdings)
+    end
+
+    def content_begin(digests : Array(Bytes), budget : UInt64, signatures : Wire::Delta::Signatures, bases : Wire::Prefixed::Bases) : SettledContents
+      SettledContents.new(content_source(digests, budget, signatures, bases))
+    end
+
+    def content_source(digests : Array(Bytes), budget : UInt64, signatures : Wire::Delta::Signatures, bases : Wire::Prefixed::Bases) : Wire::ContentSource
       wanted = within(digests, budget)
 
       Wire::ContentSource::Streaming.new(
@@ -121,13 +155,15 @@ module Pylon::Session
           scratch = Wire::Chunks.scratch
           codec = Compress::Zstd.new(@compression)
           hasher = Digest::SHA256.new
+          prefix = Compress::Prefix.new
 
           wanted.each do |want|
-            patch = compute_patch(want, signatures)
-
-            if patch
-              emit_patch(io, want, patch, codec, scratch)
-            else
+            case (delivery = plan_delivery(want, bases, signatures, prefix))
+            in Wire::Prefixed
+              emit_prefixed(io, want, delivery, scratch)
+            in Wire::Patch
+              emit_patch(io, want, delivery, codec, scratch)
+            in Nil
               {% if flag?(:timing) %}
                 Wire::Delta.fulls_sent += 1
                 Wire::Delta.full_bytes += want.size
@@ -170,9 +206,49 @@ module Pylon::Session
       verified_read(located.path, digest)
     end
 
+    def base_content(digest : Bytes, path : String) : Bytes?
+      verified_read(path, digest) || recovered_content(digest)
+    end
+
     def write_begin(changes : Core::Changes, source : Wire::ContentSource, relocations : Array(Core::Relocation)) : PendingWrite
       outcomes = write(changes, source, relocations)
       PendingWrite.new(Proc(Array(Write::Outcome) | Fault).new { outcomes })
+    end
+
+    private def plan_delivery(want : Wanted, bases : Wire::Prefixed::Bases, signatures : Wire::Delta::Signatures, prefix : Compress::Prefix) : Wire::Prefixed | Wire::Patch | Nil
+      compute_prefixed(want, bases, prefix) || compute_patch(want, signatures)
+    end
+
+    private def compute_prefixed(want : Wanted, bases : Wire::Prefixed::Bases, prefix : Compress::Prefix) : Wire::Prefixed?
+      store = @store
+      return if store.nil?
+      return unless Wire::Prefixed.worthwhile?(want.size)
+
+      base_digest = bases[want.digest]?
+      return if base_digest.nil?
+
+      base = store.content(base_digest)
+      return if base.nil?
+
+      content = verified_read(want.path, want.digest)
+      return if content.nil?
+
+      frame = prefix.compress(content, base, Bytes.new(Compress::Zstd.bound(content.size)))
+      return if frame.is_a?(Compress::Error)
+
+      Wire::Prefixed.new(base_digest, frame)
+    end
+
+    private def emit_prefixed(io : IO, want : Wanted, prefixed : Wire::Prefixed, scratch : Bytes) : Nil
+      {% if flag?(:timing) %}
+        Wire::Delta.prefixed_sent += 1
+        Wire::Delta.prefixed_bytes += prefixed.frame.size
+      {% end %}
+
+      Wire::Binary.write_bytes(io, want.digest)
+      Wire::ContentKind::Prefixed.write(io)
+      Wire::Binary.write_bytes(io, prefixed.base)
+      Wire::Chunks.write_all(io, prefixed.frame, Compress::Identity.new, scratch)
     end
 
     private def compute_patch(want : Wanted, signatures : Wire::Delta::Signatures) : Wire::Patch?

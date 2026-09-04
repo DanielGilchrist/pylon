@@ -48,7 +48,11 @@ module Pylon::Session
       PendingSignatures.new(self, transmit(Wire::Message::SignaturesRequest.new(pairs)))
     end
 
-    def content_begin(digests : Array(Bytes), budget : UInt64, signatures : Wire::Delta::Signatures) : PendingContents | SettledContents
+    def retained?(digest : Bytes) : Bool
+      false
+    end
+
+    def content_begin(digests : Array(Bytes), budget : UInt64, signatures : Wire::Delta::Signatures, bases : Wire::Prefixed::Bases) : PendingContents | SettledContents
       return SettledContents.new(Wire::ContentSource::Materialised.new(Wire::Contents.new)) if digests.empty?
 
       PendingContents.new(self, transmit(Wire::Message::ContentsRequest.new(digests, budget, signatures)))

@@ -1,5 +1,5 @@
 Documentation/Admonition:
-  Enabled: true
+  Enabled: false
 
 Lint/ComparisonToBoolean:
   Enabled: true

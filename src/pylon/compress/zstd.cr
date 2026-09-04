@@ -7,6 +7,10 @@ module Pylon::Compress
 
     DEFAULT_LEVEL = 1
 
+    def self.bound(size : Int32) : Int32
+      LibZstd.compress_bound(LibC::SizeT.new(size)).to_i32
+    end
+
     def initialize(@level : Int32 = DEFAULT_LEVEL) : Nil
     end
 
@@ -19,7 +23,7 @@ module Pylon::Compress
         @level,
       )
 
-      failed(written) || into[0, written]
+      Error.from_zstd(written) || into[0, written]
     end
 
     def decompress(frame : Bytes, into : Bytes) : Bytes | Error
@@ -30,17 +34,11 @@ module Pylon::Compress
         LibC::SizeT.new(frame.size),
       )
 
-      failed(written) || into[0, written]
+      Error.from_zstd(written) || into[0, written]
     end
 
     def bound(size : Int32) : Int32
-      LibZstd.compress_bound(LibC::SizeT.new(size)).to_i32
-    end
-
-    private def failed(code : LibC::SizeT) : Error?
-      return if LibZstd.is_error(code) == 0
-
-      Error.new(String.new(LibZstd.error_name(code)))
+      Zstd.bound(size)
     end
   end
 end

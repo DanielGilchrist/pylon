@@ -1,3 +1,4 @@
+require "../platform"
 require "../problem"
 
 module Pylon::Scan
@@ -44,17 +45,12 @@ module Pylon::Scan
       )
     end
 
-    {% if flag?(:darwin) %}
-      private def self.modified_at(stat : LibC::Stat) : LibC::Timespec
-        stat.st_mtimespec
+    private def self.modified_at(stat : LibC::Stat) : LibC::Timespec
+      Platform.select do
+        macos { stat.st_mtimespec }
+        linux { stat.st_mtim }
       end
-    {% elsif flag?(:linux) %}
-      private def self.modified_at(stat : LibC::Stat) : LibC::Timespec
-        stat.st_mtim
-      end
-    {% else %}
-      {% raise "pylon only knows the stat layout on linux and macos" %}
-    {% end %}
+    end
 
     def initialize(@mode : UInt32, @size : UInt64, @mtime_ns : Int64, @inode : UInt64) : Nil
     end

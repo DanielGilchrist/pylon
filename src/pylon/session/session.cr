@@ -115,12 +115,19 @@ module Pylon::Session
       commit!(reconciliation.base_changes, local_outcomes, remote_outcomes)
 
       {% if flag?(:timing) %}
-        STDERR.puts("  client scans=%.1f reconcile=%.1f contents=%.1f write=%.1f commit=%.1f" % [
+        committed = Time.instant
+      {% end %}
+
+      @local.mirror(remote_root, remote_outcomes)
+
+      {% if flag?(:timing) %}
+        STDERR.puts("  client scans=%.1f reconcile=%.1f contents=%.1f write=%.1f commit=%.1f mirror=%.1f" % [
           (scanned - started).total_milliseconds,
           (reconciled - scanned).total_milliseconds,
           (fetched - reconciled).total_milliseconds,
           (written - fetched).total_milliseconds,
-          (Time.instant - written).total_milliseconds,
+          (committed - written).total_milliseconds,
+          (Time.instant - committed).total_milliseconds,
         ])
         STDERR.puts("  client alloc scans=%.1f reconcile=%.1f transfer=%.1f commit=%.1f MiB" % [
           (alloc_scanned - alloc_started) / 1_048_576.0,
@@ -177,11 +184,12 @@ module Pylon::Session
       total_bytes = source.payload_size(changes)
       collector = Core::Digests::Collector.new
       signatures = Wire::Delta::Signatures.new
+      bases = Wire::Prefixed::Bases.new
       candidates = Set(Bytes).new
       pending_signatures = nil
 
       if source.delta_capable? || target.delta_capable?
-        pairs = delta_pairs(changes, source, target_holds, candidates)
+        pairs = delta_pairs(changes, source, target_holds, candidates, bases)
         pending_signatures = target.signatures_begin(pairs) unless pairs.empty?
       end
 
@@ -198,7 +206,7 @@ module Pylon::Session
 
       notify(direction, outcomes, total, total_bytes)
 
-      pending_contents = source.content_begin(wanted_from(changes, offset, collector, target_holds), TRANSFER_BUDGET, signatures)
+      pending_contents = source.content_begin(wanted_from(changes, offset, collector, target_holds), TRANSFER_BUDGET, signatures, bases)
 
       while offset < changes.size
         provided = pending_contents.await
@@ -215,7 +223,7 @@ module Pylon::Session
         offset += taken
 
         if offset < changes.size
-          pending_contents = source.content_begin(wanted_from(changes, offset, collector, target_holds), TRANSFER_BUDGET, signatures)
+          pending_contents = source.content_begin(wanted_from(changes, offset, collector, target_holds), TRANSFER_BUDGET, signatures, bases)
         end
 
         if pending_signatures && worth_waiting_for_signature?(batch, source, candidates) && (fault = pending_signatures.settle_into(signatures))
@@ -256,7 +264,19 @@ module Pylon::Session
 
       {% if flag?(:timing) %}
         if total > 0
-          STDERR.puts("  transfer #{direction}: changes=#{total} reused=#{@reused} candidates=#{candidates.size} signatures=#{signatures.size} deltas=#{Wire::Delta.deltas_sent} (#{(Wire::Delta.delta_bytes / 1_048_576.0).round(2)} MiB ops) fulls=#{Wire::Delta.fulls_sent} (#{(Wire::Delta.full_bytes / 1_048_576.0).round(2)} MiB raw)")
+          STDERR.puts("  transfer %s: changes=%d reused=%d candidates=%d signatures=%d prefixed=%d (%.2f MiB frames) deltas=%d (%.2f MiB ops) fulls=%d (%.2f MiB raw)" % [
+            direction,
+            total,
+            @reused,
+            candidates.size,
+            signatures.size,
+            Wire::Delta.prefixed_sent,
+            Wire::Delta.prefixed_bytes / 1_048_576.0,
+            Wire::Delta.deltas_sent,
+            Wire::Delta.delta_bytes / 1_048_576.0,
+            Wire::Delta.fulls_sent,
+            Wire::Delta.full_bytes / 1_048_576.0,
+          ])
         end
       {% end %}
 
@@ -309,6 +329,7 @@ module Pylon::Session
       source : A | B,
       target_holds : Set(Bytes),
       candidates : Set(Bytes),
+      bases : Wire::Prefixed::Bases,
     ) : Array(Wire::Message::SignaturesRequest::Pair)
       pairs = Array(Wire::Message::SignaturesRequest::Pair).new
 
@@ -320,11 +341,16 @@ module Pylon::Session
         digest = new.digest
         next if old.digest == digest
         next if target_holds.includes?(digest)
+        next if bases.has_key?(digest)
 
         size = source.known_size(change.path)
-        next if size && !Wire::Delta.worthwhile?(size)
-        next unless candidates.add?(digest)
+        next if size && !Wire::Prefixed.worthwhile?(size)
 
+        bases[digest] = old.digest
+        next if source.retained?(old.digest)
+        next if size && !Wire::Delta.worthwhile?(size)
+
+        candidates << digest
         pairs << Wire::Message::SignaturesRequest::Pair.new(digest, old.digest)
       end
 
