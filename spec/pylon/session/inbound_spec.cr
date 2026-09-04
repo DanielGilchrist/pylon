@@ -1,0 +1,87 @@
+require "file_utils"
+require "socket"
+require "../../spec_helper"
+require "../../../src/pylon/session/server"
+require "../../../src/pylon/session/local_endpoint"
+require "../../../src/pylon/session/remote_endpoint"
+require "../../../src/pylon/session/session"
+require "../../support/remote_end"
+
+include Pylon::Session
+
+private def scripted_server(& : IO ->) : IO::Memory
+  script = IO::Memory.new
+  Pylon::Wire::Greeting.write(script)
+  yield script
+  script.rewind
+  script
+end
+
+private def cycle_against(script : IO::Memory) : {Report | Fault, RemoteEndpoint}
+  root = File.join(Dir.tempdir, "pylon-inbound-#{Random::Secure.hex(8)}")
+  Dir.mkdir_p(root)
+
+  begin
+    endpoint = RemoteEndpoint.new(script, IO::Memory.new, remote_configuration(root))
+    {build_session(local_endpoint(root), endpoint).cycle(Time.utc.to_unix_ns.to_i64), endpoint}
+  ensure
+    FileUtils.rm_rf(root)
+  end
+end
+
+describe "what the client learns while waiting for the remote tree" do
+  it "records the remote scan's progress" do
+    script = scripted_server do |io|
+      Pylon::Wire::Message.write(io, Pylon::Wire::Message::ScanProgress.new(1234_i64, 5_000_000_i64))
+    end
+
+    _, endpoint = cycle_against(script)
+
+    endpoint.inbound.phase.should eq(Inbound::RemoteScanning.new(1234_i64, 5_000_000_i64))
+    endpoint.inbound.meter.bytes.should eq(script.size)
+  end
+
+  it "knows how large the announced tree is and how much of it has arrived" do
+    root = Pylon::Core::Directory.new({"a.rb" => Pylon::Core::File.new(Bytes.new(Pylon::Wire::DIGEST_BYTES, 3_u8), executable: false)})
+    measured = Pylon::Wire::Chunks.measure_entry(root)
+
+    script = scripted_server do |io|
+      Pylon::Wire::Message.write(io, Pylon::Wire::Message::TreeAnnounce.new(measured))
+      Pylon::Wire::Message.write(io, Pylon::Wire::Message::ScanResponse.new(root))
+    end
+
+    _, endpoint = cycle_against(script)
+
+    phase = endpoint.inbound.phase
+    phase.should be_a(Inbound::ReceivingTree)
+    next unless phase.is_a?(Inbound::ReceivingTree)
+
+    phase.expected.should eq(measured.to_i64)
+    endpoint.inbound.received(phase).should eq(measured.to_i64)
+  end
+
+  it "hears the real server announce its tree before sending it" do
+    base = File.join(Dir.tempdir, "pylon-announce-#{Random::Secure.hex(8)}")
+    local = File.join(base, "local")
+    remote = File.join(base, "remote")
+    Dir.mkdir_p(local)
+    Dir.mkdir_p(remote)
+    File.write(File.join(remote, "pushed.rb"), "from the box")
+
+    client, socket = UNIXSocket.pair
+    serve_remote_end(socket)
+
+    begin
+      endpoint = RemoteEndpoint.new(client, client, remote_configuration(remote, watch: true))
+      cycle!(build_session(local_endpoint(local), endpoint), Time.utc.to_unix_ns.to_i64)
+
+      phase = endpoint.inbound.phase
+      phase.should be_a(Inbound::ReceivingTree)
+      endpoint.inbound.received(phase).should eq(phase.expected) if phase.is_a?(Inbound::ReceivingTree)
+    ensure
+      client.close
+      socket.close
+      FileUtils.rm_rf(base)
+    end
+  end
+end

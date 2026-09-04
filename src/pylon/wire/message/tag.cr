@@ -12,5 +12,7 @@ module Pylon::Wire::Message
     SignaturesRequest
     SignaturesResponse
     Configure
+    ScanProgress
+    TreeAnnounce
   end
 end

@@ -20,6 +20,7 @@ module Pylon
       Inotify
       FSEvents
       Mirror
+      ServerScan
     end
 
     @@parallel_contexts = Hash(Name, Fiber::ExecutionContext::Parallel).new

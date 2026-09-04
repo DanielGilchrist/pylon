@@ -12,6 +12,8 @@ require "./message/write_response"
 require "./message/tree_update"
 require "./message/tree_delta"
 require "./message/configure"
+require "./message/scan_progress"
+require "./message/tree_announce"
 require "../wire"
 require "./closed"
 require "./greeting"
@@ -40,7 +42,9 @@ module Pylon::Wire
                 WriteResponse |
                 TreeUpdate |
                 TreeDelta |
-                Configure
+                Configure |
+                ScanProgress |
+                TreeAnnounce
 
     def write(io : IO, message : Any) : Problem?
       message.write(io)
@@ -82,6 +86,8 @@ module Pylon::Wire
       in .tree_update?         then read_tree_update(reader)
       in .tree_delta?          then TreeDelta.new(reader.u32, Chunks.read_changes(reader))
       in .configure?           then read_configure(reader)
+      in .scan_progress?       then ScanProgress.new(reader.i64, reader.i64)
+      in .tree_announce?       then TreeAnnounce.new(reader.u32)
       end
     end
 

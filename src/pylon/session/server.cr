@@ -12,7 +12,8 @@ require "./checkpoint/schedule"
 
 module Pylon::Session
   class Server
-    READ_AHEAD = 1
+    READ_AHEAD        = 1
+    PROGRESS_INTERVAL = 250.milliseconds
 
     def self.accept(input : IO, output : IO, log : IO) : Server | Problem
       if (problem = Wire::Greeting.write(output))
@@ -36,7 +37,9 @@ module Pylon::Session
          Wire::Message::WriteRequest,
          Wire::Message::WriteResponse,
          Wire::Message::TreeUpdate,
-         Wire::Message::TreeDelta
+         Wire::Message::TreeDelta,
+         Wire::Message::ScanProgress,
+         Wire::Message::TreeAnnounce
         refusal = "the first message must configure this side, not a #{message.class.name}"
         Wire::Message.write(output, Wire::Message::Failure.new(refusal))
         Problem.new(refusal)
@@ -173,7 +176,7 @@ module Pylon::Session
         {% end %}
 
         drain
-        current = @endpoint.scan(Time.utc.to_unix_ns.to_i64)
+        current = scan_reporting(Time.utc.to_unix_ns.to_i64)
         @sequence += 1
 
         {% if flag?(:timing) %}
@@ -182,7 +185,7 @@ module Pylon::Session
 
         failed =
           if @sent.nil?
-            Wire::Message.write(@output, Wire::Message::TreeUpdate.new(@sequence, current, live: !@subscriber.nil?))
+            announce(current) || Wire::Message.write(@output, Wire::Message::TreeUpdate.new(@sequence, current, live: !@subscriber.nil?))
           else
             Wire::Message.write(@output, Wire::Message::TreeDelta.new(@sequence, Core::Differ.diff(@sent, current)))
           end
@@ -209,15 +212,37 @@ module Pylon::Session
       @endpoint.mark_dirty(subscriber.drain)
     end
 
+    private def scan_reporting(now_ns : Int64) : Core::Entry?
+      scanned = Channel(Core::Entry?).new(1)
+      Fibers.isolated(:server_scan) { scanned.send(@endpoint.scan(now_ns)) }
+      reporting = true
+
+      loop do
+        select
+        when current = scanned.receive
+          return current
+        when timeout(PROGRESS_INTERVAL)
+          next unless reporting
+
+          tally = @endpoint.tally
+          reporting = Wire::Message.write(@output, Wire::Message::ScanProgress.new(tally.files, tally.hashed_bytes)).nil?
+        end
+      end
+    end
+
+    private def announce(current : Core::Entry?) : Problem?
+      Wire::Message.write(@output, Wire::Message::TreeAnnounce.new(Wire::Chunks.measure_entry(current)))
+    end
+
     private def serve(request : Wire::Message::Any) : Bool
       problem =
         case request
         in Wire::Message::ScanRequest
           @lock.synchronize do
             drain
-            current = @endpoint.scan(request.now_ns)
+            current = scan_reporting(request.now_ns)
             @sent = current
-            Wire::Message.write(@output, Wire::Message::ScanResponse.new(current))
+            announce(current) || Wire::Message.write(@output, Wire::Message::ScanResponse.new(current))
           end
         in Wire::Message::ContentsRequest
           @lock.synchronize do
@@ -245,7 +270,9 @@ module Pylon::Session
            Wire::Message::ContentsResponse,
            Wire::Message::SignaturesResponse,
            Wire::Message::WriteResponse,
-           Wire::Message::Configure
+           Wire::Message::Configure,
+           Wire::Message::ScanProgress,
+           Wire::Message::TreeAnnounce
           @lock.synchronize do
             failure = Wire::Message::Failure.new("the client sent a #{request.class.name} where a request was expected")
             Wire::Message.write(@output, failure)

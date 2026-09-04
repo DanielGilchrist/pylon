@@ -14,7 +14,7 @@ describe Pylon::Session::ContentStore do
       opened = ContentStore.open(directory)
 
       opened.should be_a(ContentStore::Unavailable)
-      opened.reason.should contain("not implemented on Linux yet") if opened.is_a?(ContentStore::Unavailable)
+      opened.reason.should contain("not implemented for Linux yet") if opened.is_a?(ContentStore::Unavailable)
       Dir.children(directory).should be_empty
     ensure
       FileUtils.rm_rf(directory)

@@ -38,6 +38,51 @@ private def report_with_moves(remote : Array(Pylon::Write::Outcome), moves : Arr
   Pylon::Session::Report.new(Array(Conflict).new, Array(Pylon::Write::Outcome).new, remote, Array(Trouble).new, remote_relocations: moves)
 end
 
+private def reporter_waiting_on_the_remote(inbound : Pylon::Session::Inbound) : Pylon::CLI::Reporter
+  Colorize.enabled = false
+  reporter = Pylon::CLI::Reporter.new(IO::Memory.new, false, false, brand: Pylon::Brand::DEFAULT)
+  tally = Pylon::Scan::Tally.new
+  100.times { tally.saw_file }
+  tally.finish
+  reporter.observe(tally)
+  reporter.observe(inbound)
+  reporter
+end
+
+describe "the startup status line" do
+  it "says the remote has not spoken yet" do
+    inbound = Pylon::Session::Inbound.new
+
+    reporter_waiting_on_the_remote(inbound).scan_status.should eq("waiting for the remote · 100 files here")
+  end
+
+  it "relays the remote scan's counters" do
+    inbound = Pylon::Session::Inbound.new
+    inbound.scanning(1234_i64, 0_i64)
+    reporter_waiting_on_the_remote(inbound).scan_status.should eq("remote scanning · 1234 files")
+
+    inbound.scanning(1234_i64, 3_i64 * 1024 * 1024)
+    reporter_waiting_on_the_remote(inbound).scan_status.should eq("remote scanning · 1234 files · 3.0 MiB hashed")
+  end
+
+  it "shows how much of the announced tree has arrived" do
+    inbound = Pylon::Session::Inbound.new
+    inbound.meter.add(700)
+    inbound.announced(2_u32 * 1024 * 1024)
+    inbound.meter.add(512 * 1024)
+
+    reporter_waiting_on_the_remote(inbound).scan_status.should start_with("receiving the remote tree · 512 KiB of 2.0 MiB")
+  end
+
+  it "never reports more of the tree than was announced" do
+    inbound = Pylon::Session::Inbound.new
+    inbound.announced(1024_u32)
+    inbound.meter.add(5000)
+
+    reporter_waiting_on_the_remote(inbound).scan_status.should start_with("receiving the remote tree · 1 KiB of 1 KiB")
+  end
+end
+
 describe Pylon::CLI::Reporter do
   it "says nothing when a cycle was quiet" do
     rendered(report_of).should be_empty

@@ -2,6 +2,8 @@ require "../core/applier"
 require "../fibers"
 require "../wire/message"
 require "./fault"
+require "./inbound"
+require "./metered_reader"
 require "./pending_write"
 require "./session"
 require "./settled_contents"
@@ -14,7 +16,9 @@ module Pylon::Session
     @tree : Core::Entry? = nil
     @unapplied = Core::Changes.new
 
-    def initialize(@input : IO, @output : IO, @configure : Wire::Message::Configure, @signals : Channel(Nil)? = nil) : Nil
+    def initialize(input : IO, @output : IO, @configure : Wire::Message::Configure, @signals : Channel(Nil)? = nil) : Nil
+      @inbound = Inbound.new
+      @input = MeteredReader.new(input, @inbound.meter)
       @scanned = Channel(Wire::Message::ScanResponse).new(1)
       @contents = Channel(Wire::Message::ContentsResponse).new(1)
       @signatures = Channel(Wire::Message::SignaturesResponse).new(1)
@@ -28,6 +32,7 @@ module Pylon::Session
     end
 
     getter exchanges = 0
+    getter inbound : Inbound
 
     def scan(now_ns : Int64) : Core::Entry? | Fault
       return settled_tree if @known
@@ -167,6 +172,10 @@ module Pylon::Session
           return unless deliver(@signatures, message)
         in Wire::Message::WriteResponse
           return unless deliver(@written, message)
+        in Wire::Message::ScanProgress
+          @inbound.scanning(message.files, message.hashed_bytes)
+        in Wire::Message::TreeAnnounce
+          @inbound.announced(message.bytes)
         in Wire::Message::Failure
           stop_with(Misbehaved.new(message.message))
           return

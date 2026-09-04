@@ -110,6 +110,7 @@ struct Pylon::CLI
 
         signals = Channel(Nil).new(16)
         remote_endpoint = Session::RemoteEndpoint.new(transport.reader, transport.writer, configuration(target.path), signals)
+        reporter.observe(remote_endpoint.inbound)
         session = Session::Session.new(
           left,
           remote_endpoint,

@@ -44,6 +44,12 @@ module Pylon::Wire
       write_packed(io) { |packed| Binary.write_entry(packed, entry) }
     end
 
+    def measure_entry(entry : Core::Entry?) : UInt32
+      packed = IO::Memory.new
+      write_entry(packed, entry)
+      packed.size.to_u32
+    end
+
     def read_entry(reader : Reader) : Core::Entry?
       read_packed(reader, "the tree payload") { |inner| Binary.read_entry(inner) }
     end

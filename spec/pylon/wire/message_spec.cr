@@ -45,6 +45,27 @@ describe Pylon::Wire::Message::TreeUpdate do
   end
 end
 
+describe Pylon::Wire::Message::ScanProgress do
+  it "round trips the remote scan's counters" do
+    received = round_trip(Message::ScanProgress.new(12_400_i64, 325_000_000_i64))
+
+    received.should be_a(Message::ScanProgress)
+    next unless received.is_a?(Message::ScanProgress)
+
+    received.files.should eq(12_400_i64)
+    received.hashed_bytes.should eq(325_000_000_i64)
+  end
+end
+
+describe Pylon::Wire::Message::TreeAnnounce do
+  it "round trips the size of the tree about to follow" do
+    received = round_trip(Message::TreeAnnounce.new(1_314_000_u32))
+
+    received.should be_a(Message::TreeAnnounce)
+    received.bytes.should eq(1_314_000_u32) if received.is_a?(Message::TreeAnnounce)
+  end
+end
+
 describe Pylon::Wire::Message::Configure do
   it "round trips everything the client decides for the remote end" do
     received = round_trip(configuration)

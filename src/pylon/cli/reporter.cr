@@ -1,6 +1,7 @@
 require "colorize"
 require "../brand"
 require "../scan/tally"
+require "../session/inbound"
 require "../session/session"
 require "./spinner"
 
@@ -12,6 +13,7 @@ struct Pylon::CLI
 
     @progress : Session::Progress? = nil
     @scan : Scan::Tally? = nil
+    @inbound : Session::Inbound? = nil
 
     def initialize(@io : IO, @verbose : Bool, @dry_run : Bool, @errors : IO = STDERR, *, @brand : Brand) : Nil
       @announced = Set(String).new
@@ -24,6 +26,10 @@ struct Pylon::CLI
 
     def observe(scan : Scan::Tally) : Nil
       @scan = scan
+    end
+
+    def observe(inbound : Session::Inbound) : Nil
+      @inbound = inbound
     end
 
     def starting(local : String, remote : String) : Nil
@@ -120,17 +126,47 @@ struct Pylon::CLI
       @io.puts
     end
 
-    private def scan_status : String
+    def scan_status : String
       scan = @scan
       return "connecting and scanning both sides" if scan.nil?
+      return remote_status(scan) if scan.finished?
+      return "scanning · #{scan.files} files" if scan.hashed_bytes.zero?
 
-      if scan.finished?
-        "waiting for the remote scan · #{scan.files} files here"
-      elsif scan.hashed_bytes.zero?
-        "scanning · #{scan.files} files"
-      else
-        "scanning · #{scan.files} files · #{mebibytes(scan.hashed_bytes.to_u64)} MiB hashed"
+      "scanning · #{scan.files} files · #{mebibytes(scan.hashed_bytes.to_u64)} MiB hashed"
+    end
+
+    private def remote_status(scan : Scan::Tally) : String
+      inbound = @inbound
+      return "waiting for the remote · #{scan.files} files here" if inbound.nil?
+
+      case (phase = inbound.phase)
+      in Session::Inbound::Connecting
+        "waiting for the remote · #{scan.files} files here"
+      in Session::Inbound::RemoteScanning
+        hashed = phase.hashed_bytes.zero? ? "" : " · #{mebibytes(phase.hashed_bytes.to_u64)} MiB hashed"
+        "remote scanning · #{phase.files} files#{hashed}"
+      in Session::Inbound::ReceivingTree
+        receiving(inbound.received(phase), phase)
       end
+    end
+
+    private def receiving(received : Int64, phase : Session::Inbound::ReceivingTree) : String
+      elapsed = (Time.instant - phase.since).total_seconds
+      line = "receiving the remote tree · #{size_text(received)} of #{size_text(phase.expected)}"
+      return line if elapsed < 0.5 || received.zero?
+
+      rate = received / elapsed
+      remaining = phase.expected - received
+      line += " at #{size_text(rate.to_i64)}/s"
+      line += " · about #{(remaining / rate).round.to_i} s left" if remaining > 0
+
+      line
+    end
+
+    private def size_text(bytes : Int64) : String
+      return "#{(bytes / 1024.0).round.to_i} KiB" if bytes < 1024 * 1024
+
+      "#{(bytes / (1024.0 * 1024.0)).round(1)} MiB"
     end
 
     private def refresh : Nil
