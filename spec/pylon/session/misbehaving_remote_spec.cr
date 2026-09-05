@@ -20,7 +20,15 @@ private def cycle_against(script : IO::Memory, watch : Bool = false) : Report | 
   Dir.mkdir_p(root)
 
   begin
-    session = build_session(local_endpoint(root), RemoteEndpoint.new(script, IO::Memory.new, remote_configuration(root, watch: watch), resume: nil))
+    session = build_session(
+      local_endpoint(root),
+      RemoteEndpoint.new(
+        script,
+        IO::Memory.new,
+        remote_configuration(root, watch: watch),
+        resume: nil,
+      ),
+    )
     session.cycle(Time.utc.to_unix_ns.to_i64)
   ensure
     FileUtils.rm_rf(root)
@@ -42,7 +50,10 @@ describe "a remote that misbehaves" do
   it "stops when replies pile up that nothing asked for instead of hanging" do
     script = scripted_server do |io|
       (Session::WRITE_WINDOW + 1).times do
-        Pylon::Wire::Message.write(io, Pylon::Wire::Message::WriteResponse.new(Array(Pylon::Write::Outcome).new))
+        Pylon::Wire::Message.write(
+          io,
+          Pylon::Wire::Message::WriteResponse.new(Array(Pylon::Write::Outcome).new),
+        )
       end
     end
 

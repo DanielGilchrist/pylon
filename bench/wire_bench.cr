@@ -8,7 +8,16 @@ include Pylon
 IGNORES = Scan::Ignores.new(%w[.git node_modules tmp log vendor/bundle .ruby-lsp flow-typed .idea])
 
 root = ARGV[0]
-snapshot = Scan::Scanner.new(Pylon::Disk.new(root), Scan::Cache.new, Time.utc.to_unix_ns.to_i64, IGNORES, baseline: nil, recheck: Set(String).new, tally: Scan::Tally.new, keeper: Pylon::Discard.new).scan
+snapshot = Scan::Scanner.new(
+  Pylon::Disk.new(root),
+  Scan::Cache.new,
+  Time.utc.to_unix_ns.to_i64,
+  IGNORES,
+  baseline: nil,
+  recheck: Set(String).new,
+  tally: Scan::Tally.new,
+  keeper: Pylon::Discard.new,
+).scan
 
 buffer = IO::Memory.new
 started = Time.instant

@@ -36,7 +36,11 @@ module Pylon::Session
       base = @resolver.base_content(prefixed.base, path)
       return if base.nil?
 
-      rebuilt = Compress::Prefix.decompress(prefixed.frame, base, Wire::Delta::LARGEST_DELTA_FILE.to_i32)
+      rebuilt = Compress::Prefix.decompress(
+        prefixed.frame,
+        base,
+        Wire::Delta::LARGEST_DELTA_FILE.to_i32,
+      )
       return if rebuilt.is_a?(Compress::Error)
       return unless Core::Digests.matches?(rebuilt, digest)
 

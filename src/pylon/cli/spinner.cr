@@ -62,7 +62,8 @@ struct Pylon::CLI
           when stop.receive?
             break
           when timeout(INTERVAL)
-            @io.print "\r\033[K#{INDENT}#{FRAMES[frame % FRAMES.size].colorize.cyan} #{@supply.call.colorize.dark_gray}"
+            @io.print "\r\033[K#{INDENT}#{FRAMES[frame % FRAMES.size].colorize.cyan} " \
+                      "#{@supply.call.colorize.dark_gray}"
             @io.flush
             frame += 1
           end

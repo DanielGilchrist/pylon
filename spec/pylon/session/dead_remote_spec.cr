@@ -17,7 +17,10 @@ describe "a remote that is not there" do
     socket.close
     client.close
 
-    session = build_session(local_endpoint(root), RemoteEndpoint.new(client, client, remote_configuration(root), resume: nil))
+    session = build_session(
+      local_endpoint(root),
+      RemoteEndpoint.new(client, client, remote_configuration(root), resume: nil),
+    )
 
     begin
       session.cycle(Time.utc.to_unix_ns.to_i64).should be_a(Stopped)

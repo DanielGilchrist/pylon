@@ -6,14 +6,20 @@ module Pylon
       {% statements = block.body.is_a?(Expressions) ? block.body.expressions : [block.body] %}
       {% branches = {} of String => ASTNode %}
       {% for statement in statements %}
-        {% unless statement.is_a?(Call) && statement.block && statement.args.empty? && PLATFORMS.includes?(statement.name.stringify) %}
-          {% raise "Platform.select takes exactly one `macos do ... end` and one `linux do ... end`, found #{statement}" %}
+        {% branch = statement.is_a?(Call) && statement.block && statement.args.empty? %}
+        {% unless branch && PLATFORMS.includes?(statement.name.stringify) %}
+          {% raise "Platform.select takes exactly one `macos do ... end` and one `linux do ... " \
+                   "end`, found #{statement}" %}
         {% end %}
-        {% raise "Platform.select names #{statement.name} twice" if branches.keys.includes?(statement.name.stringify) %}
+        {% if branches.keys.includes?(statement.name.stringify) %}
+          {% raise "Platform.select names #{statement.name} twice" %}
+        {% end %}
         {% branches[statement.name.stringify] = statement.block.body %}
       {% end %}
       {% for platform in PLATFORMS %}
-        {% raise "Platform.select is missing the #{platform.id} branch" unless branches.keys.includes?(platform) %}
+        {% unless branches.keys.includes?(platform) %}
+          {% raise "Platform.select is missing the #{platform.id} branch" %}
+        {% end %}
       {% end %}
       {% if flag?(:darwin) %}
         {{ branches["macos"] }}

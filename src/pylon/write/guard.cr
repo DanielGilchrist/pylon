@@ -23,7 +23,11 @@ module Pylon::Write
       in Core::SymbolicLink
         link(expected, observed)
       in Core::File
-        observed.is_a?(Scan::ObservedFile) ? file(expected, cached, observed.metadata, now_ns) : Verdict::ModificationDetected
+        if observed.is_a?(Scan::ObservedFile)
+          file(expected, cached, observed.metadata, now_ns)
+        else
+          Verdict::ModificationDetected
+        end
       in Core::Untracked, Core::Problematic
         Verdict::UnknownState
       end
@@ -43,7 +47,9 @@ module Pylon::Write
     ) : Verdict
       return Verdict::UnknownState if cached.nil?
       return Verdict::Inconclusive if cached.provisional?
-      return Verdict::Inconclusive if observed.freshly_modified?(now_ns, Scan::Metadata::GRANULARITY_NS)
+      if observed.freshly_modified?(now_ns, Scan::Metadata::GRANULARITY_NS)
+        return Verdict::Inconclusive
+      end
       return Verdict::ModificationDetected unless cached.metadata.reusable?(observed)
       return Verdict::ModificationDetected unless cached.digest == expected.digest
 

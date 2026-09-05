@@ -19,7 +19,9 @@ module Pylon::Session
       end
 
       if (blocked = probe(directory))
-        return Unavailable.new("the filesystem under #{directory} cannot snapshot files: #{blocked.reason}")
+        return Unavailable.new(
+          "the filesystem under #{directory} cannot snapshot files: #{blocked.reason}",
+        )
       end
 
       held = Set(Bytes).new
@@ -30,9 +32,11 @@ module Pylon::Session
       end
 
       case listed
-      in Missing then Unavailable.new("the directory #{directory} vanished while it was being opened")
-      in Problem then Unavailable.new("the directory #{directory} could not be listed: #{listed.reason}")
-      in Nil     then new(directory, root, held)
+      in Missing
+        Unavailable.new("the directory #{directory} vanished while it was being opened")
+      in Problem
+        Unavailable.new("the directory #{directory} could not be listed: #{listed.reason}")
+      in Nil then new(directory, root, held)
       end
     end
 

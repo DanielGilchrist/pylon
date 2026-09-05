@@ -61,7 +61,8 @@ module Pylon::Core
     end
 
     private def feed(count : Int32, hasher : ::Digest::SHA256) : Nil
-      hasher.update(Bytes[count.to_u8!, (count >> 8).to_u8!, (count >> 16).to_u8!, (count >> 24).to_u8!])
+      hasher.update(Bytes[count.to_u8!, (count >> 8).to_u8!])
+      hasher.update(Bytes[(count >> 16).to_u8!, (count >> 24).to_u8!])
     end
 
     private def gather(entry : Entry?, into : Set(Bytes)) : Nil

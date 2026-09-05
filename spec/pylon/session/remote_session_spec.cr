@@ -8,7 +8,9 @@ require "../../support/remote_end"
 
 include Pylon::Session
 
-private def in_remote_pair(& : String, String, Session(LocalEndpoint, RemoteEndpoint), RemoteEndpoint ->) : Nil
+private def in_remote_pair(
+  & : String, String, Session(LocalEndpoint, RemoteEndpoint), RemoteEndpoint ->
+) : Nil
   base = File.join(Dir.tempdir, "pylon-remote-#{Random::Secure.hex(8)}")
   local_root = File.join(base, "local")
   remote_root = File.join(base, "remote")
@@ -58,7 +60,9 @@ describe "a session over the wire protocol" do
   it "pulls content that does not fit one transfer budget in several batches" do
     in_remote_pair do |local, remote, session, endpoint|
       third = (Session::TRANSFER_BUDGET // 3 + 1).to_i32
-      3.times { |index| File.write(File.join(remote, "blob#{index}.bin"), Bytes.new(third, (index + 1).to_u8)) }
+      3.times do |index|
+        File.write(File.join(remote, "blob#{index}.bin"), Bytes.new(third, (index + 1).to_u8))
+      end
 
       cycle!(session, tick)
 
@@ -85,7 +89,9 @@ describe "a session over the wire protocol" do
 
       report.remote_outcomes.reject(&.applied?).map(&.path).should be_empty
       count.times do |index|
-        File.read(File.join(remote, "shared_#{index}.bin")).to_slice[index].should eq(shared[index] ^ 0xFF_u8)
+        File.read(File.join(remote, "shared_#{index}.bin")).to_slice[index].should eq(
+          shared[index] ^ 0xFF_u8,
+        )
       end
       cycle!(session, tick).quiet?.should be_true
     end
@@ -183,7 +189,9 @@ describe "a large push followed by more cycles" do
     in_remote_pair do |local, remote, session|
       Dir.mkdir_p(File.join(local, "app", "models"))
       Dir.mkdir_p(File.join(local, "db"))
-      400.times { |index| File.write(File.join(local, "app", "models", "f#{index}.rb"), "class F#{index}; end") }
+      400.times do |index|
+        File.write(File.join(local, "app", "models", "f#{index}.rb"), "class F#{index}; end")
+      end
       File.write(File.join(local, "db", "structure.sql"), "-- schema")
 
       cycle!(session, tick)

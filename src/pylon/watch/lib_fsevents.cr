@@ -35,12 +35,25 @@ lib LibFSEvents
 
   $kCFRunLoopDefaultMode : CFRef
 
-  fun string_create = CFStringCreateWithCString(allocator : Void*, chars : UInt8*, encoding : UInt32) : CFRef
-  fun array_create = CFArrayCreate(allocator : Void*, values : Void**, count : CFIndex, callbacks : Void*) : CFRef
+  fun string_create = CFStringCreateWithCString(
+    allocator : Void*,
+    chars : UInt8*,
+    encoding : UInt32,
+  ) : CFRef
+  fun array_create = CFArrayCreate(
+    allocator : Void*,
+    values : Void**,
+    count : CFIndex,
+    callbacks : Void*,
+  ) : CFRef
   fun release = CFRelease(reference : CFRef)
 
   fun run_loop_current = CFRunLoopGetCurrent : CFRef
-  fun run_loop_run_in_mode = CFRunLoopRunInMode(mode : CFRef, seconds : Float64, return_after_source : UInt8) : Int32
+  fun run_loop_run_in_mode = CFRunLoopRunInMode(
+    mode : CFRef,
+    seconds : Float64,
+    return_after_source : UInt8,
+  ) : Int32
 
   fun stream_create = FSEventStreamCreate(
     allocator : Void*,
@@ -52,7 +65,11 @@ lib LibFSEvents
     flags : UInt32,
   ) : StreamRef
 
-  fun stream_schedule = FSEventStreamScheduleWithRunLoop(stream : StreamRef, run_loop : CFRef, mode : CFRef)
+  fun stream_schedule = FSEventStreamScheduleWithRunLoop(
+    stream : StreamRef,
+    run_loop : CFRef,
+    mode : CFRef,
+  )
   fun stream_start = FSEventStreamStart(stream : StreamRef) : UInt8
   fun stream_stop = FSEventStreamStop(stream : StreamRef)
   fun stream_invalidate = FSEventStreamInvalidate(stream : StreamRef)

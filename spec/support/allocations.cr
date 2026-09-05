@@ -13,7 +13,8 @@ def assert_allocates_under(budget : Int, what : String, &) : Nil
   scale, suffix = unit_for(Math.max(used, budget.to_u64))
 
   used.should be < budget,
-    "#{what} allocated #{in_unit(used, scale, suffix)}, budget was #{in_unit(budget, scale, suffix)}"
+    "#{what} allocated #{in_unit(used, scale, suffix)}, budget was " \
+    "#{in_unit(budget, scale, suffix)}"
 end
 
 def unit_for(bytes : Int) : {UInt64, String}

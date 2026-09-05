@@ -57,7 +57,9 @@ module Pylon::Core
       return Extraction.new(changes, relocations) if relocations.empty?
 
       remaining = Changes.new(initial_capacity: changes.size - consumed.size)
-      changes.each_with_index { |change, index| remaining << change unless consumed.includes?(index) }
+      changes.each_with_index do |change, index|
+        remaining << change unless consumed.includes?(index)
+      end
 
       Extraction.new(remaining, relocations)
     end
@@ -68,7 +70,11 @@ module Pylon::Core
       folded
     end
 
-    private def self.unambiguous_case?(folded : Hash(String, Int32), from : String, to : String) : Bool
+    private def self.unambiguous_case?(
+      folded : Hash(String, Int32),
+      from : String,
+      to : String,
+    ) : Bool
       folded[from.downcase] == 1 && folded[to.downcase] == 1
     end
 

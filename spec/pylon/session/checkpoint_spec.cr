@@ -30,7 +30,9 @@ end
 describe Pylon::Session::Checkpoint do
   it "round trips an base and both caches" do
     in_sandbox do |path|
-      base = Pylon::Core::Directory.new({"app" => Pylon::Core::Directory.new({"user.rb" => Fixtures.f1})})
+      base = Pylon::Core::Directory.new(
+        {"app" => Pylon::Core::Directory.new({"user.rb" => Fixtures.f1})},
+      )
 
       Checkpoint.new(base, sample_cache, nil).save(path).should be_nil
 

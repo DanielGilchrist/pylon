@@ -14,7 +14,9 @@ total_bytes = 0_i64
 
 files.times do
   weight = random.rand(100)
-  lines = weight < 80 ? random.rand(10..80) : weight < 95 ? random.rand(80..1200) : random.rand(1200..20_000)
+  lines = weight < 80 ? random.rand(10..80) : weight < 95 ? random.rand(80..1200) : random.rand(
+    1200..20_000,
+  )
   builder = String::Builder.new
   lines.times { |line| builder << "def item" << line << " end\n" }
   content = builder.to_s.to_slice
@@ -50,7 +52,8 @@ sweep.each do |workers|
   end
 
   elapsed = Time.instant - started
-  puts "workers=#{workers}: #{elapsed.total_seconds.round(2)}s (#{(files / elapsed.total_seconds).round(0)} files/s)"
+  puts "workers=#{workers}: #{elapsed.total_seconds.round(2)}s " \
+       "(#{(files / elapsed.total_seconds).round(0)} files/s)"
 
   FileUtils.rm_rf(work)
 end

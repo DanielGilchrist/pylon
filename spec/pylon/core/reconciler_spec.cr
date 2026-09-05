@@ -125,7 +125,11 @@ private CASES = {
     base: Fixtures.dir({"a" => F1}),
     local: Fixtures.dir({"a" => PR}),
     remote: Fixtures.dir({"a" => PR}),
-    troubles: [Trouble.new("a", :local, "permission denied"), Trouble.new("a", :remote, "permission denied")],
+    troubles: [Trouble.new("a", :local, "permission denied"), Trouble.new(
+      "a",
+      :remote,
+      "permission denied",
+    )],
   ),
   ReconcileCase.new(
     description: "a sibling of a child unreadable on both sides still syncs",
@@ -134,7 +138,11 @@ private CASES = {
     local: Fixtures.dir({"a" => PR, "b" => F2}),
     remote: Fixtures.dir({"a" => PR, "b" => F2}),
     base_changes: Changes[Change.new("b", F1, F2)],
-    troubles: [Trouble.new("a", :local, "permission denied"), Trouble.new("a", :remote, "permission denied")],
+    troubles: [Trouble.new("a", :local, "permission denied"), Trouble.new(
+      "a",
+      :remote,
+      "permission denied",
+    )],
   ),
   ReconcileCase.new(
     description: "local created a directory",

@@ -19,8 +19,13 @@ module Pylon::Core
         length = separator - start
 
         return Malformed.new(raw, "is empty") if length == 0
-        return Malformed.new(raw, "is a '.' path component") if length == 1 && bytes[start] == '.'.ord
-        return Malformed.new(raw, "is a '..' path component") if length == 2 && bytes[start] == '.'.ord && bytes[start + 1] == '.'.ord
+        if length == 1 && bytes[start] == '.'.ord
+          return Malformed.new(raw, "is a '.' path component")
+        end
+
+        if length == 2 && bytes[start] == '.'.ord && bytes[start + 1] == '.'.ord
+          return Malformed.new(raw, "is a '..' path component")
+        end
 
         start = separator + 1
       end

@@ -7,8 +7,19 @@ require "../../../src/pylon/disk"
 
 private FILES = 120
 
-private def build_writer(disk : Pylon::Disk, contents : Pylon::Wire::Contents, parallelism = Pylon::Write::Writer::DEFAULT_PARALLELISM) : Pylon::Write::Writer(Pylon::Disk, Pylon::Session::Staging(Unrecoverable))
-  Pylon::Write::Writer.new(disk, Pylon::Session::Staging.new(contents, Unrecoverable.new), Pylon::Scan::Cache.new, Time.utc.to_unix_ns.to_i64, Pylon::Scan::Ignores::NONE, parallelism: parallelism)
+private def build_writer(
+  disk : Pylon::Disk,
+  contents : Pylon::Wire::Contents,
+  parallelism = Pylon::Write::Writer::DEFAULT_PARALLELISM,
+) : Pylon::Write::Writer(Pylon::Disk, Pylon::Session::Staging(Unrecoverable))
+  Pylon::Write::Writer.new(
+    disk,
+    Pylon::Session::Staging.new(contents, Unrecoverable.new),
+    Pylon::Scan::Cache.new,
+    Time.utc.to_unix_ns.to_i64,
+    Pylon::Scan::Ignores::NONE,
+    parallelism: parallelism,
+  )
 end
 
 private def bulk_changes : Pylon::Core::Changes
@@ -66,7 +77,9 @@ describe "Writer running independent file writes in parallel" do
         right = File.read(File.join(sequential_root, change.path))
         left.should eq(right)
 
-        File.info(File.join(parallel_root, change.path)).permissions.owner_execute?.should eq(entry.executable?)
+        File.info(File.join(parallel_root, change.path)).permissions.owner_execute?.should eq(
+          entry.executable?,
+        )
       end
     ensure
       FileUtils.rm_rf(parallel_root)
@@ -99,7 +112,11 @@ describe "Writer running independent file writes in parallel" do
       digest = Digest::SHA256.digest("nested#{index}").to_slice
       contents[digest] = "body #{index}".to_slice
       changes << Pylon::Core::Change.new("d#{index}", nil, Pylon::Core::Directory.new)
-      changes << Pylon::Core::Change.new("d#{index}/file.rb", nil, Pylon::Core::File.new(digest, executable: false))
+      changes << Pylon::Core::Change.new(
+        "d#{index}/file.rb",
+        nil,
+        Pylon::Core::File.new(digest, executable: false),
+      )
     end
 
     root = File.tempname("pylon-parallel-nested")
@@ -109,7 +126,9 @@ describe "Writer running independent file writes in parallel" do
       outcomes = build_writer(Pylon::Disk.new(root), contents).write(changes)
 
       outcomes.count(&.applied?).should eq(changes.size)
-      20.times { |index| File.read(File.join(root, "d#{index}", "file.rb")).should eq("body #{index}") }
+      20.times do |index|
+        File.read(File.join(root, "d#{index}", "file.rb")).should eq("body #{index}")
+      end
     ensure
       FileUtils.rm_rf(root)
     end
@@ -130,7 +149,11 @@ describe "Writer running independent file writes in parallel" do
     begin
       outcomes = build_writer(Pylon::Disk.new(root), contents).write(changes)
 
-      outcomes.count { |outcome| outcome.skipped.is_a?(Pylon::Write::StagedContentMissing) }.should eq(missing.size)
+      unrecovered = outcomes.count do |outcome|
+        outcome.skipped.is_a?(Pylon::Write::StagedContentMissing)
+      end
+
+      unrecovered.should eq(missing.size)
       outcomes.count(&.applied?).should eq(changes.size - missing.size)
     ensure
       FileUtils.rm_rf(root)

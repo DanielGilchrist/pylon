@@ -98,7 +98,12 @@ module Ameba::Rule::Layout
       end
     end
 
-    private def message_for(members : Array(Member), kept : Array(Int32), member : Member, index : Int32) : String?
+    private def message_for(
+      members : Array(Member),
+      kept : Array(Int32),
+      member : Member,
+      index : Int32,
+    ) : String?
       below = kept.reverse.find { |position| members[position].section < member.section }
       return too_early(member, members[below]) if below && below > index
 
@@ -219,7 +224,9 @@ module Ameba::Rule::Layout
         collect_sections(branch.then, sections)
         collect_sections(branch.else, sections)
       when Crystal::Expressions
-        branch.expressions.each { |part| collect_sections(part, sections) if part.is_a?(Crystal::MacroIf) }
+        branch.expressions.each do |part|
+          collect_sections(part, sections) if part.is_a?(Crystal::MacroIf)
+        end
         classify_text(literal_text(branch.expressions), sections)
       when Crystal::MacroLiteral
         classify_text(branch.value, sections)
@@ -268,9 +275,12 @@ module Ameba::Rule::Layout
 
     private def instance_method(visibility : Crystal::Visibility, abstract_method : Bool) : Section
       case visibility
-      in .public?    then abstract_method ? Section::PublicAbstractMethods : Section::PublicInstanceMethods
-      in .protected? then abstract_method ? Section::ProtectedAbstractMethods : Section::ProtectedInstanceMethods
-      in .private?   then abstract_method ? Section::PrivateAbstractMethods : Section::PrivateInstanceMethods
+      in .public?
+        abstract_method ? Section::PublicAbstractMethods : Section::PublicInstanceMethods
+      in .protected?
+        abstract_method ? Section::ProtectedAbstractMethods : Section::ProtectedInstanceMethods
+      in .private?
+        abstract_method ? Section::PrivateAbstractMethods : Section::PrivateInstanceMethods
       end
     end
 
@@ -309,11 +319,13 @@ module Ameba::Rule::Layout
     end
 
     private def too_late(member : Member, anchor : Member) : String
-      "#{member.section.label.capitalize} come before #{anchor.section.label}, so `#{member.label}` belongs above `#{anchor.label}`"
+      "#{member.section.label.capitalize} come before #{anchor.section.label}, so " \
+      "`#{member.label}` belongs above `#{anchor.label}`"
     end
 
     private def too_early(member : Member, anchor : Member) : String
-      "#{member.section.label.capitalize} come after #{anchor.section.label}, so `#{member.label}` belongs below `#{anchor.label}`"
+      "#{member.section.label.capitalize} come after #{anchor.section.label}, so " \
+      "`#{member.label}` belongs below `#{anchor.label}`"
     end
   end
 end

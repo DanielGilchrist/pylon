@@ -7,11 +7,19 @@ module Pylon::Wire::Message
   struct WriteRequest
     include Writable
 
-    def self.new(changes : Core::Changes, relocations : Array(Core::Relocation), contents : Contents) : WriteRequest
+    def self.new(
+      changes : Core::Changes,
+      relocations : Array(Core::Relocation),
+      contents : Contents,
+    ) : WriteRequest
       new(changes, relocations, ContentSource::Materialised.new(contents))
     end
 
-    def initialize(@changes : Core::Changes, @relocations : Array(Core::Relocation), @source : ContentSource) : Nil
+    def initialize(
+      @changes : Core::Changes,
+      @relocations : Array(Core::Relocation),
+      @source : ContentSource,
+    ) : Nil
     end
 
     getter changes : Core::Changes

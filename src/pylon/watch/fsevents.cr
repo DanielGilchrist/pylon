@@ -161,7 +161,11 @@ module Pylon::Watch
         return
       end
 
-      LibFSEvents.stream_schedule(stream, LibFSEvents.run_loop_current, LibFSEvents.kCFRunLoopDefaultMode)
+      LibFSEvents.stream_schedule(
+        stream,
+        LibFSEvents.run_loop_current,
+        LibFSEvents.kCFRunLoopDefaultMode,
+      )
 
       if LibFSEvents.stream_start(stream).zero?
         LibFSEvents.stream_invalidate(stream)

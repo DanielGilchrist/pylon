@@ -4,7 +4,8 @@ module Ameba::Rule::Style
       description "Disallows ternaries with a nil branch"
     end
 
-    MSG = "Write `value if condition` or `value unless condition` instead of a ternary with a nil branch"
+    MSG = "Write `value if condition` or `value unless condition` instead of a ternary with a " \
+          "nil branch"
 
     def test(source : Source, node : Crystal::If) : Nil
       return unless node.ternary?

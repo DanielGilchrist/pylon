@@ -16,7 +16,13 @@ level = 9
 
 class Catalogue
   def initialize(repo : String) : Nil
-    @process = Process.new("git", ["-C", repo, "cat-file", "--batch"], input: :pipe, output: :pipe, error: :inherit)
+    @process = Process.new(
+      "git",
+      ["-C", repo, "cat-file", "--batch"],
+      input: :pipe,
+      output: :pipe,
+      error: :inherit,
+    )
   end
 
   def blob(spec : String) : Bytes?
@@ -53,7 +59,11 @@ def digest(content : Bytes) : Bytes
 end
 
 listing = IO::Memory.new
-Process.run("git", ["-C", repo, "diff", "--name-status", "-z", "--no-renames", from, to], output: listing)
+Process.run(
+  "git",
+  ["-C", repo, "diff", "--name-status", "-z", "--no-renames", from, to],
+  output: listing,
+)
 fields = listing.to_s.split('\0').reject(&.empty?)
 
 catalogue = Catalogue.new(repo)
@@ -125,12 +135,19 @@ outcomes_io = IO::Memory.new
 Wire::Chunks.write_outcomes(outcomes_io, outcomes)
 per_item_overhead = changes.size.to_i64 * (Wire::DIGEST_BYTES + 1 + 4 + 4 + 5)
 
-puts "#{from} -> #{to}: #{changes.size} file changes (#{adds} added, #{deletes} deleted, #{small_mods + prefixed_mods} modified)"
+puts "#{from} -> #{to}: #{changes.size} file changes (#{adds} added, #{deletes} deleted, " \
+     "#{small_mods + prefixed_mods} modified)"
 puts "  upstream changes list (zstd):   #{mib(changes_io.size.to_i64)} MiB"
-puts "  upstream content framing:       #{mib(per_item_overhead)} MiB (digest+kind+chunk headers per item)"
-puts "  upstream adds, full zstd-#{level}:    #{mib(adds_wire)} MiB (#{mib(adds_raw)} MiB raw, #{adds} files)"
+puts "  upstream content framing:       #{mib(per_item_overhead)} MiB (digest+kind+chunk headers " \
+     "per item)"
+puts "  upstream adds, full zstd-#{level}:    #{mib(adds_wire)} MiB (#{mib(adds_raw)} MiB raw, " \
+     "#{adds} files)"
 puts "  upstream small mods (<1 KiB):   #{mib(small_mods_wire)} MiB (#{small_mods} files)"
-puts "  upstream prefixed frames:       #{mib(prefixed_wire)} MiB (#{mib(prefixed_raw)} MiB raw, #{prefixed_mods} files, #{prefixed_time.total_seconds.round(2)}s compress)"
-puts "  upstream total estimate:        #{mib(changes_io.size.to_i64 + per_item_overhead + adds_wire + small_mods_wire + prefixed_wire)} MiB"
+puts "  upstream prefixed frames:       #{mib(prefixed_wire)} MiB (#{mib(prefixed_raw)} MiB raw, " \
+     "#{prefixed_mods} files, #{prefixed_time.total_seconds.round(2)}s compress)"
+total_estimate = changes_io.size.to_i64 + per_item_overhead + adds_wire +
+                 small_mods_wire + prefixed_wire
+puts "  upstream total estimate:        #{mib(total_estimate)} MiB"
 puts "  downstream outcomes (zstd):     #{mib(outcomes_io.size.to_i64)} MiB"
-puts "  deleted content receiver held:  #{mib(deleted_raw)} MiB raw (#{deletes} files) — what a flip back must re-send in full today"
+puts "  deleted content receiver held:  #{mib(deleted_raw)} MiB raw (#{deletes} files) — what a " \
+     "flip back must re-send in full today"

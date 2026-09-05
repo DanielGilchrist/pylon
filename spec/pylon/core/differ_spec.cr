@@ -1,8 +1,18 @@
 require "../../spec_helper"
 require "../../../src/pylon/core/differ"
 
-private CONTENTS = {nil, Fixtures.f1, Fixtures.f2, Fixtures.f1x, Fixtures.d0, Fixtures.symlink_relative, Fixtures.symlink_absolute, Fixtures.untracked, Fixtures.problematic}
-private NAMES    = {"a", "b", "c"}
+private CONTENTS = {
+  nil,
+  Fixtures.f1,
+  Fixtures.f2,
+  Fixtures.f1x,
+  Fixtures.d0,
+  Fixtures.symlink_relative,
+  Fixtures.symlink_absolute,
+  Fixtures.untracked,
+  Fixtures.problematic,
+}
+private NAMES = {"a", "b", "c"}
 
 private def random_entry(random : Random, depth : Int32) : Entry?
   return CONTENTS[random.rand(CONTENTS.size)] if depth <= 0 || random.rand(3) == 0
@@ -40,7 +50,9 @@ describe Pylon::Core::Differ do
   end
 
   it "collapses a replaced subtree into one change" do
-    base = Pylon::Core::Directory.new({"app" => Pylon::Core::Directory.new({"a" => Fixtures.f1, "b" => Fixtures.f2})})
+    base = Pylon::Core::Directory.new(
+      {"app" => Pylon::Core::Directory.new({"a" => Fixtures.f1, "b" => Fixtures.f2})},
+    )
     target = Pylon::Core::Directory.new({"app" => Fixtures.f1})
 
     Differ.diff(base, target).map(&.path).should eq(["app"])

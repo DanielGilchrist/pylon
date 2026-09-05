@@ -16,8 +16,15 @@ private def fails_to_decode(bytes : Bytes, & : Reader ->) : Bool
   reader.failed?
 end
 
-private CONTENTS = {nil, Fixtures.f1, Fixtures.f2, Fixtures.f1x, Fixtures.untracked, Fixtures.problematic}
-private NAMES    = {"a", "b", "c"}
+private CONTENTS = {
+  nil,
+  Fixtures.f1,
+  Fixtures.f2,
+  Fixtures.f1x,
+  Fixtures.untracked,
+  Fixtures.problematic,
+}
+private NAMES = {"a", "b", "c"}
 
 private def random_entry(random : Random, depth : Int32) : Entry?
   if depth <= 0 || random.rand(3) == 0
@@ -120,7 +127,9 @@ describe Pylon::Wire::Binary do
     io.rewind
 
     decoded = Binary.read_relocations(Reader.new(io))
-    decoded.map { |relocation| {relocation.from, relocation.to} }.should eq([{"old.rb", "new.rb"}, {"lib", "moved/lib"}])
+    decoded.map { |relocation| {relocation.from, relocation.to} }.should eq(
+      [{"old.rb", "new.rb"}, {"lib", "moved/lib"}],
+    )
     (decoded[0].entry == Fixtures.f1x).should be_true
     (decoded[1].entry == Fixtures.d1).should be_true
   end
@@ -132,7 +141,8 @@ describe Pylon::Wire::Binary do
       io = IO::Memory.new
       Binary.write_relocations(io, [Pylon::Core::Relocation.new(source, destination, file)])
 
-      fails_to_decode(io.to_slice) { |reader| Binary.read_relocations(reader) }.should be_true, "#{source.inspect} to #{destination.inspect}"
+      refused = fails_to_decode(io.to_slice) { |reader| Binary.read_relocations(reader) }
+      refused.should be_true, "#{source.inspect} to #{destination.inspect}"
     end
   end
 

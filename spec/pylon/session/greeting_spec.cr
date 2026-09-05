@@ -32,7 +32,11 @@ private class BufferedIO < IO
   end
 end
 
-private def rejected_with(message : String, brand : Pylon::Brand = Pylon::Brand::DEFAULT, & : UNIXSocket ->) : Nil
+private def rejected_with(
+  message : String,
+  brand : Pylon::Brand = Pylon::Brand::DEFAULT,
+  & : UNIXSocket ->
+) : Nil
   root = File.join(Dir.tempdir, "pylon-greeting-#{Random::Secure.hex(8)}")
   Dir.mkdir_p(root)
 
@@ -40,7 +44,10 @@ private def rejected_with(message : String, brand : Pylon::Brand = Pylon::Brand:
 
   begin
     yield socket
-    session = build_session(local_endpoint(root), RemoteEndpoint.new(client, client, remote_configuration(root, brand: brand), resume: nil))
+    session = build_session(
+      local_endpoint(root),
+      RemoteEndpoint.new(client, client, remote_configuration(root, brand: brand), resume: nil),
+    )
 
     result = session.cycle(Time.utc.to_unix_ns.to_i64)
 
@@ -70,13 +77,17 @@ describe "the wire greeting" do
   end
 
   it "names the program it expected by the name it was given" do
-    rejected_with("did not identify itself as Test Sync", brand: Pylon::Brand.new("Test Sync")) do |socket|
+    rejected_with(
+      "did not identify itself as Test Sync",
+      brand: Pylon::Brand.new("Test Sync"),
+    ) do |socket|
       socket.puts("bash: pylon: command not found")
       socket.flush
     end
   end
 
-  it "flushes the greeting so a buffered stdout cannot hold it back while the server waits to be configured" do
+  it "flushes the greeting so a buffered stdout cannot hold it back while the server waits to be " \
+     "configured" do
     buffered = BufferedIO.new
 
     Pylon::Wire::Greeting.write(buffered)
@@ -91,7 +102,9 @@ describe "the wire greeting" do
     accepted = Server.accept(IO::Memory.new, closed, IO::Memory.new)
 
     accepted.should be_a(Pylon::Problem)
-    accepted.reason.should start_with("the greeting could not be sent") if accepted.is_a?(Pylon::Problem)
+    if accepted.is_a?(Pylon::Problem)
+      accepted.reason.should start_with("the greeting could not be sent")
+    end
   end
 
   it "is sent by the server before anything else" do

@@ -29,7 +29,9 @@ module Pylon::Core
         end
 
         pattern = Filesystem::Pattern.parse(text)
-        return Invalid.new("#{text.inspect} is not a valid glob: #{pattern.reason}") if pattern.is_a?(Problem)
+        if pattern.is_a?(Problem)
+          return Invalid.new("#{text.inspect} is not a valid glob: #{pattern.reason}")
+        end
 
         rules << GlobRule.new(side, pattern)
       end

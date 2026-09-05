@@ -26,7 +26,11 @@ end
 
 private NOW = MTIME + 1_000_000_000_i64 * 10
 
-private def check(expected : Pylon::Core::Entry?, cached : Pylon::Scan::CacheEntry?, observed : Pylon::Scan::Observed | Problem | Nil) : Verdict
+private def check(
+  expected : Pylon::Core::Entry?,
+  cached : Pylon::Scan::CacheEntry?,
+  observed : Pylon::Scan::Observed | Problem | Nil,
+) : Verdict
   Guard.check(expected, cached, observed, NOW)
 end
 
@@ -40,59 +44,88 @@ describe Pylon::Write::Guard do
   end
 
   it "refuses to act when the expected file vanished" do
-    check(Pylon::Core::File.new(DIGEST, executable: false), cached, nil).should eq(Verdict::ModificationDetected)
+    check(Pylon::Core::File.new(DIGEST, executable: false), cached, nil).should eq(
+      Verdict::ModificationDetected,
+    )
   end
 
   it "permits replacing a file that still matches the cache and the expected digest" do
-    check(Pylon::Core::File.new(DIGEST, executable: false), cached, observed_file).should eq(Verdict::Proceed)
+    check(Pylon::Core::File.new(DIGEST, executable: false), cached, observed_file).should eq(
+      Verdict::Proceed,
+    )
   end
 
   it "refuses without cache evidence, rather than assuming safety" do
-    check(Pylon::Core::File.new(DIGEST, executable: false), nil, observed_file).should eq(Verdict::UnknownState)
+    check(Pylon::Core::File.new(DIGEST, executable: false), nil, observed_file).should eq(
+      Verdict::UnknownState,
+    )
   end
 
   it "refuses when the file changed since it was scanned" do
-    check(Pylon::Core::File.new(DIGEST, executable: false), cached, observed_file(size: 101_u64)).should eq(Verdict::ModificationDetected)
-    check(Pylon::Core::File.new(DIGEST, executable: false), cached, observed_file(mtime_ns: MTIME + 1)).should eq(Verdict::ModificationDetected)
-    check(Pylon::Core::File.new(DIGEST, executable: false), cached, observed_file(inode: 8_u64)).should eq(Verdict::ModificationDetected)
+    file = Pylon::Core::File.new(DIGEST, executable: false)
+
+    check(file, cached, observed_file(size: 101_u64)).should eq(Verdict::ModificationDetected)
+    check(file, cached, observed_file(mtime_ns: MTIME + 1)).should eq(Verdict::ModificationDetected)
+    check(file, cached, observed_file(inode: 8_u64)).should eq(Verdict::ModificationDetected)
   end
 
   it "cannot conclude anything about a file modified within the clock granularity window" do
     fresh = observed_file(mtime_ns: NOW)
     entry = Pylon::Scan::CacheEntry.new(metadata(mtime_ns: NOW), DIGEST, provisional: false)
 
-    check(Pylon::Core::File.new(DIGEST, executable: false), entry, fresh).should eq(Verdict::Inconclusive)
+    check(Pylon::Core::File.new(DIGEST, executable: false), entry, fresh).should eq(
+      Verdict::Inconclusive,
+    )
   end
 
   it "cannot conclude anything from a digest that was recorded inside the granularity window" do
     entry = Pylon::Scan::CacheEntry.new(metadata, DIGEST, provisional: true)
 
-    check(Pylon::Core::File.new(DIGEST, executable: false), entry, observed_file).should eq(Verdict::Inconclusive)
+    check(Pylon::Core::File.new(DIGEST, executable: false), entry, observed_file).should eq(
+      Verdict::Inconclusive,
+    )
   end
 
   it "refuses when only the permissions changed" do
     executable = observed_file(mode: (LibC::S_IFREG | 0o755).to_u32)
 
-    check(Pylon::Core::File.new(DIGEST, executable: false), cached, executable).should eq(Verdict::ModificationDetected)
+    check(Pylon::Core::File.new(DIGEST, executable: false), cached, executable).should eq(
+      Verdict::ModificationDetected,
+    )
   end
 
   it "refuses when the cached digest disagrees with what we planned against" do
-    check(Pylon::Core::File.new(OTHER, executable: false), cached, observed_file).should eq(Verdict::ModificationDetected)
+    check(Pylon::Core::File.new(OTHER, executable: false), cached, observed_file).should eq(
+      Verdict::ModificationDetected,
+    )
   end
 
   it "refuses when a file was replaced by a directory" do
-    check(Pylon::Core::File.new(DIGEST, executable: false), cached, Pylon::Scan::ObservedDirectory.new).should eq(Verdict::ModificationDetected)
+    file = Pylon::Core::File.new(DIGEST, executable: false)
+
+    check(file, cached, Pylon::Scan::ObservedDirectory.new).should eq(Verdict::ModificationDetected)
   end
 
   it "checks kind for directories and target for symlinks" do
-    check(Pylon::Core::Directory.new, nil, Pylon::Scan::ObservedDirectory.new).should eq(Verdict::Proceed)
-    check(Pylon::Core::Directory.new, nil, Pylon::Scan::ObservedLink.new("t")).should eq(Verdict::ModificationDetected)
-    check(Pylon::Core::SymbolicLink.new("t"), nil, Pylon::Scan::ObservedLink.new("t")).should eq(Verdict::Proceed)
-    check(Pylon::Core::SymbolicLink.new("t"), nil, Pylon::Scan::ObservedDirectory.new).should eq(Verdict::ModificationDetected)
+    check(Pylon::Core::Directory.new, nil, Pylon::Scan::ObservedDirectory.new).should eq(
+      Verdict::Proceed,
+    )
+    check(Pylon::Core::Directory.new, nil, Pylon::Scan::ObservedLink.new("t")).should eq(
+      Verdict::ModificationDetected,
+    )
+    check(Pylon::Core::SymbolicLink.new("t"), nil, Pylon::Scan::ObservedLink.new("t")).should eq(
+      Verdict::Proceed,
+    )
+    check(Pylon::Core::SymbolicLink.new("t"), nil, Pylon::Scan::ObservedDirectory.new).should eq(
+      Verdict::ModificationDetected,
+    )
   end
 
   it "refuses to overwrite a symlink that was pointed somewhere else" do
-    check(Pylon::Core::SymbolicLink.new("intended"), nil, Pylon::Scan::ObservedLink.new("retargeted")).should eq(Verdict::ModificationDetected)
+    link = Pylon::Core::SymbolicLink.new("intended")
+    retargeted = Pylon::Scan::ObservedLink.new("retargeted")
+
+    check(link, nil, retargeted).should eq(Verdict::ModificationDetected)
   end
 
   it "never proceeds against unsyncable expectations" do

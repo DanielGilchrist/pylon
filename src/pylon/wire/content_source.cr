@@ -18,7 +18,11 @@ module Pylon::Wire
     end
 
     struct Streaming < ContentSource
-      def initialize(@digests : Set(Bytes), @emit : Proc(IO, Nil), @materialise : Proc(Contents)) : Nil
+      def initialize(
+        @digests : Set(Bytes),
+        @emit : Proc(IO, Nil),
+        @materialise : Proc(Contents),
+      ) : Nil
       end
 
       getter digests : Set(Bytes)

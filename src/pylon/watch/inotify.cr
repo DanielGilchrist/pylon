@@ -115,12 +115,21 @@ module Pylon::Watch
     end
 
     private def add_watch(relative : String) : Nil
-      wd = LibInotify.inotify_add_watch(@descriptor, absolute(relative).check_no_null_byte, WATCH_MASK)
+      wd = LibInotify.inotify_add_watch(
+        @descriptor,
+        absolute(relative).check_no_null_byte,
+        WATCH_MASK,
+      )
 
       if wd < 0
         unless @missed || relative.empty?
           @missed = true
-          STDERR.puts(@brand.prefix("some directories could not be watched (inotify watch limit?), changes in them will not be noticed"))
+          STDERR.puts(
+            @brand.prefix(
+              "some directories could not be watched (inotify watch limit?), changes in them " \
+              "will not be noticed",
+            ),
+          )
         end
 
         return

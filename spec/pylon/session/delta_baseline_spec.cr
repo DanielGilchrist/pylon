@@ -14,7 +14,9 @@ end
 
 # The server only pushes tree deltas when it has a watcher, so this is the only
 # topology that exercises the shared delta baseline.
-private def in_watched_pair(& : String, String, Session(LocalEndpoint, RemoteEndpoint), ::Channel(Nil) ->) : Nil
+private def in_watched_pair(
+  & : String, String, Session(LocalEndpoint, RemoteEndpoint), ::Channel(Nil) ->
+) : Nil
   base = File.join(Dir.tempdir, "pylon-delta-#{Random::Secure.hex(8)}")
   local = File.join(base, "local")
   remote = File.join(base, "remote")
@@ -29,7 +31,13 @@ private def in_watched_pair(& : String, String, Session(LocalEndpoint, RemoteEnd
   begin
     session = build_session(
       local_endpoint(local),
-      RemoteEndpoint.new(client, client, remote_configuration(remote, watch: true), pushes, resume: nil),
+      RemoteEndpoint.new(
+        client,
+        client,
+        remote_configuration(remote, watch: true),
+        pushes,
+        resume: nil,
+      ),
       push_first: true,
     )
     yield local, remote, session, pushes
@@ -79,7 +87,9 @@ describe "the tree delta baseline" do
     in_watched_pair do |local, remote, session, pushes|
       Dir.mkdir_p(File.join(local, "app", "models"))
       Dir.mkdir_p(File.join(local, "db"))
-      400.times { |index| File.write(File.join(local, "app", "models", "f#{index}.rb"), "class F#{index}; end") }
+      400.times do |index|
+        File.write(File.join(local, "app", "models", "f#{index}.rb"), "class F#{index}; end")
+      end
       File.write(File.join(local, "db", "structure.sql"), "-- schema")
 
       cycle!(session, tick)

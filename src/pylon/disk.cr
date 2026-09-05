@@ -42,7 +42,11 @@ module Pylon
       Filesystem.each_child(absolute(relative_path)) { |name| yield name }
     end
 
-    def digest(relative_path : String, buffer : Bytes = Bytes.new(READ_BUFFER_BYTES), hasher : Digest::SHA256 = Digest::SHA256.new) : Bytes | Problem
+    def digest(
+      relative_path : String,
+      buffer : Bytes = Bytes.new(READ_BUFFER_BYTES),
+      hasher : Digest::SHA256 = Digest::SHA256.new,
+    ) : Bytes | Problem
       hasher.reset
 
       opened = Filesystem.open(absolute(relative_path)) do |file|
@@ -72,7 +76,15 @@ module Pylon
       end
     end
 
-    def stream(relative_path : String, digest : Bytes, io : IO, buffer : Bytes, codec : Compress::Codec, scratch : Bytes, hasher : Digest::SHA256) : Nil
+    def stream(
+      relative_path : String,
+      digest : Bytes,
+      io : IO,
+      buffer : Bytes,
+      codec : Compress::Codec,
+      scratch : Bytes,
+      hasher : Digest::SHA256,
+    ) : Nil
       Wire::Binary.write_bytes(io, digest)
       Wire::ContentKind::Full.write(io)
       hasher.reset
@@ -105,7 +117,8 @@ module Pylon
 
     def write_file(relative_path : String, content : Bytes, executable : Bool) : Write::Problem?
       staged(absolute(relative_path)) do |temporary|
-        Filesystem.write(temporary, content) || Filesystem.chmod(temporary, executable ? 0o755 : 0o644)
+        mode = executable ? 0o755 : 0o644
+        Filesystem.write(temporary, content) || Filesystem.chmod(temporary, mode)
       end
     end
 
@@ -161,8 +174,13 @@ module Pylon
       return if failed.nil?
 
       case (discarded = Filesystem.delete(temporary))
-      in Nil     then failed
-      in Problem then Problem.new("#{failed.reason} (and the temporary file #{temporary} could not be removed: #{discarded.reason})")
+      in Nil
+        failed
+      in Problem
+        Problem.new(
+          "#{failed.reason} (and the temporary file #{temporary} could not be removed: " \
+          "#{discarded.reason})",
+        )
       end
     end
 

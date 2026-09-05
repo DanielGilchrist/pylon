@@ -28,7 +28,9 @@ private class CountingIO < IO
   end
 end
 
-private def in_retaining_pair(& : String, String, Session(LocalEndpoint, RemoteEndpoint), RemoteEndpoint, CountingIO ->) : Nil
+private def in_retaining_pair(
+  & : String, String, Session(LocalEndpoint, RemoteEndpoint), RemoteEndpoint, CountingIO ->
+) : Nil
   base = File.join(Dir.tempdir, "pylon-retained-#{Random::Secure.hex(8)}")
   local_root = File.join(base, "local")
   remote_root = File.join(base, "remote")
@@ -40,7 +42,12 @@ private def in_retaining_pair(& : String, String, Session(LocalEndpoint, RemoteE
   counting = CountingIO.new(client)
 
   begin
-    endpoint = RemoteEndpoint.new(client, counting, remote_configuration(remote_root, state: File.join(base, "remote-state")), resume: nil)
+    endpoint = RemoteEndpoint.new(
+      client,
+      counting,
+      remote_configuration(remote_root, state: File.join(base, "remote-state")),
+      resume: nil,
+    )
     session = build_session(local_endpoint(local_root), endpoint)
     yield local_root, remote_root, session, endpoint, counting
   ensure

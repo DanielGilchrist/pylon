@@ -4,7 +4,12 @@ module Pylon::Core
   module Reconciler
     extend self
 
-    def reconcile(base : Entry?, local : Entry?, remote : Entry?, preferences : Preferences) : Reconciliation
+    def reconcile(
+      base : Entry?,
+      local : Entry?,
+      remote : Entry?,
+      preferences : Preferences,
+    ) : Reconciliation
       state = State.new(preferences)
       state.walk("", base, local, remote)
       state.result
@@ -128,17 +133,32 @@ module Pylon::Core
         base == local && local == remote
       end
 
-      private def propagate_to_remote(path : String, base : Entry?, local : Entry?, remote : Entry?) : Nil
+      private def propagate_to_remote(
+        path : String,
+        base : Entry?,
+        local : Entry?,
+        remote : Entry?,
+      ) : Nil
         remote_changes << Change.new(path, remote, local)
         base_changes << Change.new(path, base, local)
       end
 
-      private def propagate_to_local(path : String, base : Entry?, local : Entry?, remote : Entry?) : Nil
+      private def propagate_to_local(
+        path : String,
+        base : Entry?,
+        local : Entry?,
+        remote : Entry?,
+      ) : Nil
         local_changes << Change.new(path, local, remote)
         base_changes << Change.new(path, base, remote)
       end
 
-      private def record_conflict(path : String, base : Entry?, local : Entry?, remote : Entry?) : Nil
+      private def record_conflict(
+        path : String,
+        base : Entry?,
+        local : Entry?,
+        remote : Entry?,
+      ) : Nil
         conflicts << Conflict.new(
           path,
           Changes[Change.new(path, base, local)],

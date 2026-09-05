@@ -21,9 +21,15 @@ private NOW = BASE_MTIME + GRANULARITY * 10
 describe Pylon::Scan::Metadata do
   it "maps stat mode onto an entry kind" do
     metadata(mode: (LibC::S_IFREG | 0o644).to_u32).kind.should eq(Pylon::Scan::Metadata::Kind::File)
-    metadata(mode: (LibC::S_IFDIR | 0o755).to_u32).kind.should eq(Pylon::Scan::Metadata::Kind::Directory)
-    metadata(mode: (LibC::S_IFLNK | 0o777).to_u32).kind.should eq(Pylon::Scan::Metadata::Kind::SymbolicLink)
-    metadata(mode: (LibC::S_IFIFO | 0o644).to_u32).kind.should eq(Pylon::Scan::Metadata::Kind::Untracked)
+    metadata(mode: (LibC::S_IFDIR | 0o755).to_u32).kind.should eq(
+      Pylon::Scan::Metadata::Kind::Directory,
+    )
+    metadata(mode: (LibC::S_IFLNK | 0o777).to_u32).kind.should eq(
+      Pylon::Scan::Metadata::Kind::SymbolicLink,
+    )
+    metadata(mode: (LibC::S_IFIFO | 0o644).to_u32).kind.should eq(
+      Pylon::Scan::Metadata::Kind::Untracked,
+    )
   end
 
   it "reads the executable bit" do

@@ -60,7 +60,15 @@ private def in_retaining_pair(retain_from_start : Bool = true, & : Pair ->) : Ni
   endpoint = RemoteEndpoint.new(metered, metered, remote_configuration(remote_root), resume: nil)
 
   begin
-    yield Pair.new(local_root, remote_root, build_session(left, endpoint), endpoint, metered, left, store)
+    yield Pair.new(
+      local_root,
+      remote_root,
+      build_session(left, endpoint),
+      endpoint,
+      metered,
+      left,
+      store,
+    )
   ensure
     client.close
     socket.close

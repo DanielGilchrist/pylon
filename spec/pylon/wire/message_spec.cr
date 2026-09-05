@@ -10,7 +10,12 @@ private def round_trip(message : Message::Any) : Message::Any | Closed | Invalid
   Message.read(io)
 end
 
-private def configuration(root : String = "/srv/app", brand : String = "Test Sync", state : String? = "/srv/.state", known : Bytes? = nil) : Message::Configure
+private def configuration(
+  root : String = "/srv/app",
+  brand : String = "Test Sync",
+  state : String? = "/srv/.state",
+  known : Bytes? = nil,
+) : Message::Configure
   Message::Configure.new(
     root: root,
     ignores: ["node_modules", ".git"],
@@ -37,7 +42,9 @@ describe Pylon::Wire::Message::AvailabilityResponse do
     received = round_trip(Message::AvailabilityResponse.new([Bytes.new(DIGEST_BYTES, 3_u8)]))
 
     received.should be_a(Message::AvailabilityResponse)
-    received.payload.should eq([Bytes.new(DIGEST_BYTES, 3_u8)]) if received.is_a?(Message::AvailabilityResponse)
+    if received.is_a?(Message::AvailabilityResponse)
+      received.payload.should eq([Bytes.new(DIGEST_BYTES, 3_u8)])
+    end
   end
 end
 
@@ -59,7 +66,9 @@ end
 
 describe Pylon::Wire::Message::TreeUpdate do
   it "round trips a live tree the server will keep updating" do
-    root = Pylon::Core::Directory.new({"a.rb" => Pylon::Core::File.new(Bytes.new(DIGEST_BYTES, 7_u8), executable: false)})
+    root = Pylon::Core::Directory.new(
+      {"a.rb" => Pylon::Core::File.new(Bytes.new(DIGEST_BYTES, 7_u8), executable: false)},
+    )
     received = round_trip(Message::TreeUpdate.new(3_u32, root, live: true))
 
     received.should be_a(Message::TreeUpdate)
@@ -157,6 +166,8 @@ describe Pylon::Wire::Message::Configure do
     received = round_trip(configuration(root: "/srv/app\0"))
 
     received.should be_a(Invalid)
-    received.reason.should eq("a string in the message contains a NUL byte") if received.is_a?(Invalid)
+    if received.is_a?(Invalid)
+      received.reason.should eq("a string in the message contains a NUL byte")
+    end
   end
 end

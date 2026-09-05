@@ -59,7 +59,8 @@ module Pylon::Wire
     end
 
     def read_changes(reader : Reader) : Core::Changes
-      read_packed(reader, "the changes payload") { |inner| Binary.read_changes(inner) } || Core::Changes.new
+      found = read_packed(reader, "the changes payload") { |inner| Binary.read_changes(inner) }
+      found || Core::Changes.new
     end
 
     def write_outcomes(io : IO, outcomes : Array(Write::Outcome)) : Nil
@@ -71,7 +72,11 @@ module Pylon::Wire
     end
 
     def read_relocations(reader : Reader) : Array(Core::Relocation)
-      read_packed(reader, "the relocations payload") { |inner| Binary.read_relocations(inner) } || Array(Core::Relocation).new
+      found = read_packed(reader, "the relocations payload") do |inner|
+        Binary.read_relocations(inner)
+      end
+
+      found || Array(Core::Relocation).new
     end
 
     def read_contents(reader : Reader) : Contents
@@ -140,10 +145,16 @@ module Pylon::Wire
     end
 
     def read_outcomes(reader : Reader) : Array(Write::Outcome)
-      read_packed(reader, "the outcomes payload") { |inner| Binary.read_outcomes(inner) } || Array(Write::Outcome).new
+      found = read_packed(reader, "the outcomes payload") { |inner| Binary.read_outcomes(inner) }
+      found || Array(Write::Outcome).new
     end
 
-    def read_all(reader : Reader, codec : Compress::Codec, scratch : Bytes, limit : Int32 = Wire::MAX_CONTENT_BYTES) : Bytes?
+    def read_all(
+      reader : Reader,
+      codec : Compress::Codec,
+      scratch : Bytes,
+      limit : Int32 = Wire::MAX_CONTENT_BYTES,
+    ) : Bytes?
       content = Bytes.empty
       filled = 0
 
@@ -152,7 +163,9 @@ module Pylon::Wire
         in Nil
           break
         in Reader::Oversized
-          reader.fail("a chunk claims #{packed_size.claimed} packed bytes, over the #{scratch.size} limit")
+          reader.fail(
+            "a chunk claims #{packed_size.claimed} packed bytes, over the #{scratch.size} limit",
+          )
           break
         in Int32
         end
@@ -221,8 +234,12 @@ module Pylon::Wire
     private def pack(codec : Compress::Codec, source : Bytes, scratch : Bytes) : Bytes
       packed = codec.compress(source, scratch)
 
-      # An error here is a bug where the caller built mismatched buffers so we want to blow up loudly.
-      raise "compression into a bound-sized buffer failed, a caller passed mismatched buffers: #{packed.message}" if packed.is_a?(Compress::Error)
+      # An error here is a bug where the caller built mismatched buffers so we want to blow up
+      # loudly.
+      if packed.is_a?(Compress::Error)
+        raise "compression into a bound-sized buffer failed, a caller passed mismatched buffers: " \
+              "#{packed.message}"
+      end
 
       packed
     end

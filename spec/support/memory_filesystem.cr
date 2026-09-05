@@ -65,8 +65,9 @@ struct MemoryFilesystem
 
     mode =
       case node.kind
-      in Pylon::Scan::Metadata::Kind::Directory    then LibC::S_IFDIR | 0o755
-      in Pylon::Scan::Metadata::Kind::File         then LibC::S_IFREG | (node.executable ? 0o755 : 0o644)
+      in Pylon::Scan::Metadata::Kind::Directory then LibC::S_IFDIR | 0o755
+      in Pylon::Scan::Metadata::Kind::File
+        LibC::S_IFREG | (node.executable ? 0o755 : 0o644)
       in Pylon::Scan::Metadata::Kind::SymbolicLink then LibC::S_IFLNK | 0o777
       in Pylon::Scan::Metadata::Kind::Untracked    then LibC::S_IFIFO | 0o644
       end
@@ -94,7 +95,11 @@ struct MemoryFilesystem
     nil
   end
 
-  def digest(relative_path : String, buffer : Bytes = Bytes.empty, hasher : Digest::SHA256 = Digest::SHA256.new) : Bytes | Pylon::Problem
+  def digest(
+    relative_path : String,
+    buffer : Bytes = Bytes.empty,
+    hasher : Digest::SHA256 = Digest::SHA256.new,
+  ) : Bytes | Pylon::Problem
     node = @nodes[relative_path]
     return Pylon::Problem.new("could not be read (EACCES)") unless node.readable
 

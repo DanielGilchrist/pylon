@@ -15,7 +15,9 @@ describe "Pylon::Core purity" do
   it "performs no side effects" do
     offences = Array(String).new
 
-    Dir.glob(File.join(__DIR__, "..", "..", "..", "src", "pylon", "core", "**", "*.cr")).each do |path|
+    Dir.glob(
+      File.join(__DIR__, "..", "..", "..", "src", "pylon", "core", "**", "*.cr"),
+    ).each do |path|
       File.read_lines(path).each_with_index(1) do |line, number|
         FORBIDDEN.each do |pattern|
           next unless line.matches?(pattern)
@@ -26,6 +28,7 @@ describe "Pylon::Core purity" do
     end
 
     offences.should be_empty,
-      "the reconcile core must stay pure so it can be tested without a filesystem or network:\n#{offences.join("\n")}"
+      "the reconcile core must stay pure so it can be tested without a filesystem or " \
+      "network:\n#{offences.join("\n")}"
   end
 end

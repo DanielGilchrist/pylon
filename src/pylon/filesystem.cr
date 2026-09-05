@@ -113,7 +113,8 @@ module Pylon
     def snapshot(from : String, to : String) : Problem?
       Platform.select do
         macos do
-          return if LibClone.clonefile(from.check_no_null_byte, to.check_no_null_byte, LibClone::NOFOLLOW) == 0
+          source = from.check_no_null_byte
+          return if LibClone.clonefile(source, to.check_no_null_byte, LibClone::NOFOLLOW) == 0
 
           Problem.new("could not be cloned (#{Errno.value})")
         end

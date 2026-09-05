@@ -21,7 +21,10 @@ remote_root = File.join(work, "remote")
 Dir.mkdir_p(local_root)
 
 random = Random.new(SEED)
-words = %w[def end class module require include return case when nil true false property getter struct record alias]
+words = %w[
+  def end class module require include return case when
+  nil true false property getter struct record alias
+]
 total_bytes = 0_i64
 
 generated = Time.instant
@@ -31,18 +34,23 @@ files.times do |index|
   Dir.mkdir_p(directory)
 
   weight = random.rand(100)
-  lines = weight < 80 ? random.rand(10..80) : weight < 95 ? random.rand(80..1200) : random.rand(1200..20_000)
+  lines = weight < 80 ? random.rand(10..80) : weight < 95 ? random.rand(80..1200) : random.rand(
+    1200..20_000,
+  )
 
   File.open(File.join(directory, "file#{index}.cr"), "w") do |file|
     lines.times do |line|
-      file << words[random.rand(words.size)] << " item" << line << " " << words[random.rand(words.size)] << "\n"
+      file << words[random.rand(words.size)] << " item" << line << " " << words[random.rand(
+        words.size,
+      )] << "\n"
     end
   end
 
   total_bytes += File.size(File.join(directory, "file#{index}.cr"))
 end
 
-puts "tree:      #{files} files, #{(total_bytes / (1024.0 * 1024.0)).round(1)} MiB on the remote (generated in #{(Time.instant - generated).total_seconds.round(1)}s)"
+puts "tree:      #{files} files, #{(total_bytes / (1024.0 * 1024.0)).round(1)} MiB on the remote " \
+     "(generated in #{(Time.instant - generated).total_seconds.round(1)}s)"
 
 level = (ENV["BULK_COMPRESSION"]? || "1").to_i
 watch = ENV["BULK_WATCH"]? == "1"
@@ -52,12 +60,16 @@ opened =
     proxy = File.expand_path("../bin/latency_proxy", __DIR__)
 
     unless File.exists?(proxy)
-      STDERR.puts("build first: crystal build --release -o bin/latency_proxy bench/latency_proxy.cr")
+      STDERR.puts(
+        "build first: crystal build --release -o bin/latency_proxy bench/latency_proxy.cr",
+      )
       exit(1)
     end
 
     rate = ENV["BULK_RATE_BYTES"]? || "0"
-    Session::ProcessTransport.open(proxy, [latency || "0", rate, binary, "remote"]) { |line| STDERR.puts(line) }
+    Session::ProcessTransport.open(proxy, [latency || "0", rate, binary, "remote"]) do |line|
+      STDERR.puts(line)
+    end
   else
     Session::ProcessTransport.open(binary, ["remote"]) { |line| STDERR.puts(line) }
   end
@@ -69,10 +81,31 @@ transport =
   end
 
 left = Session::LocalEndpoint.new(local_root, Scan::Ignores::NONE, compression: level)
-right = Session::RemoteEndpoint.new(transport.reader, transport.writer, Pylon::Wire::Message::Configure.new(root: remote_root, ignores: Array(String).new, compression: level, brand: Pylon::Brand::DEFAULT, state: nil, watch: watch, known: nil), resume: nil)
+right = Session::RemoteEndpoint.new(
+  transport.reader,
+  transport.writer,
+  Pylon::Wire::Message::Configure.new(
+    root: remote_root,
+    ignores: Array(String).new,
+    compression: level,
+    brand: Pylon::Brand::DEFAULT,
+    state: nil,
+    watch: watch,
+    known: nil,
+  ),
+  resume: nil,
+)
 preferences = Core::Preferences.build(Array(String).new, Array(String).new)
 raise "expected empty preferences to build" if preferences.is_a?(Core::Preferences::Invalid)
-session = Session::Session.new(left, right, preferences: preferences, base: nil, dry_run: false, push_first: false, on_progress: nil)
+session = Session::Session.new(
+  left,
+  right,
+  preferences: preferences,
+  base: nil,
+  dry_run: false,
+  push_first: false,
+  on_progress: nil,
+)
 
 started = Time.instant
 report = session.cycle(Time.utc.to_unix_ns.to_i64)
@@ -82,14 +115,17 @@ elapsed = Time.instant - started
 applied = report.local_outcomes.count(&.applied?)
 skipped = report.local_outcomes.count { |outcome| !outcome.applied? }
 
-puts "bulk pull: #{elapsed.total_seconds.round(2)}s (#{(total_bytes / (1024.0 * 1024.0) / elapsed.total_seconds).round(1)} MiB/s)"
-puts "outcomes:  #{applied} applied, #{skipped} skipped, #{report.remote_outcomes.size} outgoing, #{report.conflicts.size} conflicts, halted=#{report.halted?}"
+puts "bulk pull: #{elapsed.total_seconds.round(2)}s " \
+     "(#{(total_bytes / (1024.0 * 1024.0) / elapsed.total_seconds).round(1)} MiB/s)"
+puts "outcomes:  #{applied} applied, #{skipped} skipped, #{report.remote_outcomes.size} " \
+     "outgoing, #{report.conflicts.size} conflicts, halted=#{report.halted?}"
 puts "roundtrip: #{right.exchanges} exchanges"
 
 verify_started = Time.instant
 second = session.cycle(Time.utc.to_unix_ns.to_i64)
 abort("the session faulted: #{second.explain}") if second.is_a?(Session::Fault)
-puts "verify:    converged=#{second.quiet?} (no-op cycle #{(Time.instant - verify_started).total_seconds.round(2)}s)"
+puts "verify:    converged=#{second.quiet?} (no-op cycle " \
+     "#{(Time.instant - verify_started).total_seconds.round(2)}s)"
 
 synced = Dir.glob(File.join(local_root, "**", "*")).count { |path| File.file?(path) }
 puts "local:     #{synced} files on disk"

@@ -50,9 +50,18 @@ module Pylon::Session
       end
     end
 
-    private def self.configured(configure : Wire::Message::Configure, input : IO, output : IO, log : IO) : Server
+    private def self.configured(
+      configure : Wire::Message::Configure,
+      input : IO,
+      output : IO,
+      log : IO,
+    ) : Server
       brand = configure.brand
-      endpoint = LocalEndpoint.new(configure.root, Scan::Ignores.new(configure.ignores), compression: configure.compression)
+      endpoint = LocalEndpoint.new(
+        configure.root,
+        Scan::Ignores.new(configure.ignores),
+        compression: configure.compression,
+      )
       resumable = nil
 
       if (state = configure.state)
@@ -62,7 +71,9 @@ module Pylon::Session
           resumable = restored.exchanged
         in Checkpoint::Absent
         in Checkpoint::Damaged
-          log.puts(brand.prefix("ignoring the sync state at #{state} (#{restored.reason}), scanning from scratch"))
+          log.puts(brand.prefix(
+            "ignoring the sync state at #{state} (#{restored.reason}), scanning from scratch",
+          ))
         end
 
         case (store = ContentStore.open("#{state}.content", configure.root))
@@ -76,12 +87,16 @@ module Pylon::Session
       subscriber = nil
 
       if configure.watch?
-        case (opened = Watch::Watcher.open(configure.root, configure.ignores, Channel(Nil).new(1), brand))
+        opened = Watch::Watcher.open(configure.root, configure.ignores, Channel(Nil).new(1), brand)
+
+        case opened
         in Watch::Any
           subscriber = opened
           endpoint.accelerate!
         in Watch::Unavailable
-          log.puts(brand.prefix("watching is unavailable on this side (#{opened.reason}), every cycle will rescan"))
+          log.puts(brand.prefix(
+            "watching is unavailable on this side (#{opened.reason}), every cycle will rescan",
+          ))
         end
       end
 
@@ -247,13 +262,15 @@ module Pylon::Session
           next unless reporting
 
           tally = @endpoint.tally
-          reporting = Wire::Message.write(@output, Wire::Message::ScanProgress.new(tally.files, tally.hashed_bytes)).nil?
+          progress = Wire::Message::ScanProgress.new(tally.files, tally.hashed_bytes)
+          reporting = Wire::Message.write(@output, progress).nil?
         end
       end
     end
 
     private def announce(current : Core::Entry?) : Problem?
-      Wire::Message.write(@output, Wire::Message::TreeAnnounce.new(Wire::Chunks.measure_entry(current)))
+      announcement = Wire::Message::TreeAnnounce.new(Wire::Chunks.measure_entry(current))
+      Wire::Message.write(@output, announcement)
     end
 
     private def open_with(current : Core::Entry?) : Problem?
@@ -263,7 +280,8 @@ module Pylon::Session
         return Wire::Message.write(@output, delta_since(resumable, current))
       end
 
-      announce(current) || Wire::Message.write(@output, Wire::Message::TreeUpdate.new(@sequence, current, live: live?))
+      update = Wire::Message::TreeUpdate.new(@sequence, current, live: live?)
+      announce(current) || Wire::Message.write(@output, update)
     end
 
     private def live? : Bool
@@ -289,11 +307,17 @@ module Pylon::Session
             drain
             current = scan_reporting(request.now_ns)
             @sent = current
-            announce(current) || Wire::Message.write(@output, Wire::Message::ScanResponse.new(current))
+            response = Wire::Message::ScanResponse.new(current)
+            announce(current) || Wire::Message.write(@output, response)
           end
         in Wire::Message::ContentsRequest
           @lock.synchronize do
-            source = @endpoint.content_source(request.digests, request.budget, request.signatures, Wire::Prefixed::Bases.new)
+            source = @endpoint.content_source(
+              request.digests,
+              request.budget,
+              request.signatures,
+              Wire::Prefixed::Bases.new,
+            )
             response = Wire::Message::ContentsResponse.new(source)
             Wire::Message.write(@output, response)
           end
@@ -309,7 +333,11 @@ module Pylon::Session
           end
         in Wire::Message::WriteRequest
           @lock.synchronize do
-            outcomes = @endpoint.write(request.changes, Wire::ContentSource::Materialised.new(request.contents), request.relocations)
+            outcomes = @endpoint.write(
+              request.changes,
+              Wire::ContentSource::Materialised.new(request.contents),
+              request.relocations,
+            )
             @sent = Core::Applier.apply(@sent, Write::Outcome.changes(outcomes)) unless @sent.nil?
             failed = Wire::Message.write(@output, Wire::Message::WriteResponse.new(outcomes))
             @checkpoints.try(&.save_if_due) if failed.nil?
@@ -327,7 +355,9 @@ module Pylon::Session
            Wire::Message::TreeAnnounce,
            Wire::Message::AvailabilityResponse
           @lock.synchronize do
-            failure = Wire::Message::Failure.new("the client sent a #{request.class.name} where a request was expected")
+            failure = Wire::Message::Failure.new(
+              "the client sent a #{request.class.name} where a request was expected",
+            )
             Wire::Message.write(@output, failure)
           end
 

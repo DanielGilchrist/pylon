@@ -73,7 +73,12 @@ describe Pylon::Wire::Chunks do
     io.rewind
 
     reader = Reader.new(io)
-    collected = Chunks.read_all(reader, Pylon::Compress::Zstd.new, Chunks.scratch, limit: Chunks::CHUNK_BYTES * 2)
+    collected = Chunks.read_all(
+      reader,
+      Pylon::Compress::Zstd.new,
+      Chunks.scratch,
+      limit: Chunks::CHUNK_BYTES * 2,
+    )
 
     collected.should be_nil
     reader.failed?.should be_true

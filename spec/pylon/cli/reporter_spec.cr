@@ -11,10 +11,18 @@ private def report_of(
   Pylon::Session::Report.new(conflicts, local, remote, troubles, halt)
 end
 
-private def rendered(report : Pylon::Session::Report, verbose = false, dry_run = false, elapsed : Time::Span? = nil) : String
+private def rendered(
+  report : Pylon::Session::Report,
+  verbose = false,
+  dry_run = false,
+  elapsed : Time::Span? = nil,
+) : String
   Colorize.enabled = false
   io = IO::Memory.new
-  Pylon::CLI::Reporter.new(io, verbose, dry_run, brand: Pylon::Brand::DEFAULT).report(report, elapsed)
+  Pylon::CLI::Reporter.new(io, verbose, dry_run, brand: Pylon::Brand::DEFAULT).report(
+    report,
+    elapsed,
+  )
   io.to_s
 end
 
@@ -26,7 +34,10 @@ private def removed(path : String) : Pylon::Write::Outcome
   Pylon::Write::Outcome.new(path, nil)
 end
 
-private def skipped(path : String, reason : Pylon::Write::Skipped = Pylon::Write::ModificationDetected.new) : Pylon::Write::Outcome
+private def skipped(
+  path : String,
+  reason : Pylon::Write::Skipped = Pylon::Write::ModificationDetected.new,
+) : Pylon::Write::Outcome
   Pylon::Write::Outcome.new(path, nil, reason)
 end
 
@@ -34,8 +45,17 @@ private def moved(from : String, to : String) : Pylon::Core::Relocation
   Pylon::Core::Relocation.new(from, to, Fixtures.directory!(Fixtures.d1))
 end
 
-private def report_with_moves(remote : Array(Pylon::Write::Outcome), moves : Array(Pylon::Core::Relocation)) : Pylon::Session::Report
-  Pylon::Session::Report.new(Array(Conflict).new, Array(Pylon::Write::Outcome).new, remote, Array(Trouble).new, remote_relocations: moves)
+private def report_with_moves(
+  remote : Array(Pylon::Write::Outcome),
+  moves : Array(Pylon::Core::Relocation),
+) : Pylon::Session::Report
+  Pylon::Session::Report.new(
+    Array(Conflict).new,
+    Array(Pylon::Write::Outcome).new,
+    remote,
+    Array(Trouble).new,
+    remote_relocations: moves,
+  )
 end
 
 private def reporter_waiting_on_the_remote(inbound : Pylon::Session::Inbound) : Pylon::CLI::Reporter
@@ -53,7 +73,9 @@ describe "the startup status line" do
   it "says the remote has not spoken yet" do
     inbound = Pylon::Session::Inbound.new
 
-    reporter_waiting_on_the_remote(inbound).scan_status.should eq("waiting for the remote · 100 files here")
+    reporter_waiting_on_the_remote(inbound).scan_status.should eq(
+      "waiting for the remote · 100 files here",
+    )
   end
 
   it "relays the remote scan's counters" do
@@ -62,7 +84,9 @@ describe "the startup status line" do
     reporter_waiting_on_the_remote(inbound).scan_status.should eq("remote scanning · 1234 files")
 
     inbound.scanning(1234_i64, 3_i64 * 1024 * 1024)
-    reporter_waiting_on_the_remote(inbound).scan_status.should eq("remote scanning · 1234 files · 3.0 MiB hashed")
+    reporter_waiting_on_the_remote(inbound).scan_status.should eq(
+      "remote scanning · 1234 files · 3.0 MiB hashed",
+    )
   end
 
   it "shows how much of the announced tree has arrived" do
@@ -71,7 +95,9 @@ describe "the startup status line" do
     inbound.announced(2_u32 * 1024 * 1024)
     inbound.meter.add(512 * 1024)
 
-    reporter_waiting_on_the_remote(inbound).scan_status.should start_with("receiving the remote tree · 512 KiB of 2.0 MiB")
+    reporter_waiting_on_the_remote(inbound).scan_status.should start_with(
+      "receiving the remote tree · 512 KiB of 2.0 MiB",
+    )
   end
 
   it "never reports more of the tree than was announced" do
@@ -79,7 +105,9 @@ describe "the startup status line" do
     inbound.announced(1024_u32)
     inbound.meter.add(5000)
 
-    reporter_waiting_on_the_remote(inbound).scan_status.should start_with("receiving the remote tree · 1 KiB of 1 KiB")
+    reporter_waiting_on_the_remote(inbound).scan_status.should start_with(
+      "receiving the remote tree · 1 KiB of 1 KiB",
+    )
   end
 end
 
@@ -143,7 +171,9 @@ describe Pylon::CLI::Reporter do
   end
 
   it "explains a conflict rather than just counting it" do
-    output = rendered(report_of(conflicts: [Conflict.new("db/structure.sql", Changes.new, Changes.new)]))
+    output = rendered(
+      report_of(conflicts: [Conflict.new("db/structure.sql", Changes.new, Changes.new)]),
+    )
 
     output.should contain("conflict")
     output.should contain("db/structure.sql")
@@ -151,7 +181,9 @@ describe Pylon::CLI::Reporter do
   end
 
   it "groups a flood of conflicts by directory" do
-    conflicts = Array.new(30) { |index| Conflict.new("config/locales/translation.#{index}.yml", Changes.new, Changes.new) }
+    conflicts = Array.new(30) do |index|
+      Conflict.new("config/locales/translation.#{index}.yml", Changes.new, Changes.new)
+    end
 
     output = rendered(report_of(conflicts: conflicts))
 
@@ -207,7 +239,12 @@ describe Pylon::CLI::Reporter do
 
   it "counts the directories it does not name in a summary" do
     outcomes = (1..40).flat_map do |index|
-      [applied("app/f#{index}.rb"), applied("lib/f#{index}.rb"), applied("db/f#{index}.rb"), applied("bin/f#{index}.rb")]
+      [
+        applied("app/f#{index}.rb"),
+        applied("lib/f#{index}.rb"),
+        applied("db/f#{index}.rb"),
+        applied("bin/f#{index}.rb"),
+      ]
     end
 
     output = rendered(report_of(remote: outcomes.to_a))
@@ -217,7 +254,9 @@ describe Pylon::CLI::Reporter do
   end
 
   it "does not claim more directories when it named them all" do
-    outcomes = (1..20).flat_map { |index| [applied("app/f#{index}.rb"), applied("lib/f#{index}.rb")] }
+    outcomes = (1..20).flat_map do |index|
+      [applied("app/f#{index}.rb"), applied("lib/f#{index}.rb")]
+    end
 
     output = rendered(report_of(remote: outcomes.to_a))
 
@@ -225,7 +264,10 @@ describe Pylon::CLI::Reporter do
   end
 
   it "names a move once rather than as a removal and a write" do
-    report = report_with_moves([removed("lib"), Pylon::Write::Outcome.new("moved", Fixtures.d1)], [moved("lib", "moved")])
+    report = report_with_moves(
+      [removed("lib"), Pylon::Write::Outcome.new("moved", Fixtures.d1)],
+      [moved("lib", "moved")],
+    )
 
     output = rendered(report)
 
@@ -245,7 +287,10 @@ describe Pylon::CLI::Reporter do
   end
 
   it "previews a move as a move" do
-    output = rendered(report_with_moves(Array(Pylon::Write::Outcome).new, [moved("lib", "moved")]), dry_run: true)
+    output = rendered(
+      report_with_moves(Array(Pylon::Write::Outcome).new, [moved("lib", "moved")]),
+      dry_run: true,
+    )
 
     output.should contain("move")
     output.should contain("lib → moved")
@@ -296,7 +341,14 @@ describe Pylon::CLI::Reporter do
     output = IO::Memory.new
     errors = IO::Memory.new
 
-    Pylon::CLI::Reporter.new(output, false, false, errors: errors, brand: Pylon::Brand::DEFAULT).failed("the remote server stopped")
+    reporter = Pylon::CLI::Reporter.new(
+      output,
+      false,
+      false,
+      errors: errors,
+      brand: Pylon::Brand::DEFAULT,
+    )
+    reporter.failed("the remote server stopped")
 
     errors.to_s.should eq("pylon: the remote server stopped\n")
     output.to_s.should be_empty
@@ -306,14 +358,22 @@ describe Pylon::CLI::Reporter do
     Colorize.enabled = false
     output = IO::Memory.new
     errors = IO::Memory.new
-    reporter = Pylon::CLI::Reporter.new(output, false, false, errors: errors, brand: Pylon::Brand.new("Test Sync"))
+    reporter = Pylon::CLI::Reporter.new(
+      output,
+      false,
+      false,
+      errors: errors,
+      brand: Pylon::Brand.new("Test Sync"),
+    )
 
     reporter.starting("./app", "user@host:/srv/app")
     reporter.warn("the state file was ignored")
     reporter.failed("the remote server stopped")
 
     output.to_s.should contain("Test Sync app → user@host:/srv/app")
-    errors.to_s.should eq("Test Sync: the state file was ignored\nTest Sync: the remote server stopped\n")
+    errors.to_s.should eq(
+      "Test Sync: the state file was ignored\nTest Sync: the remote server stopped\n",
+    )
   end
 
   it "passes a remote line through to the error stream" do
@@ -321,7 +381,14 @@ describe Pylon::CLI::Reporter do
     output = IO::Memory.new
     errors = IO::Memory.new
 
-    Pylon::CLI::Reporter.new(output, false, false, errors: errors, brand: Pylon::Brand::DEFAULT).relay("sh: pylon: not found")
+    reporter = Pylon::CLI::Reporter.new(
+      output,
+      false,
+      false,
+      errors: errors,
+      brand: Pylon::Brand::DEFAULT,
+    )
+    reporter.relay("sh: pylon: not found")
 
     errors.to_s.should contain("remote sh: pylon: not found")
     output.to_s.should be_empty

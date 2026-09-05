@@ -27,7 +27,9 @@ describe Pylon::Core::Safety do
   end
 
   it "allows a root change that keeps its type" do
-    bigger = Pylon::Core::Directory.new({"a" => Fixtures.f1, "b" => Fixtures.f2, "c" => Fixtures.f1})
+    bigger = Pylon::Core::Directory.new(
+      {"a" => Fixtures.f1, "b" => Fixtures.f2, "c" => Fixtures.f1},
+    )
 
     Safety.check(Changes[Change.new("", populated, bigger)]).should be_nil
   end

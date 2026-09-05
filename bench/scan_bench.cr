@@ -20,7 +20,17 @@ filesystem = Pylon::Disk.new(root)
 puts "root: #{root} (parallelism #{parallelism})"
 
 started = Time.instant
-cold = Scanner.new(filesystem, Cache.new, now, IGNORES, baseline: nil, recheck: Set(String).new, tally: Tally.new, keeper: Pylon::Discard.new, parallelism: parallelism).scan
+cold = Scanner.new(
+  filesystem,
+  Cache.new,
+  now,
+  IGNORES,
+  baseline: nil,
+  recheck: Set(String).new,
+  tally: Tally.new,
+  keeper: Pylon::Discard.new,
+  parallelism: parallelism,
+).scan
 cold_elapsed = Time.instant - started
 
 files = cold.cache.size
@@ -32,7 +42,16 @@ puts "bytes hashed: #{bytes // 1_048_576} MiB"
 puts "cold scan:    #{cold_elapsed.total_milliseconds.round(1)} ms"
 
 started = Time.instant
-warm = Scanner.new(filesystem, cold.cache, now + 60_000_000_000_i64, IGNORES, baseline: nil, recheck: Set(String).new, tally: Tally.new, keeper: Pylon::Discard.new).scan
+warm = Scanner.new(
+  filesystem,
+  cold.cache,
+  now + 60_000_000_000_i64,
+  IGNORES,
+  baseline: nil,
+  recheck: Set(String).new,
+  tally: Tally.new,
+  keeper: Pylon::Discard.new,
+).scan
 warm_elapsed = Time.instant - started
 
 puts "warm scan:    #{warm_elapsed.total_milliseconds.round(1)} ms"
@@ -44,5 +63,8 @@ base = cold.root.try(&.syncable)
 preferences = Pylon::Core::Preferences.build(Array(String).new, Array(String).new)
 raise "expected empty preferences to build" if preferences.is_a?(Pylon::Core::Preferences::Invalid)
 reconciliation = Reconciler.reconcile(base, cold.root, warm.root, preferences)
-quiet = reconciliation.local_changes.empty? && reconciliation.remote_changes.empty? && reconciliation.conflicts.empty?
-puts "reconcile:    #{(Time.instant - started).total_milliseconds.round(2)} ms (#{quiet ? "no changes" : "changes"})"
+quiet = reconciliation.local_changes.empty? &&
+        reconciliation.remote_changes.empty? &&
+        reconciliation.conflicts.empty?
+puts "reconcile:    #{(Time.instant - started).total_milliseconds.round(2)} ms " \
+     "(#{quiet ? "no changes" : "changes"})"

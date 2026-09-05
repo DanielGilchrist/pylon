@@ -50,10 +50,16 @@ struct Pylon::CLI
     @[Kebab::Option(description: "zstd level for content sent over the link, both directions")]
     getter compression : Int32 = DEFAULT_COMPRESSION
 
-    @[Kebab::Option(description: "Conflicts matching this glob keep this machine's copy, repeatable, . is the fallback")]
+    @[Kebab::Option(
+      description: "Conflicts matching this glob keep this machine's copy, repeatable, . is the " \
+                   "fallback",
+    )]
     getter prefer_local : Array(String) = Array(String).new
 
-    @[Kebab::Option(description: "Conflicts matching this glob keep the remote's copy, repeatable, . is the fallback")]
+    @[Kebab::Option(
+      description: "Conflicts matching this glob keep the remote's copy, repeatable, . is the " \
+                   "fallback",
+    )]
     getter prefer_remote : Array(String) = Array(String).new
 
     @[Kebab::Option(short: 'w', description: "Keep running and sync on every change")]
@@ -65,7 +71,10 @@ struct Pylon::CLI
     @[Kebab::Option(short: 'v', description: "Explain every skipped path")]
     getter? verbose : Bool = false
 
-    @[Kebab::Option(converter: BrandConverter, description: "Name to show in output instead of pylon")]
+    @[Kebab::Option(
+      converter: BrandConverter,
+      description: "Name to show in output instead of pylon",
+    )]
     getter brand : Brand = Brand::DEFAULT
 
     def run : Nil
@@ -130,9 +139,13 @@ struct Pylon::CLI
         )
 
         checkpoints = state.try do |path|
+          build = -> : Session::Checkpoint do
+            Session::Checkpoint.new(session.base, left.cache, remote_endpoint.tree)
+          end
+
           Session::Checkpoint::Schedule.new(
             path,
-            -> : Session::Checkpoint { Session::Checkpoint.new(session.base, left.cache, remote_endpoint.tree) },
+            build,
             on_problem: ->(problem : String) : Nil { reporter.warn(problem) },
           )
         end
@@ -200,10 +213,17 @@ struct Pylon::CLI
       subscriber.close
     end
 
-    private def report_fault(reporter : Reporter, fault : Session::Fault, target : Target) : NoReturn
+    private def report_fault(
+      reporter : Reporter,
+      fault : Session::Fault,
+      target : Target,
+    ) : NoReturn
       case fault
       in Session::Stopped
-        fail_with(reporter, "#{fault.explain}. Check that #{remote_binary.inspect} exists on #{target.host}")
+        fail_with(
+          reporter,
+          "#{fault.explain}. Check that #{remote_binary.inspect} exists on #{target.host}",
+        )
       in Session::Incompatible, Session::Misbehaved
         fail_with(reporter, fault.explain)
       end
@@ -230,7 +250,9 @@ struct Pylon::CLI
       in Session::Checkpoint::Absent
         Session::Checkpoint.new
       in Session::Checkpoint::Damaged
-        reporter.warn("ignoring the sync state at #{path} (#{loaded.reason}), scanning from scratch")
+        reporter.warn(
+          "ignoring the sync state at #{path} (#{loaded.reason}), scanning from scratch",
+        )
         Session::Checkpoint.new
       end
     end
@@ -240,7 +262,10 @@ struct Pylon::CLI
       exit(1)
     end
 
-    private def configuration(remote_root : String, exchanged : Core::Entry?) : Wire::Message::Configure
+    private def configuration(
+      remote_root : String,
+      exchanged : Core::Entry?,
+    ) : Wire::Message::Configure
       Wire::Message::Configure.new(
         root: remote_root,
         ignores: ignore,

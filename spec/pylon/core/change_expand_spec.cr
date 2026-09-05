@@ -1,8 +1,17 @@
 require "../../spec_helper"
 require "../../../src/pylon/core/change"
 
-private CONTENTS = {nil, Fixtures.f1, Fixtures.f2, Fixtures.f1x, Fixtures.symlink_relative, Fixtures.symlink_absolute, Fixtures.untracked, Fixtures.problematic}
-private NAMES    = {"a", "b"}
+private CONTENTS = {
+  nil,
+  Fixtures.f1,
+  Fixtures.f2,
+  Fixtures.f1x,
+  Fixtures.symlink_relative,
+  Fixtures.symlink_absolute,
+  Fixtures.untracked,
+  Fixtures.problematic,
+}
+private NAMES = {"a", "b"}
 
 private def random_entry(random : Random, depth : Int32) : Entry?
   return CONTENTS[random.rand(CONTENTS.size)] if depth <= 0 || random.rand(3) == 0
@@ -29,7 +38,9 @@ describe "expanding changes" do
   end
 
   it "turns a subtree into one change per entry" do
-    subtree = Pylon::Core::Directory.new({"models" => Pylon::Core::Directory.new({"user.rb" => Fixtures.f1})})
+    subtree = Pylon::Core::Directory.new(
+      {"models" => Pylon::Core::Directory.new({"user.rb" => Fixtures.f1})},
+    )
 
     expanded = Changes.expand([Change.new("app", nil, subtree)])
 

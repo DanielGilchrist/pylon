@@ -25,7 +25,8 @@ module Pylon::Scan
       false
     end
 
-    # We hard reject syncing transient files like swap files and the like, maybe make this configurable later?
+    # We hard reject syncing transient files like swap files and the like, maybe make this
+    # configurable later?
     private def transient?(relative_path : String) : Bool
       separator = relative_path.rindex('/')
       name = separator ? relative_path[(separator + 1)..] : relative_path

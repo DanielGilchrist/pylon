@@ -31,7 +31,11 @@ describe Pylon::Core::Relocation do
   end
 
   it "leaves a tree that differs from the deleted one as a delete and a create" do
-    grown = Fixtures.dir({"a.rb" => Fixtures.f1, "deep" => Fixtures.dir({"b.rb" => Fixtures.f2}), "c.rb" => Fixtures.f1})
+    grown = Fixtures.dir(
+      {"a.rb" => Fixtures.f1, "deep" => Fixtures.dir(
+        {"b.rb" => Fixtures.f2},
+      ), "c.rb" => Fixtures.f1},
+    )
     changes = Changes[Change.new("lib", tree, nil), Change.new("moved", nil, grown)]
 
     extraction = Relocation.extract(changes)
@@ -41,13 +45,17 @@ describe Pylon::Core::Relocation do
   end
 
   it "does not pair a file whose mode changed on the way" do
-    extraction = Relocation.extract(Changes[Change.new("a.rb", Fixtures.f1, nil), Change.new("b.rb", nil, Fixtures.f1x)])
+    extraction = Relocation.extract(
+      Changes[Change.new("a.rb", Fixtures.f1, nil), Change.new("b.rb", nil, Fixtures.f1x)],
+    )
 
     extraction.relocations.should be_empty
   end
 
   it "never treats a replacement as a move" do
-    extraction = Relocation.extract(Changes[Change.new("a.rb", Fixtures.f1, Fixtures.f2), Change.new("b.rb", nil, Fixtures.f1)])
+    extraction = Relocation.extract(
+      Changes[Change.new("a.rb", Fixtures.f1, Fixtures.f2), Change.new("b.rb", nil, Fixtures.f1)],
+    )
 
     extraction.relocations.should be_empty
   end
@@ -74,7 +82,11 @@ describe Pylon::Core::Relocation do
   end
 
   it "leaves a rename that changes only the letter case to the delete-first path" do
-    changes = Changes[Change.new("Readme.md", Fixtures.f1, nil), Change.new("README.md", nil, Fixtures.f1)]
+    changes = Changes[Change.new("Readme.md", Fixtures.f1, nil), Change.new(
+      "README.md",
+      nil,
+      Fixtures.f1,
+    )]
 
     extraction = Relocation.extract(changes)
 

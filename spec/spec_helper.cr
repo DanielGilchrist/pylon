@@ -5,7 +5,11 @@ require "./support/entries"
 include Pylon::Core
 
 def local_endpoint(root : String) : Pylon::Session::LocalEndpoint
-  Pylon::Session::LocalEndpoint.new(root, Pylon::Scan::Ignores::NONE, compression: Pylon::Compress::Zstd::DEFAULT_LEVEL)
+  Pylon::Session::LocalEndpoint.new(
+    root,
+    Pylon::Scan::Ignores::NONE,
+    compression: Pylon::Compress::Zstd::DEFAULT_LEVEL,
+  )
 end
 
 def build_session(
@@ -48,7 +52,8 @@ record ReconcileCase,
   troubles : Array(Trouble) = Array(Trouble).new
 
 def assert_changes(actual : Changes, expected : Changes, label : String) : Nil
-  actual.size.should eq(expected.size), "#{label}: expected #{expected.size} change(s), got #{actual.size}"
+  actual.size.should eq(expected.size), "#{label}: expected #{expected.size} change(s), got " \
+                                        "#{actual.size}"
 
   by_path = expected.to_h { |change| {change.path, change} }
 

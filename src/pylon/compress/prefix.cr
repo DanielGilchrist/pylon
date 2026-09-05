@@ -33,9 +33,13 @@ module Pylon::Compress
 
     def decompress(frame : Bytes, prefix : Bytes, limit : Int32) : Bytes | Error
       size = declared_size(frame)
-      return Error.new("the frame does not declare its content size") if size == CONTENT_SIZE_UNKNOWN
+      if size == CONTENT_SIZE_UNKNOWN
+        return Error.new("the frame does not declare its content size")
+      end
       return Error.new("the frame header is invalid") if size == CONTENT_SIZE_ERROR
-      return Error.new("the frame claims #{size} bytes, over the #{limit} byte limit") if size > limit
+      if size > limit
+        return Error.new("the frame claims #{size} bytes, over the #{limit} byte limit")
+      end
 
       if (error = configure_decompressor(prefix))
         return error
@@ -49,14 +53,23 @@ module Pylon::Compress
 
       tune(LibZstd::CParameter::CompressionLevel, LEVEL) ||
         tune(LibZstd::CParameter::WindowLog, window_log) ||
-        tune(LibZstd::CParameter::EnableLongDistanceMatching, window_log >= WINDOW_LOG_MAX ? 1 : 0) ||
+        tune(
+          LibZstd::CParameter::EnableLongDistanceMatching,
+          window_log >= WINDOW_LOG_MAX ? 1 : 0,
+        ) ||
         reference_for_compression(prefix)
     end
 
     private def configure_decompressor(prefix : Bytes) : Error?
       LibZstd.dctx_reset(@decompressor, LibZstd::ResetDirective::SessionOnly)
 
-      Error.from_zstd(LibZstd.dctx_set_parameter(@decompressor, LibZstd::DParameter::WindowLogMax, WINDOW_LOG_MAX)) ||
+      Error.from_zstd(
+        LibZstd.dctx_set_parameter(
+          @decompressor,
+          LibZstd::DParameter::WindowLogMax,
+          WINDOW_LOG_MAX,
+        ),
+      ) ||
         reference_for_decompression(prefix)
     end
 
@@ -69,11 +82,23 @@ module Pylon::Compress
     end
 
     private def reference_for_compression(prefix : Bytes) : Error?
-      Error.from_zstd(LibZstd.cctx_ref_prefix(@compressor, prefix.to_unsafe.as(Void*), LibC::SizeT.new(prefix.size)))
+      Error.from_zstd(
+        LibZstd.cctx_ref_prefix(
+          @compressor,
+          prefix.to_unsafe.as(Void*),
+          LibC::SizeT.new(prefix.size),
+        ),
+      )
     end
 
     private def reference_for_decompression(prefix : Bytes) : Error?
-      Error.from_zstd(LibZstd.dctx_ref_prefix(@decompressor, prefix.to_unsafe.as(Void*), LibC::SizeT.new(prefix.size)))
+      Error.from_zstd(
+        LibZstd.dctx_ref_prefix(
+          @decompressor,
+          prefix.to_unsafe.as(Void*),
+          LibC::SizeT.new(prefix.size),
+        ),
+      )
     end
 
     private def declared_size(frame : Bytes) : UInt64

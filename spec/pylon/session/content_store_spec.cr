@@ -75,7 +75,9 @@ describe Pylon::Session::ContentStore do
     in_store do |tree, _, directory|
       kept = Array.new(3) { |index| place(tree, "kept#{index}", "kept #{index}") }
       kept.each { |digest| File.write(File.join(directory, digest.hexstring), "") }
-      (ContentStore::ORPHAN_LIMIT + 5).times { |index| File.write(File.join(directory, Digest::SHA256.hexdigest(index.to_s)), "") }
+      (ContentStore::ORPHAN_LIMIT + 5).times do |index|
+        File.write(File.join(directory, Digest::SHA256.hexdigest(index.to_s)), "")
+      end
 
       reopened = ContentStore.open(directory, tree)
       raise "the store could not be reopened" if reopened.is_a?(ContentStore::Unavailable)

@@ -37,3 +37,9 @@ Typing/MethodReturnTypeRestriction:
 
 Metrics/CyclomaticComplexity:
   Enabled: false
+
+Layout/LineLength:
+  Enabled: true
+  MaxLength: 100
+  Excluded:
+    - lint/spec/**/*.cr

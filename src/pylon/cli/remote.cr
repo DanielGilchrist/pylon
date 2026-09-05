@@ -3,7 +3,9 @@ require "../problem"
 require "../session/server"
 
 struct Pylon::CLI
-  @[Kebab::Command(summary: "Run the remote end of a sync. The client starts this over ssh and configures it")]
+  @[Kebab::Command(
+    summary: "Run the remote end of a sync. The client starts this over ssh and configures it",
+  )]
   struct Remote
     include Kebab::Parseable
 

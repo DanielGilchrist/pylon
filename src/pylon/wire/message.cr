@@ -63,7 +63,9 @@ module Pylon::Wire
         byte
       in UInt8
         tag = Tag.from_value?(byte)
-        return Invalid.new("unknown message tag #{byte}, both sides must run the same version") if tag.nil?
+        if tag.nil?
+          return Invalid.new("unknown message tag #{byte}, both sides must run the same version")
+        end
 
         reader = Reader.new(io)
         reader.result(decode(tag, reader))
@@ -113,7 +115,11 @@ module Pylon::Wire
     end
 
     private def read_write_request(reader : Reader) : WriteRequest
-      WriteRequest.new(Chunks.read_changes(reader), Chunks.read_relocations(reader), Chunks.read_contents(reader))
+      WriteRequest.new(
+        Chunks.read_changes(reader),
+        Chunks.read_relocations(reader),
+        Chunks.read_contents(reader),
+      )
     end
 
     private def read_tree_update(reader : Reader) : TreeUpdate
@@ -145,7 +151,9 @@ module Pylon::Wire
       state = reader.string?
       watch = reader.bool
       known = reader.bytes?
-      reader.fail("the known tree fingerprint has the wrong length") if known && known.size != DIGEST_BYTES
+      if known && known.size != DIGEST_BYTES
+        reader.fail("the known tree fingerprint has the wrong length")
+      end
 
       Configure.new(
         root: root,

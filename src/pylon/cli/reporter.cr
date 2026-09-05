@@ -15,7 +15,14 @@ struct Pylon::CLI
     @scan : Scan::Tally? = nil
     @inbound : Session::Inbound? = nil
 
-    def initialize(@io : IO, @verbose : Bool, @dry_run : Bool, @errors : IO = STDERR, *, @brand : Brand) : Nil
+    def initialize(
+      @io : IO,
+      @verbose : Bool,
+      @dry_run : Bool,
+      @errors : IO = STDERR,
+      *,
+      @brand : Brand,
+    ) : Nil
       @announced = Set(String).new
       @announced_troubles = Set(String).new
       @spinner = Spinner.new(@io)
@@ -34,7 +41,8 @@ struct Pylon::CLI
 
     def starting(local : String, remote : String) : Nil
       @io.puts
-      @io.puts "#{@brand.name.colorize.bold} #{File.basename(local).colorize.cyan} #{"→".colorize.dark_gray} #{remote.colorize.cyan}"
+      @io.puts "#{@brand.name.colorize.bold} #{File.basename(local).colorize.cyan} " \
+               "#{"→".colorize.dark_gray} #{remote.colorize.cyan}"
 
       if @io.tty?
         @spinner.show { scan_status }
@@ -82,7 +90,8 @@ struct Pylon::CLI
     def ready(elapsed : Time::Span, watching : Int32) : Nil
       clear_progress
 
-      @io.puts "#{indent}#{"ready".colorize.green.bold} #{"·".colorize.dark_gray} #{watching} files in sync #{"·".colorize.dark_gray} #{format(elapsed)}"
+      @io.puts "#{indent}#{"ready".colorize.green.bold} #{"·".colorize.dark_gray} #{watching} " \
+               "files in sync #{"·".colorize.dark_gray} #{format(elapsed)}"
       @io.puts "#{indent}#{"watching for changes, ctrl-c to stop".colorize.dark_gray}"
       @io.puts
     end
@@ -143,7 +152,12 @@ struct Pylon::CLI
       in Session::Inbound::Connecting
         "waiting for the remote · #{scan.files} files here"
       in Session::Inbound::RemoteScanning
-        hashed = phase.hashed_bytes.zero? ? "" : " · #{mebibytes(phase.hashed_bytes.to_u64)} MiB hashed"
+        hashed =
+          if phase.hashed_bytes.zero?
+            ""
+          else
+            " · #{mebibytes(phase.hashed_bytes.to_u64)} MiB hashed"
+          end
         "remote scanning · #{phase.files} files#{hashed}"
       in Session::Inbound::ReceivingTree
         receiving(inbound.received(phase), phase)
@@ -189,7 +203,12 @@ struct Pylon::CLI
       total = @progress.try(&.total_bytes)
       volume = total ? "#{sent}/#{mebibytes(total)}" : sent
       elapsed = (Time.instant - @started).total_seconds
-      rate = elapsed > 0.5 ? " at #{(@streamed_bytes / (1024.0 * 1024.0) / elapsed).round(1)} MiB/s" : ""
+      rate =
+        if elapsed > 0.5
+          " at #{(@streamed_bytes / (1024.0 * 1024.0) / elapsed).round(1)} MiB/s"
+        else
+          ""
+        end
 
       " · #{volume} MiB#{rate}"
     end
@@ -207,7 +226,8 @@ struct Pylon::CLI
 
       if fresh.size > SUMMARISE_OVER && !@verbose
         location = busiest(fresh)
-        @io.puts "#{indent}#{"!".colorize.yellow.bold} #{"#{fresh.size} conflicts".colorize.yellow} #{location.colorize.dark_gray}"
+        @io.puts "#{indent}#{"!".colorize.yellow.bold} " \
+                 "#{"#{fresh.size} conflicts".colorize.yellow} #{location.colorize.dark_gray}"
       else
         fresh.each do |root|
           @io.puts "#{indent}#{"!".colorize.yellow.bold} #{"conflict".colorize.yellow} #{root}"
@@ -215,14 +235,18 @@ struct Pylon::CLI
       end
 
       unless fresh.empty?
-        @io.puts "#{indent}  #{"both sides changed since the last sync; decide with --prefer-local and --prefer-remote globs".colorize.dark_gray}"
+        advice = "both sides changed since the last sync; " \
+                 "decide with --prefer-local and --prefer-remote globs"
+        @io.puts "#{indent}  #{advice.colorize.dark_gray}"
       end
 
       if cleared.size > SUMMARISE_OVER && !@verbose
-        @io.puts "#{indent}#{"✓".colorize.green} #{"#{cleared.size} conflicts resolved".colorize.dark_gray}"
+        @io.puts "#{indent}#{"✓".colorize.green} " \
+                 "#{"#{cleared.size} conflicts resolved".colorize.dark_gray}"
       else
         cleared.each do |root|
-          @io.puts "#{indent}#{"✓".colorize.green} #{"conflict resolved".colorize.dark_gray} #{root}"
+          @io.puts "#{indent}#{"✓".colorize.green} #{"conflict resolved".colorize.dark_gray} " \
+                   "#{root}"
         end
       end
 
@@ -240,7 +264,9 @@ struct Pylon::CLI
         next if @announced_troubles.includes?(key)
 
         where = trouble.side.remote? ? " on the remote" : ""
-        @io.puts "#{indent}#{"!".colorize.yellow.bold} #{"cannot sync#{where}".colorize.yellow} #{trouble.path} #{"(#{trouble.reason}; it will not sync until this is fixed)".colorize.dark_gray}"
+        @io.puts "#{indent}#{"!".colorize.yellow.bold} #{"cannot sync#{where}".colorize.yellow} " \
+                 "#{trouble.path} " \
+                 "#{"(#{trouble.reason}; it will not sync until this is fixed)".colorize.dark_gray}"
         spoke = true
       end
 
@@ -248,33 +274,46 @@ struct Pylon::CLI
       spoke
     end
 
-    private def show(arrow : String, colour : Colorize::ColorANSI, outcomes : Array(Write::Outcome), relocations : Array(Core::Relocation)) : Nil
+    private def show(
+      arrow : String,
+      colour : Colorize::ColorANSI,
+      outcomes : Array(Write::Outcome),
+      relocations : Array(Core::Relocation),
+    ) : Nil
       return if outcomes.empty? && relocations.empty?
 
       relocated = Set(String).new(initial_capacity: relocations.size * 2)
       relocations.each { |relocation| relocated << relocation.from << relocation.to }
 
-      written = outcomes.select { |outcome| outcome.entry.is_a?(Core::File) && !relocated.includes?(outcome.path) }
-      deleted = outcomes.select { |outcome| outcome.entry.nil? && !relocated.includes?(outcome.path) }
+      written = outcomes.select do |outcome|
+        outcome.entry.is_a?(Core::File) && !relocated.includes?(outcome.path)
+      end
+      deleted = outcomes.select do |outcome|
+        outcome.entry.nil? && !relocated.includes?(outcome.path)
+      end
 
       if outcomes.size > SUMMARISE_OVER && !@verbose
         unless written.empty?
-          @io.puts "#{indent}#{arrow.colorize(colour)} #{written.size} files #{summarise(written).colorize.dark_gray}"
+          @io.puts "#{indent}#{arrow.colorize(colour)} #{written.size} files " \
+                   "#{summarise(written).colorize.dark_gray}"
         end
 
         unless deleted.empty?
-          @io.puts "#{indent}#{arrow.colorize(colour)} #{"#{deleted.size} removed".colorize.dark_gray}"
+          @io.puts "#{indent}#{arrow.colorize(colour)} " \
+                   "#{"#{deleted.size} removed".colorize.dark_gray}"
         end
 
         unless relocations.empty?
-          @io.puts "#{indent}#{arrow.colorize(colour)} #{"#{relocations.size} moved".colorize.dark_gray}"
+          @io.puts "#{indent}#{arrow.colorize(colour)} " \
+                   "#{"#{relocations.size} moved".colorize.dark_gray}"
         end
 
         return
       end
 
       relocations.each do |relocation|
-        @io.puts "#{indent}#{arrow.colorize(colour)} #{relocation.from} #{"→".colorize.dark_gray} #{relocation.to}"
+        @io.puts "#{indent}#{arrow.colorize(colour)} #{relocation.from} " \
+                 "#{"→".colorize.dark_gray} #{relocation.to}"
       end
 
       listed = (written + deleted).sort_by!(&.path)
@@ -320,7 +359,8 @@ struct Pylon::CLI
         return
       end
 
-      @io.puts "#{indent}#{"dry run".colorize.yellow.bold} #{"nothing will be changed".colorize.dark_gray}"
+      @io.puts "#{indent}#{"dry run".colorize.yellow.bold} " \
+               "#{"nothing will be changed".colorize.dark_gray}"
 
       listing("↑", Colorize::ColorANSI::Green, outgoing, report.remote_relocations)
       listing("↓", Colorize::ColorANSI::Blue, incoming, report.local_relocations)
@@ -330,11 +370,17 @@ struct Pylon::CLI
       end
     end
 
-    private def listing(arrow : String, colour : Colorize::ColorANSI, outcomes : Array(Write::Outcome), relocations : Array(Core::Relocation)) : Nil
+    private def listing(
+      arrow : String,
+      colour : Colorize::ColorANSI,
+      outcomes : Array(Write::Outcome),
+      relocations : Array(Core::Relocation),
+    ) : Nil
       return if outcomes.empty? && relocations.empty?
 
       relocations.each do |relocation|
-        @io.puts "#{indent}#{arrow.colorize(colour)} #{"move  ".colorize.dark_gray} #{relocation.from} #{"→".colorize.dark_gray} #{relocation.to}"
+        @io.puts "#{indent}#{arrow.colorize(colour)} #{"move  ".colorize.dark_gray} " \
+                 "#{relocation.from} #{"→".colorize.dark_gray} #{relocation.to}"
       end
 
       outcomes.first(PREVIEW_PATHS).each do |outcome|
@@ -342,7 +388,9 @@ struct Pylon::CLI
       end
 
       remaining = outcomes.size - PREVIEW_PATHS
-      @io.puts "#{indent}#{arrow.colorize(colour)} #{"and #{remaining} more".colorize.dark_gray}" if remaining > 0
+      return if remaining <= 0
+
+      @io.puts "#{indent}#{arrow.colorize(colour)} #{"and #{remaining} more".colorize.dark_gray}"
     end
 
     private def verb(outcome : Write::Outcome) : String

@@ -40,7 +40,9 @@ describe Pylon::Watch::FSEvents do
       File.write(File.join(root, "nested", "deeper", "inner.rb"), "puts 2")
 
       seen = drain_within(watcher, 5.0) do |dirty|
-        dirty.is_a?(Everything) || (dirty.is_a?(Touched) && dirty.paths.any?(&.starts_with?("nested")))
+        next true if dirty.is_a?(Everything)
+
+        dirty.is_a?(Touched) && dirty.paths.any?(&.starts_with?("nested"))
       end
       seen.should be_true
 

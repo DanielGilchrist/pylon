@@ -31,7 +31,9 @@ private class MeteredIO < IO
   end
 end
 
-private def in_metered_pair(& : String, String, Session(LocalEndpoint, RemoteEndpoint), MeteredIO ->) : Nil
+private def in_metered_pair(
+  & : String, String, Session(LocalEndpoint, RemoteEndpoint), MeteredIO ->
+) : Nil
   base = File.join(Dir.tempdir, "pylon-delta-#{Random::Secure.hex(8)}")
   local_root = File.join(base, "local")
   remote_root = File.join(base, "remote")
@@ -44,7 +46,10 @@ private def in_metered_pair(& : String, String, Session(LocalEndpoint, RemoteEnd
   metered = MeteredIO.new(client)
 
   begin
-    session = build_session(local_endpoint(local_root), RemoteEndpoint.new(metered, metered, remote_configuration(remote_root), resume: nil))
+    session = build_session(
+      local_endpoint(local_root),
+      RemoteEndpoint.new(metered, metered, remote_configuration(remote_root), resume: nil),
+    )
     yield local_root, remote_root, session, metered
   ensure
     client.close

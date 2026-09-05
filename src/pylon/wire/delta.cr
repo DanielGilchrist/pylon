@@ -94,11 +94,16 @@ module Pylon::Wire
           matched += block_size
           position += block_size
           literal_start = position
-          rolled = weak_checksum(content[position, block_size]) if position + block_size <= content.size
+          if position + block_size <= content.size
+            rolled = weak_checksum(content[position, block_size])
+          end
         else
           departing = content[position]
           position += 1
-          rolled = advance_checksum(rolled, departing, content[position + block_size - 1], block_size) if position + block_size <= content.size
+          if position + block_size <= content.size
+            arriving = content[position + block_size - 1]
+            rolled = advance_checksum(rolled, departing, arriving, block_size)
+          end
         end
       end
 
@@ -228,7 +233,12 @@ module Pylon::Wire
       (signature.blocks.size - 1).to_i64 * signature.block_size
     end
 
-    private def advance_checksum(rolled : UInt32, departing : UInt8, arriving : UInt8, length : Int32) : UInt32
+    private def advance_checksum(
+      rolled : UInt32,
+      departing : UInt8,
+      arriving : UInt8,
+      length : Int32,
+    ) : UInt32
       a = rolled & 0xffff_u32
       b = rolled >> 16
 

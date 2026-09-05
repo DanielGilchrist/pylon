@@ -83,7 +83,9 @@ module Pylon::Wire
         when 5
           entry = Core::Problematic.new(reader.required_string)
         else
-          reader.fail("unknown entry kind in message, both sides must run the same version") unless reader.failed?
+          unless reader.failed?
+            reader.fail("unknown entry kind in message, both sides must run the same version")
+          end
           return
         end
 
@@ -161,7 +163,8 @@ module Pylon::Wire
 
         case (relocation = Core::Relocation.parse(from, to, entry))
         in Core::Relocation then relocations << relocation
-        in Core::Malformed  then reader.fail("a relocation names #{relocation.raw.inspect}, which #{relocation.reason}")
+        in Core::Malformed
+          reader.fail("a relocation names #{relocation.raw.inspect}, which #{relocation.reason}")
         end
       end
 
@@ -211,7 +214,9 @@ module Pylon::Wire
       when 4 then Write::DryRun.new
       when 5 then Write::WriteFailed.new(reader.required_string)
       else
-        reader.fail("unknown skip reason in message, both sides must run the same version") unless reader.failed?
+        unless reader.failed?
+          reader.fail("unknown skip reason in message, both sides must run the same version")
+        end
         nil
       end
     end

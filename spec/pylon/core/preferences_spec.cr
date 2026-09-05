@@ -1,6 +1,9 @@
 require "../../spec_helper"
 
-private def build(local : Array(String) = Array(String).new, remote : Array(String) = Array(String).new) : Preferences
+private def build(
+  local : Array(String) = Array(String).new,
+  remote : Array(String) = Array(String).new,
+) : Preferences
   case (preferences = Preferences.build(local, remote))
   in Preferences          then preferences
   in Preferences::Invalid then fail(preferences.message)

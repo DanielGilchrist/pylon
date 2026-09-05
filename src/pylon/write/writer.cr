@@ -16,7 +16,8 @@ require "./problem"
 module Pylon::Write
   struct Writer(F, S)
     # APFS contends on staged writes past ~4 workers, 2 was the measured as being the most optimal.
-    # ext4 on Linux didn't seem to have the same problem so just leaving it to scale by CPU count for now.
+    # ext4 on Linux didn't seem to have the same problem so just leaving it to scale by CPU count
+    # for now.
     DEFAULT_PARALLELISM = Platform.select do
       macos { 2 }
       linux { System.cpu_count.to_i * 2 }
@@ -34,7 +35,10 @@ module Pylon::Write
     ) : Nil
     end
 
-    def write(changes : Core::Changes, relocations : Array(Core::Relocation) = Array(Core::Relocation).new) : Array(Outcome)
+    def write(
+      changes : Core::Changes,
+      relocations : Array(Core::Relocation) = Array(Core::Relocation).new,
+    ) : Array(Outcome)
       outcomes = write_changes(changes)
       relocations.each { |relocation| relocate(relocation, outcomes) }
       outcomes
@@ -74,7 +78,8 @@ module Pylon::Write
       end
 
       if @filesystem.rename(relocation.from, relocation.to)
-        into.concat(write_changes(Core::Changes.expand(Core::Changes[Core::Change.new(relocation.to, nil, relocation.entry)])))
+        arrival = Core::Changes[Core::Change.new(relocation.to, nil, relocation.entry)]
+        into.concat(write_changes(Core::Changes.expand(arrival)))
         into << write_one(Core::Change.new(relocation.from, relocation.entry, nil))
         return
       end
@@ -82,8 +87,13 @@ module Pylon::Write
       into << Outcome.new(relocation.from, nil) << Outcome.new(relocation.to, relocation.entry)
     end
 
-    private def skip_relocation(relocation : Core::Relocation, skipped : Skipped, into : Array(Outcome)) : Nil
-      into << Outcome.new(relocation.from, relocation.entry, skipped) << Outcome.new(relocation.to, nil, skipped)
+    private def skip_relocation(
+      relocation : Core::Relocation,
+      skipped : Skipped,
+      into : Array(Outcome),
+    ) : Nil
+      into << Outcome.new(relocation.from, relocation.entry, skipped)
+      into << Outcome.new(relocation.to, nil, skipped)
     end
 
     private def guard_absent(path : String) : Verdict
@@ -96,7 +106,9 @@ module Pylon::Write
 
     private def guard_intact(path : String, expected : Core::Syncable) : Verdict
       verdict = Guard.check(expected, @cache[path]?, @filesystem.observe(path), @now_ns)
-      verdict = verify_content(path, expected) if verdict.inconclusive? && expected.is_a?(Core::File)
+      if verdict.inconclusive? && expected.is_a?(Core::File)
+        verdict = verify_content(path, expected)
+      end
       return verdict unless verdict.proceed? && expected.is_a?(Core::Directory)
 
       intact_children(path, expected)
@@ -149,7 +161,10 @@ module Pylon::Write
       outcomes
     end
 
-    private def write_concurrently(changes : Core::Changes, independent : Array(Int32)) : Array(Outcome)
+    private def write_concurrently(
+      changes : Core::Changes,
+      independent : Array(Int32),
+    ) : Array(Outcome)
       stripe = (independent.size + @parallelism - 1) // @parallelism
       groups = independent.each_slice(stripe).to_a
       slices = Array(Array(Outcome)).new(groups.size) { Array(Outcome).new }
@@ -224,7 +239,9 @@ module Pylon::Write
         return Outcome.new(change.path, change.old, WriteFailed.new(created.reason))
       end
 
-      return Outcome.new(change.path, created, StagedContentMissing.new) if incomplete?(change.new, created)
+      if incomplete?(change.new, created)
+        return Outcome.new(change.path, created, StagedContentMissing.new)
+      end
 
       Outcome.new(change.path, created)
     end
@@ -268,7 +285,9 @@ module Pylon::Write
       return Verdict::Proceed if observed.nil?
 
       verdict = Guard.check(expected, @cache[path]?, observed, @now_ns)
-      verdict = verify_content(path, expected) if verdict.inconclusive? && expected.is_a?(Core::File)
+      if verdict.inconclusive? && expected.is_a?(Core::File)
+        verdict = verify_content(path, expected)
+      end
       return verdict unless verdict.proceed?
 
       expected.is_a?(Core::Directory) ? guard_removal(path, expected) : verdict

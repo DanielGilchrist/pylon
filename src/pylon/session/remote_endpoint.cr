@@ -56,9 +56,15 @@ module Pylon::Session
       true
     end
 
-    def signatures_begin(pairs : Array(Wire::Message::SignaturesRequest::Pair)) : Session::PendingSignatures
+    def signatures_begin(
+      pairs : Array(Wire::Message::SignaturesRequest::Pair),
+    ) : Session::PendingSignatures
       fault = transmit(Wire::Message::SignaturesRequest.new(pairs))
-      Awaiting(Wire::Message::SignaturesResponse, Wire::Delta::Signatures).new(self, @signatures, fault)
+      Awaiting(Wire::Message::SignaturesResponse, Wire::Delta::Signatures).new(
+        self,
+        @signatures,
+        fault,
+      )
     end
 
     def retained?(digest : Bytes) : Bool
@@ -79,7 +85,9 @@ module Pylon::Session
       bases : Wire::Prefixed::Bases,
     ) : Session::PendingContents
       if digests.empty?
-        return Settled(Wire::ContentSource).new(Wire::ContentSource::Materialised.new(Wire::Contents.new))
+        return Settled(Wire::ContentSource).new(
+          Wire::ContentSource::Materialised.new(Wire::Contents.new),
+        )
       end
 
       fault = transmit(Wire::Message::ContentsRequest.new(digests, budget, signatures))
@@ -137,16 +145,19 @@ module Pylon::Session
         @greeting.close
       in Wire::Greeting::Incompatible
         stop_with(Incompatible.new(
-          "the remote #{@configure.brand.name} uses wire protocol version #{greeting.version} but this one uses #{Wire::PROTOCOL}. Update the remote binary",
+          "the remote #{@configure.brand.name} uses wire protocol version #{greeting.version} " \
+          "but this one uses #{Wire::PROTOCOL}. Update the remote binary",
         ))
         return
       in Wire::Greeting::Foreign
         stop_with(Incompatible.new(
-          "the remote did not identify itself as #{@configure.brand.name}. It may be running an outdated binary or the wrong command",
+          "the remote did not identify itself as #{@configure.brand.name}. It may be running an " \
+          "outdated binary or the wrong command",
         ))
         return
       in Wire::Greeting::Unreachable
-        stop_with(Stopped.new("the connection failed before the remote identified itself: #{greeting.reason}"))
+        reason = "the connection failed before the remote identified itself: #{greeting.reason}"
+        stop_with(Stopped.new(reason))
         return
       end
 
@@ -179,7 +190,9 @@ module Pylon::Session
         in Wire::Message::AvailabilityResponse
           return unless deliver(@availability, message)
         in Wire::Message::WriteResponse
-          message.payload.each { |outcome| @unapplied << Core::Change.new(outcome.path, nil, outcome.entry) }
+          message.payload.each do |outcome|
+            @unapplied << Core::Change.new(outcome.path, nil, outcome.entry)
+          end
           return unless deliver(@written, message)
         in Wire::Message::ScanProgress
           @inbound.scanning(message.files, message.hashed_bytes)
@@ -194,7 +207,9 @@ module Pylon::Session
            Wire::Message::WriteRequest,
            Wire::Message::AvailabilityRequest,
            Wire::Message::Configure
-          stop_with(Misbehaved.new("the server sent a #{message.class.name}, which only clients send"))
+          stop_with(
+            Misbehaved.new("the server sent a #{message.class.name}, which only clients send"),
+          )
           return
         end
       end
@@ -224,7 +239,9 @@ module Pylon::Session
       when channel.send(message)
         true
       else
-        stop_with(Misbehaved.new("the server sent a #{message.class.name} that nothing was waiting for"))
+        stop_with(
+          Misbehaved.new("the server sent a #{message.class.name} that nothing was waiting for"),
+        )
         false
       end
     end

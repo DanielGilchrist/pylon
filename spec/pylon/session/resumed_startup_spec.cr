@@ -30,7 +30,11 @@ private record Ends, local : String, remote : String, state : String
 
 private def with_roots(& : Ends ->) : Nil
   base = File.join(Dir.tempdir, "pylon-resume-#{Random::Secure.hex(8)}")
-  ends = Ends.new(File.join(base, "local"), File.join(base, "remote"), File.join(base, "remote-state"))
+  ends = Ends.new(
+    File.join(base, "local"),
+    File.join(base, "remote"),
+    File.join(base, "remote-state"),
+  )
   Dir.mkdir_p(ends.local)
   Dir.mkdir_p(ends.remote)
 
@@ -41,7 +45,11 @@ private def with_roots(& : Ends ->) : Nil
   end
 end
 
-private def connect(ends : Ends, resume : Core::Entry?, & : Session(LocalEndpoint, RemoteEndpoint), RemoteEndpoint, CountingReader ->) : Nil
+private def connect(
+  ends : Ends,
+  resume : Core::Entry?,
+  & : Session(LocalEndpoint, RemoteEndpoint), RemoteEndpoint, CountingReader ->
+) : Nil
   client, socket = UNIXSocket.pair
   serve_remote_end(socket)
   counting = CountingReader.new(client)

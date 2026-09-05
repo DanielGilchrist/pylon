@@ -54,7 +54,9 @@ def pump(from : IO, to : IO, delay : Time::Span, rate : Float64, finished : Chan
       break unless deliver(to, item.chunk)
 
       moved += item.chunk.size
-      available_at = rate > 0 ? {ready_at, Time.instant}.max + (item.chunk.size / rate).seconds : available_at
+      if rate > 0
+        available_at = {ready_at, Time.instant}.max + (item.chunk.size / rate).seconds
+      end
     end
 
     close_quietly(to)
@@ -83,5 +85,8 @@ pump(child.output, STDOUT, delay, rate, downstream)
 
 sent = upstream.receive
 received = downstream.receive
-STDERR.puts("latency_proxy: #{(sent / 1_048_576.0).round(2)} MiB to the remote, #{(received / 1_048_576.0).round(2)} MiB back")
+STDERR.puts(
+  "latency_proxy: #{(sent / 1_048_576.0).round(2)} MiB to the remote, " \
+  "#{(received / 1_048_576.0).round(2)} MiB back",
+)
 exit(child.wait.success? ? 0 : 1)

@@ -12,7 +12,9 @@ describe "Pylon::Core::Changes#deletes_last" do
       Change.new("swapped.rb", Fixtures.f1, Fixtures.f2),
     ]
 
-    changes.deletes_last(NOTHING_LATE).map(&.path).should eq(["kept.rb", "swapped.rb", "gone.rb", "dir"])
+    changes.deletes_last(NOTHING_LATE).map(&.path).should eq(
+      ["kept.rb", "swapped.rb", "gone.rb", "dir"],
+    )
   end
 
   it "moves late digests behind other writes but ahead of deletions" do

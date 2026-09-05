@@ -14,7 +14,13 @@ record Pair, path : String, old : Bytes, new : Bytes
 
 class Catalogue
   def initialize(repo : String) : Nil
-    @process = Process.new("git", ["-C", repo, "cat-file", "--batch"], input: :pipe, output: :pipe, error: :inherit)
+    @process = Process.new(
+      "git",
+      ["-C", repo, "cat-file", "--batch"],
+      input: :pipe,
+      output: :pipe,
+      error: :inherit,
+    )
   end
 
   def blob(spec : String) : Bytes?
@@ -48,12 +54,20 @@ end
 
 def patch_from_size(old_path : String, new_path : String, level : Int32) : Int64
   output = IO::Memory.new
-  Process.run("zstd", ["-#{level}", "-q", "-c", "--patch-from=#{old_path}", new_path], output: output)
+  Process.run(
+    "zstd",
+    ["-#{level}", "-q", "-c", "--patch-from=#{old_path}", new_path],
+    output: output,
+  )
   output.size.to_i64
 end
 
 listing = IO::Memory.new
-Process.run("git", ["-C", repo, "diff", "--name-only", "--diff-filter=M", "-z", from, to], output: listing)
+Process.run(
+  "git",
+  ["-C", repo, "diff", "--name-only", "--diff-filter=M", "-z", from, to],
+  output: listing,
+)
 paths = listing.to_s.split('\0').reject(&.empty?)
 
 catalogue = Catalogue.new(repo)
@@ -84,7 +98,10 @@ paths.each do |path|
   full_packed = packed_size(codec, new)
   full += full_packed
 
-  unless gate <= new.size.to_u64 <= Wire::Delta::LARGEST_DELTA_FILE && gate <= old.size.to_u64 <= Wire::Delta::LARGEST_DELTA_FILE
+  within_gate = gate <= new.size.to_u64 <= Wire::Delta::LARGEST_DELTA_FILE &&
+                gate <= old.size.to_u64 <= Wire::Delta::LARGEST_DELTA_FILE
+
+  unless within_gate
     below_gate += 1
     below_gate_bytes += full_packed
     rsync_ops += full_packed
@@ -126,7 +143,11 @@ File.delete?(scratch_old)
 File.delete?(scratch_new)
 
 added = IO::Memory.new
-Process.run("git", ["-C", repo, "diff", "--name-only", "--diff-filter=A", "-z", from, to], output: added)
+Process.run(
+  "git",
+  ["-C", repo, "diff", "--name-only", "--diff-filter=A", "-z", from, to],
+  output: added,
+)
 added_packed = 0_i64
 added_raw = 0_i64
 added_catalogue = Catalogue.new(repo)
@@ -140,15 +161,20 @@ end
 added_catalogue.close
 
 puts "added files:           #{mib(added_raw)} MiB raw, #{mib(added_packed)} MiB packed upstream"
-puts "modified files:        #{paths.size} (#{below_gate} below the #{gate // 1024} KiB gate, #{mib(below_gate_bytes)} MiB packed, shipped full by every strategy)"
+puts "modified files:        #{paths.size} (#{below_gate} below the #{gate // 1024} KiB gate, " \
+     "#{mib(below_gate_bytes)} MiB packed, shipped full by every strategy)"
 puts "raw new content:       #{mib(raw)} MiB"
 puts "full zstd-#{level}:           #{mib(full)} MiB upstream"
-puts "rsync delta (current): #{mib(rsync_ops)} MiB upstream (#{rsync_gave_up} gave up, #{mib(rsync_gave_up_bytes)} MiB of that is full sends) + #{mib(rsync_signatures)} MiB signatures downstream"
+puts "rsync delta (current): #{mib(rsync_ops)} MiB upstream (#{rsync_gave_up} gave up, " \
+     "#{mib(rsync_gave_up_bytes)} MiB of that is full sends) + #{mib(rsync_signatures)} MiB " \
+     "signatures downstream"
 puts "zstd --patch-from:     #{mib(patch_from)} MiB upstream, no signatures"
-puts "pylon prefix codec:    #{mib(prefixed + below_gate_bytes)} MiB upstream, #{prefixed_time.total_seconds.round(2)}s of compression"
+puts "pylon prefix codec:    #{mib(prefixed + below_gate_bytes)} MiB upstream, " \
+     "#{prefixed_time.total_seconds.round(2)}s of compression"
 puts
 puts "largest rsync costs (path, full, rsync, patch-from in KiB):"
 offenders.sort_by! { |_, _, rsync, _| -rsync }
 offenders.first(12).each do |path, full_packed, rsync, patched|
-  puts "  #{path[0, 70].ljust(70)} #{(full_packed // 1024).to_s.rjust(6)} #{(rsync // 1024).to_s.rjust(6)} #{(patched // 1024).to_s.rjust(6)}"
+  puts "  #{path[0, 70].ljust(70)} #{(full_packed // 1024).to_s.rjust(6)} " \
+       "#{(rsync // 1024).to_s.rjust(6)} #{(patched // 1024).to_s.rjust(6)}"
 end

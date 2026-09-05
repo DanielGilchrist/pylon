@@ -164,7 +164,9 @@ describe "moves" do
       File.rename(File.join(local, "lib"), File.join(local, "moved"))
       report = cycle!(session, tick)
 
-      report.remote_relocations.map { |relocation| {relocation.from, relocation.to} }.should eq([{"lib", "moved"}])
+      report.remote_relocations.map { |relocation| {relocation.from, relocation.to} }.should eq(
+        [{"lib", "moved"}],
+      )
       File.read(File.join(remote, "moved", "deep", "b.rb")).should eq("b")
       Dir.exists?(File.join(remote, "lib")).should be_false
       before.same_file?(File.info(File.join(remote, "moved", "deep", "b.rb"))).should be_true
@@ -180,7 +182,9 @@ describe "moves" do
       File.rename(File.join(remote, "one.rb"), File.join(remote, "two.rb"))
       report = cycle!(session, tick)
 
-      report.local_relocations.map { |relocation| {relocation.from, relocation.to} }.should eq([{"one.rb", "two.rb"}])
+      report.local_relocations.map { |relocation| {relocation.from, relocation.to} }.should eq(
+        [{"one.rb", "two.rb"}],
+      )
       File.read(File.join(local, "two.rb")).should eq("same")
       File.exists?(File.join(local, "one.rb")).should be_false
       cycle!(session, tick).quiet?.should be_true
@@ -210,10 +214,17 @@ describe "moves" do
       cycle!(session, tick)
 
       File.rename(File.join(local, "lib"), File.join(local, "moved"))
-      preview = build_session(local_endpoint(local), local_endpoint(remote), base: session.base, dry_run: true)
+      preview = build_session(
+        local_endpoint(local),
+        local_endpoint(remote),
+        base: session.base,
+        dry_run: true,
+      )
       report = cycle!(preview, tick)
 
-      report.remote_relocations.map { |relocation| {relocation.from, relocation.to} }.should eq([{"lib", "moved"}])
+      report.remote_relocations.map { |relocation| {relocation.from, relocation.to} }.should eq(
+        [{"lib", "moved"}],
+      )
       report.quiet?.should be_false
       Dir.exists?(File.join(remote, "lib")).should be_true
       Dir.exists?(File.join(remote, "moved")).should be_false
@@ -305,7 +316,12 @@ describe "the first cycle of a session" do
       File.write(File.join(remote, "shared.rb"), "replaced on the box")
       File.write(File.join(remote, "from_box.rb"), "box")
 
-      session = build_session(local_endpoint(local), local_endpoint(remote), base: warm_up.base, push_first: true)
+      session = build_session(
+        local_endpoint(local),
+        local_endpoint(remote),
+        base: warm_up.base,
+        push_first: true,
+      )
       report = cycle!(session, tick)
 
       report.conflicts.should be_empty

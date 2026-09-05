@@ -35,8 +35,9 @@ class MemoryTarget
     return if node.nil?
 
     case node.kind
-    in Pylon::Scan::Metadata::Kind::Directory    then Pylon::Scan::ObservedDirectory.new
-    in Pylon::Scan::Metadata::Kind::File         then Pylon::Scan::ObservedFile.new(metadata_for(node))
+    in Pylon::Scan::Metadata::Kind::Directory then Pylon::Scan::ObservedDirectory.new
+    in Pylon::Scan::Metadata::Kind::File
+      Pylon::Scan::ObservedFile.new(metadata_for(node))
     in Pylon::Scan::Metadata::Kind::SymbolicLink then Pylon::Scan::ObservedLink.new(node.target)
     in Pylon::Scan::Metadata::Kind::Untracked    then Pylon::Scan::ObservedUntracked.new
     end
@@ -90,7 +91,11 @@ class MemoryTarget
 
     @lock.synchronize do
       operations << "symlink #{path}"
-      @nodes[path] = Node.new(kind: Pylon::Scan::Metadata::Kind::SymbolicLink, target: target, inode: take_inode)
+      @nodes[path] = Node.new(
+        kind: Pylon::Scan::Metadata::Kind::SymbolicLink,
+        target: target,
+        inode: take_inode,
+      )
     end
 
     nil
@@ -136,7 +141,13 @@ class MemoryTarget
     nil
   end
 
-  def seed_file(path : String, content : String, executable = false, inode = 1_u64, mtime_ns = 1_000_i64) : Bytes
+  def seed_file(
+    path : String,
+    content : String,
+    executable = false,
+    inode = 1_u64,
+    mtime_ns = 1_000_i64,
+  ) : Bytes
     bytes = content.to_slice
     @nodes[path] = Node.new(
       kind: Pylon::Scan::Metadata::Kind::File,
@@ -155,8 +166,9 @@ class MemoryTarget
   private def metadata_for(node : Node) : Pylon::Scan::Metadata
     mode =
       case node.kind
-      in Pylon::Scan::Metadata::Kind::Directory    then LibC::S_IFDIR | 0o755
-      in Pylon::Scan::Metadata::Kind::File         then LibC::S_IFREG | (node.executable ? 0o755 : 0o644)
+      in Pylon::Scan::Metadata::Kind::Directory then LibC::S_IFDIR | 0o755
+      in Pylon::Scan::Metadata::Kind::File
+        LibC::S_IFREG | (node.executable ? 0o755 : 0o644)
       in Pylon::Scan::Metadata::Kind::SymbolicLink then LibC::S_IFLNK | 0o777
       in Pylon::Scan::Metadata::Kind::Untracked    then LibC::S_IFIFO | 0o644
       end

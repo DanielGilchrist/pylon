@@ -15,7 +15,11 @@ module Pylon::Scan
     MEBIBYTE            = 1024 * 1024
     DEFAULT_PARALLELISM = System.cpu_count.to_i * 2
 
-    private alias Surveyed = SurveyedDirectory | SurveyedFile | SurveyedLink | SurveyedUntracked | SurveyedProblem
+    private alias Surveyed = SurveyedDirectory |
+                             SurveyedFile |
+                             SurveyedLink |
+                             SurveyedUntracked |
+                             SurveyedProblem
 
     @next_cache : Cache
     @dirty : Set(String)
@@ -204,7 +208,11 @@ module Pylon::Scan
       end
     end
 
-    private def build(survey : Survey, digests : Hash(String, Bytes | Problem), path : String) : Core::Entry?
+    private def build(
+      survey : Survey,
+      digests : Hash(String, Bytes | Problem),
+      path : String,
+    ) : Core::Entry?
       if (carried = survey.carried[path]?)
         return carried
       end

@@ -97,8 +97,8 @@ module Pylon::Session
       if @dry_run
         return Report.new(
           reconciliation.conflicts,
-          local_changes.map { |change| Write::Outcome.new(change.path, change.new, Write::DryRun.new) },
-          remote_changes.map { |change| Write::Outcome.new(change.path, change.new, Write::DryRun.new) },
+          local_changes.map { |change| preview(change) },
+          remote_changes.map { |change| preview(change) },
           troubles: reconciliation.troubles,
           local_relocations: local_extraction.relocations,
           remote_relocations: remote_extraction.relocations,
@@ -110,11 +110,25 @@ module Pylon::Session
       {% end %}
 
       local_holds = digests_present_in(local_root, local_changes)
-      local_outcomes = transfer(local_changes, local_extraction.relocations, @remote, @local, :to_local, local_holds)
+      local_outcomes = transfer(
+        local_changes,
+        local_extraction.relocations,
+        @remote,
+        @local,
+        :to_local,
+        local_holds,
+      )
       return local_outcomes if local_outcomes.is_a?(Fault)
 
       remote_holds = digests_present_in(remote_root, remote_changes)
-      remote_outcomes = transfer(remote_changes, remote_extraction.relocations, @local, @remote, :to_remote, remote_holds)
+      remote_outcomes = transfer(
+        remote_changes,
+        remote_extraction.relocations,
+        @local,
+        @remote,
+        :to_remote,
+        remote_holds,
+      )
       return remote_outcomes if remote_outcomes.is_a?(Fault)
 
       {% if flag?(:timing) %}
@@ -153,7 +167,14 @@ module Pylon::Session
       )
     end
 
-    private def landed(relocations : Array(Core::Relocation), outcomes : Array(Write::Outcome)) : Array(Core::Relocation)
+    private def preview(change : Core::Change) : Write::Outcome
+      Write::Outcome.new(change.path, change.new, Write::DryRun.new)
+    end
+
+    private def landed(
+      relocations : Array(Core::Relocation),
+      outcomes : Array(Write::Outcome),
+    ) : Array(Core::Relocation)
       return relocations if relocations.empty?
 
       arrived = Set(String).new(initial_capacity: outcomes.size)
@@ -204,7 +225,9 @@ module Pylon::Session
         pending_signatures = nil
       end
 
-      case (held = target.availability_begin(availability_query(changes, source, target_holds, bases)).await)
+      asked = availability_query(changes, source, target_holds, bases)
+
+      case (held = target.availability_begin(asked).await)
       in Fault        then return held
       in Array(Bytes) then held.each { |digest| target_holds << digest }
       end
@@ -218,7 +241,12 @@ module Pylon::Session
 
       notify(direction, outcomes, total, total_bytes)
 
-      pending_contents = source.content_begin(wanted_from(changes, offset, collector, target_holds), TRANSFER_BUDGET, signatures, bases)
+      pending_contents = source.content_begin(
+        wanted_from(changes, offset, collector, target_holds),
+        TRANSFER_BUDGET,
+        signatures,
+        bases,
+      )
 
       while offset < changes.size
         provided = pending_contents.await
@@ -227,7 +255,9 @@ module Pylon::Session
         taken = split(changes, offset, provided.digests, target_holds)
 
         if taken.zero?
-          changes.each(within: offset...) { |change| outcomes << Write::Outcome.new(change.path, change.old, Write::StagedContentMissing.new) }
+          changes.each(within: offset...) do |change|
+            outcomes << Write::Outcome.new(change.path, change.old, Write::StagedContentMissing.new)
+          end
           break
         end
 
@@ -235,7 +265,12 @@ module Pylon::Session
         offset += taken
 
         if offset < changes.size
-          pending_contents = source.content_begin(wanted_from(changes, offset, collector, target_holds), TRANSFER_BUDGET, signatures, bases)
+          pending_contents = source.content_begin(
+            wanted_from(changes, offset, collector, target_holds),
+            TRANSFER_BUDGET,
+            signatures,
+            bases,
+          )
         end
 
         if pending_signatures && worth_waiting_for_signature?(batch, source, candidates)
@@ -267,7 +302,8 @@ module Pylon::Session
       end
 
       if relocations_pending
-        inflight.push(target.write_begin(Core::Changes.new, Wire::ContentSource::Materialised.new(Wire::Contents.new), relocations))
+        nothing = Wire::ContentSource::Materialised.new(Wire::Contents.new)
+        inflight.push(target.write_begin(Core::Changes.new, nothing, relocations))
       end
 
       while (oldest = inflight.shift?)
@@ -280,7 +316,9 @@ module Pylon::Session
 
       {% if flag?(:timing) %}
         if total > 0
-          STDERR.puts("  transfer %s: changes=%d reused=%d candidates=%d signatures=%d prefixed=%d (%.2f MiB frames) deltas=%d (%.2f MiB ops) fulls=%d (%.2f MiB raw)" % [
+          summary = "  transfer %s: changes=%d reused=%d candidates=%d signatures=%d " \
+                    "prefixed=%d (%.2f MiB frames) deltas=%d (%.2f MiB ops) fulls=%d (%.2f MiB raw)"
+          STDERR.puts(summary % [
             direction,
             total,
             @reused,
@@ -307,7 +345,12 @@ module Pylon::Session
       nil
     end
 
-    private def wanted_from(changes : Core::Changes, offset : Int32, collector : Core::Digests::Collector, target_holds : Set(Bytes)) : Array(Bytes)
+    private def wanted_from(
+      changes : Core::Changes,
+      offset : Int32,
+      collector : Core::Digests::Collector,
+      target_holds : Set(Bytes),
+    ) : Array(Bytes)
       wanted = collector.required(changes, offset)
 
       {% if flag?(:timing) %}
@@ -352,7 +395,11 @@ module Pylon::Session
       unsized || weight >= ROUND_TRIP_WORTH_BYTES ? asked : Array(Bytes).new
     end
 
-    private def worth_waiting_for_signature?(batch : Core::Changes, source : A | B, candidates : Set(Bytes)) : Bool
+    private def worth_waiting_for_signature?(
+      batch : Core::Changes,
+      source : A | B,
+      candidates : Set(Bytes),
+    ) : Bool
       return false if candidates.empty?
 
       weight = 0_u64
@@ -371,7 +418,12 @@ module Pylon::Session
       false
     end
 
-    private def notify(direction : Direction, outcomes : Array(Write::Outcome), total : Int32, total_bytes : UInt64?) : Nil
+    private def notify(
+      direction : Direction,
+      outcomes : Array(Write::Outcome),
+      total : Int32,
+      total_bytes : UInt64?,
+    ) : Nil
       return if total <= PROGRESS_THRESHOLD
 
       @on_progress.try(&.call(Progress.new(direction, outcomes.size, total, total_bytes)))
@@ -410,7 +462,12 @@ module Pylon::Session
       pairs
     end
 
-    private def split(changes : Core::Changes, offset : Int32, available : Set(Bytes), target_holds : Set(Bytes)) : Int32
+    private def split(
+      changes : Core::Changes,
+      offset : Int32,
+      available : Set(Bytes),
+      target_holds : Set(Bytes),
+    ) : Int32
       taken = 0
 
       changes.each(within: offset...) do |change|
@@ -430,7 +487,8 @@ module Pylon::Session
       local_outcomes : Array(Write::Outcome),
       remote_outcomes : Array(Write::Outcome),
     ) : Nil
-      landed = planned + Write::Outcome.changes(local_outcomes) + Write::Outcome.changes(remote_outcomes)
+      landed = planned + Write::Outcome.changes(local_outcomes)
+      landed += Write::Outcome.changes(remote_outcomes)
 
       @base = Core::Applier.apply(@base, landed).try(&.syncable)
     end

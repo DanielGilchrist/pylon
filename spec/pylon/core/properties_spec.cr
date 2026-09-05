@@ -1,8 +1,25 @@
 require "../../spec_helper"
 
-private CONVERGING_CONTENTS = {nil, Fixtures.f1, Fixtures.f2, Fixtures.f1x, Fixtures.untracked, Fixtures.symlink_relative, Fixtures.symlink_absolute}
-private ALL_CONTENTS        = {nil, Fixtures.f1, Fixtures.f2, Fixtures.f1x, Fixtures.untracked, Fixtures.symlink_relative, Fixtures.symlink_absolute, Fixtures.problematic}
-private NAMES               = {"a", "b"}
+private CONVERGING_CONTENTS = {
+  nil,
+  Fixtures.f1,
+  Fixtures.f2,
+  Fixtures.f1x,
+  Fixtures.untracked,
+  Fixtures.symlink_relative,
+  Fixtures.symlink_absolute,
+}
+private ALL_CONTENTS = {
+  nil,
+  Fixtures.f1,
+  Fixtures.f2,
+  Fixtures.f1x,
+  Fixtures.untracked,
+  Fixtures.symlink_relative,
+  Fixtures.symlink_absolute,
+  Fixtures.problematic,
+}
+private NAMES = {"a", "b"}
 
 private def random_entry(random : Random, depth : Int32, pool : Tuple = ALL_CONTENTS) : Entry?
   if depth <= 0 || random.rand(3) == 0
@@ -121,7 +138,8 @@ describe "reconciler properties" do
           syncable_projection(next_local) == syncable_projection(next_remote)
 
         converged.should be_true,
-          "seed=#{seed} iteration=#{iteration} side=#{preferences.winner("")}: replicas diverged\nalpha=#{next_local.inspect}\nbeta=#{next_remote.inspect}"
+          "seed=#{seed} iteration=#{iteration} side=#{preferences.winner("")}: replicas " \
+          "diverged\nalpha=#{next_local.inspect}\nbeta=#{next_remote.inspect}"
       end
     end
   end
@@ -167,7 +185,8 @@ describe "reconciler properties" do
 
         (local_unreadable & remote_unreadable).each do |path|
           (dig(updated, path) == dig(base, path)).should be_true,
-            "seed=#{seed} iteration=#{iteration} mode=#{mode}: the base changed at unreadable path #{path.inspect}"
+            "seed=#{seed} iteration=#{iteration} mode=#{mode}: the base changed at unreadable " \
+            "path #{path.inspect}"
         end
       end
     end

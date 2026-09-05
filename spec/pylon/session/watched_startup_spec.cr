@@ -12,7 +12,11 @@ private def tick : Int64
   Time.utc.to_unix_ns.to_i64 + Random.rand(1_000_000_i64)
 end
 
-private def in_pair(watch : Bool, create_remote : Bool = true, & : String, String, Session(LocalEndpoint, RemoteEndpoint), RemoteEndpoint ->) : Nil
+private def in_pair(
+  watch : Bool,
+  create_remote : Bool = true,
+  & : String, String, Session(LocalEndpoint, RemoteEndpoint), RemoteEndpoint ->
+) : Nil
   base = File.join(Dir.tempdir, "pylon-startup-#{Random::Secure.hex(8)}")
   local = File.join(base, "local")
   remote = File.join(base, "remote")
@@ -23,7 +27,13 @@ private def in_pair(watch : Bool, create_remote : Bool = true, & : String, Strin
   serve_remote_end(socket)
 
   begin
-    endpoint = RemoteEndpoint.new(client, client, remote_configuration(remote, watch: watch), ::Channel(Nil).new(16), resume: nil)
+    endpoint = RemoteEndpoint.new(
+      client,
+      client,
+      remote_configuration(remote, watch: watch),
+      ::Channel(Nil).new(16),
+      resume: nil,
+    )
     session = build_session(local_endpoint(local), endpoint)
     yield local, remote, session, endpoint
   ensure

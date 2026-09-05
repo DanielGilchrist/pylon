@@ -1,7 +1,11 @@
 module Ameba::Rule::Layout
   class TypeStructure < Base
     class Rewrite
-      def self.build(lines : Array(String), nodes : Array(Crystal::ASTNode), members : Array(Member)) : Rewrite?
+      def self.build(
+        lines : Array(String),
+        nodes : Array(Crystal::ASTNode),
+        members : Array(Member),
+      ) : Rewrite?
         slots = Array(Slot).new
         annotations = Array(Crystal::ASTNode).new
 
@@ -39,7 +43,12 @@ module Ameba::Rule::Layout
         lines[last_line...(first_line - 1)].all?(&.strip.empty?)
       end
 
-      def initialize(@lines : Array(String), @slots : Array(Slot), @first_line : Int32, @last_line : Int32) : Nil
+      def initialize(
+        @lines : Array(String),
+        @slots : Array(Slot),
+        @first_line : Int32,
+        @last_line : Int32,
+      ) : Nil
       end
 
       def apply(corrector : Source::Corrector) : Nil
@@ -73,7 +82,13 @@ module Ameba::Rule::Layout
       end
 
       private record Slot, member : Member, first_line : Int32, last_line : Int32, index : Int32 do
-        def self.build(lines : Array(String), member : Member, leading : Crystal::ASTNode?, previous : Slot?, index : Int32) : Slot?
+        def self.build(
+          lines : Array(String),
+          member : Member,
+          leading : Crystal::ASTNode?,
+          previous : Slot?,
+          index : Int32,
+        ) : Slot?
           location = (leading || member.node).location
           end_location = member.node.end_location
           return unless location && end_location
@@ -88,7 +103,12 @@ module Ameba::Rule::Layout
           return unless first_line > floor
           return unless end_location.line_number >= first_line
 
-          new(member: member, first_line: first_line, last_line: end_location.line_number, index: index)
+          new(
+            member: member,
+            first_line: first_line,
+            last_line: end_location.line_number,
+            index: index,
+          )
         end
 
         def section : Section

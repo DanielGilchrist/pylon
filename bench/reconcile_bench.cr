@@ -13,7 +13,9 @@ def build_tree : Directory
 
   DIRECTORIES.times do |index|
     contents = Hash(String, Entry).new
-    FILES_PER.times { |file| contents["file_#{file}.rb"] = Pylon::Core::File.new(DIGEST_ALPHA, executable: false) }
+    FILES_PER.times do |file|
+      contents["file_#{file}.rb"] = Pylon::Core::File.new(DIGEST_ALPHA, executable: false)
+    end
     root["dir_#{index}"] = Pylon::Core::Directory.new(contents)
   end
 

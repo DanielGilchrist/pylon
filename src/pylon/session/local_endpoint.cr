@@ -94,7 +94,9 @@ module Pylon::Session
       false
     end
 
-    def signatures_begin(pairs : Array(Wire::Message::SignaturesRequest::Pair)) : Settled(Wire::Delta::Signatures)
+    def signatures_begin(
+      pairs : Array(Wire::Message::SignaturesRequest::Pair),
+    ) : Settled(Wire::Delta::Signatures)
       Settled.new(signatures(pairs))
     end
 
@@ -143,7 +145,12 @@ module Pylon::Session
       Settled(Wire::ContentSource).new(content_source(digests, budget, signatures, bases))
     end
 
-    def content_source(digests : Array(Bytes), budget : UInt64, signatures : Wire::Delta::Signatures, bases : Wire::Prefixed::Bases) : Wire::ContentSource
+    def content_source(
+      digests : Array(Bytes),
+      budget : UInt64,
+      signatures : Wire::Delta::Signatures,
+      bases : Wire::Prefixed::Bases,
+    ) : Wire::ContentSource
       wanted = within(digests, budget)
 
       Wire::ContentSource::Streaming.new(
@@ -193,8 +200,14 @@ module Pylon::Session
       end
     end
 
-    def write(changes : Core::Changes, source : Wire::ContentSource, relocations : Array(Core::Relocation) = Array(Core::Relocation).new) : Array(Write::Outcome)
-      Write::Writer.new(@disk, Staging.new(source.contents, self), @cache, Time.utc.to_unix_ns.to_i64, @ignores).write(changes, relocations)
+    def write(
+      changes : Core::Changes,
+      source : Wire::ContentSource,
+      relocations : Array(Core::Relocation) = Array(Core::Relocation).new,
+    ) : Array(Write::Outcome)
+      staging = Staging.new(source.contents, self)
+      writer = Write::Writer.new(@disk, staging, @cache, Time.utc.to_unix_ns.to_i64, @ignores)
+      writer.write(changes, relocations)
     end
 
     def recovered_content(digest : Bytes) : Bytes?
@@ -223,11 +236,20 @@ module Pylon::Session
       store.content(digest)
     end
 
-    private def plan_delivery(want : Wanted, bases : Wire::Prefixed::Bases, signatures : Wire::Delta::Signatures, prefix : Compress::Prefix) : Wire::Prefixed | Wire::Patch | Nil
+    private def plan_delivery(
+      want : Wanted,
+      bases : Wire::Prefixed::Bases,
+      signatures : Wire::Delta::Signatures,
+      prefix : Compress::Prefix,
+    ) : Wire::Prefixed | Wire::Patch | Nil
       compute_prefixed(want, bases, prefix) || compute_patch(want, signatures)
     end
 
-    private def compute_prefixed(want : Wanted, bases : Wire::Prefixed::Bases, prefix : Compress::Prefix) : Wire::Prefixed?
+    private def compute_prefixed(
+      want : Wanted,
+      bases : Wire::Prefixed::Bases,
+      prefix : Compress::Prefix,
+    ) : Wire::Prefixed?
       store = @store
       return if store.nil?
       return unless Wire::Prefixed.worthwhile?(want.size)
@@ -247,7 +269,12 @@ module Pylon::Session
       Wire::Prefixed.new(base_digest, frame)
     end
 
-    private def emit_prefixed(io : IO, want : Wanted, prefixed : Wire::Prefixed, scratch : Bytes) : Nil
+    private def emit_prefixed(
+      io : IO,
+      want : Wanted,
+      prefixed : Wire::Prefixed,
+      scratch : Bytes,
+    ) : Nil
       {% if flag?(:timing) %}
         Wire::Delta.prefixed_sent += 1
         Wire::Delta.prefixed_bytes += prefixed.frame.size
@@ -273,7 +300,13 @@ module Pylon::Session
       Wire::Patch.new(based.base, ops)
     end
 
-    private def emit_patch(io : IO, want : Wanted, patch : Wire::Patch, codec : Compress::Codec, scratch : Bytes) : Nil
+    private def emit_patch(
+      io : IO,
+      want : Wanted,
+      patch : Wire::Patch,
+      codec : Compress::Codec,
+      scratch : Bytes,
+    ) : Nil
       {% if flag?(:timing) %}
         Wire::Delta.deltas_sent += 1
         Wire::Delta.delta_bytes += patch.ops.size

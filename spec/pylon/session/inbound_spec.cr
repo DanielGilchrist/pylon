@@ -32,7 +32,10 @@ end
 describe "what the client learns while waiting for the remote tree" do
   it "records the remote scan's progress" do
     script = scripted_server do |io|
-      Pylon::Wire::Message.write(io, Pylon::Wire::Message::ScanProgress.new(1234_i64, 5_000_000_i64))
+      Pylon::Wire::Message.write(
+        io,
+        Pylon::Wire::Message::ScanProgress.new(1234_i64, 5_000_000_i64),
+      )
     end
 
     _, endpoint = cycle_against(script)
@@ -42,7 +45,12 @@ describe "what the client learns while waiting for the remote tree" do
   end
 
   it "knows how large the announced tree is and how much of it has arrived" do
-    root = Pylon::Core::Directory.new({"a.rb" => Pylon::Core::File.new(Bytes.new(Pylon::Wire::DIGEST_BYTES, 3_u8), executable: false)})
+    root = Pylon::Core::Directory.new(
+      {"a.rb" => Pylon::Core::File.new(
+        Bytes.new(Pylon::Wire::DIGEST_BYTES, 3_u8),
+        executable: false,
+      )},
+    )
     measured = Pylon::Wire::Chunks.measure_entry(root)
 
     script = scripted_server do |io|
@@ -72,12 +80,19 @@ describe "what the client learns while waiting for the remote tree" do
     serve_remote_end(socket)
 
     begin
-      endpoint = RemoteEndpoint.new(client, client, remote_configuration(remote, watch: true), resume: nil)
+      endpoint = RemoteEndpoint.new(
+        client,
+        client,
+        remote_configuration(remote, watch: true),
+        resume: nil,
+      )
       cycle!(build_session(local_endpoint(local), endpoint), Time.utc.to_unix_ns.to_i64)
 
       phase = endpoint.inbound.phase
       phase.should be_a(Inbound::ReceivingTree)
-      endpoint.inbound.received(phase).should eq(phase.expected) if phase.is_a?(Inbound::ReceivingTree)
+      if phase.is_a?(Inbound::ReceivingTree)
+        endpoint.inbound.received(phase).should eq(phase.expected)
+      end
     ensure
       client.close
       socket.close

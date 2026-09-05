@@ -28,7 +28,9 @@ private class CountingIO < IO
   end
 end
 
-private def in_counted_pair(& : String, String, Session(LocalEndpoint, RemoteEndpoint), CountingIO ->) : Nil
+private def in_counted_pair(
+  & : String, String, Session(LocalEndpoint, RemoteEndpoint), CountingIO ->
+) : Nil
   base = File.join(Dir.tempdir, "pylon-reuse-#{Random::Secure.hex(8)}")
   local_root = File.join(base, "local")
   remote_root = File.join(base, "remote")
@@ -41,7 +43,10 @@ private def in_counted_pair(& : String, String, Session(LocalEndpoint, RemoteEnd
   counting = CountingIO.new(client)
 
   begin
-    session = build_session(local_endpoint(local_root), RemoteEndpoint.new(client, counting, remote_configuration(remote_root), resume: nil))
+    session = build_session(
+      local_endpoint(local_root),
+      RemoteEndpoint.new(client, counting, remote_configuration(remote_root), resume: nil),
+    )
     yield local_root, remote_root, session, counting
   ensure
     client.close
@@ -99,7 +104,9 @@ describe "content reuse across paths" do
     in_counted_pair do |local, remote, session, counting|
       Dir.mkdir_p(File.join(local, "z"))
       pieces = Array(Bytes).new(24) { |index| INCOMPRESSIBLE[index * 8192, 8192] }
-      pieces.each_with_index { |piece, index| File.write(File.join(local, "z", "file#{index}.bin"), piece) }
+      pieces.each_with_index do |piece, index|
+        File.write(File.join(local, "z", "file#{index}.bin"), piece)
+      end
 
       cycle!(session, tick)
 

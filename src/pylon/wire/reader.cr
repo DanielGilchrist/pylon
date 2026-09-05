@@ -112,7 +112,9 @@ module Pylon::Wire
       value = required_bytes
       return value if @failed
 
-      fail("a digest was #{value.size} bytes, not #{DIGEST_BYTES}") unless value.size == DIGEST_BYTES
+      unless value.size == DIGEST_BYTES
+        fail("a digest was #{value.size} bytes, not #{DIGEST_BYTES}")
+      end
       value
     end
 

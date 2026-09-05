@@ -17,10 +17,14 @@ module Fixtures
   PREFERRING_LOCAL  = [LOCAL_WINS]
   PREFERRING_REMOTE = [REMOTE_WINS]
 
-  def self.built(local : Array(String) = Array(String).new, remote : Array(String) = Array(String).new) : Preferences
+  def self.built(
+    local : Array(String) = Array(String).new,
+    remote : Array(String) = Array(String).new,
+  ) : Preferences
     case (preferences = Preferences.build(local, remote))
-    in Preferences          then preferences
-    in Preferences::Invalid then raise "the fixture preferences are not a valid glob: #{preferences.message}"
+    in Preferences then preferences
+    in Preferences::Invalid
+      raise "the fixture preferences are not a valid glob: #{preferences.message}"
     end
   end
 
@@ -93,7 +97,9 @@ module Fixtures
   end
 
   def self.problem!(entry : Pylon::Core::Entry?) : Pylon::Core::Problematic
-    raise "expected a problematic entry, got #{entry.inspect}" unless entry.is_a?(Pylon::Core::Problematic)
+    unless entry.is_a?(Pylon::Core::Problematic)
+      raise "expected a problematic entry, got #{entry.inspect}"
+    end
 
     entry
   end
@@ -113,7 +119,9 @@ module Fixtures
 end
 
 module Fixtures
-  def self.metadata!(observed : Pylon::Scan::Metadata | Pylon::Problem | Nil) : Pylon::Scan::Metadata
+  def self.metadata!(
+    observed : Pylon::Scan::Metadata | Pylon::Problem | Nil,
+  ) : Pylon::Scan::Metadata
     raise "expected metadata, got #{observed.inspect}" unless observed.is_a?(Pylon::Scan::Metadata)
 
     observed

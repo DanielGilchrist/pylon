@@ -9,7 +9,11 @@ module Pylon::Session
   # us to encode the potential failures into the return type and force callers to handle them as
   # needed.
   class ProcessTransport
-    def self.open(command : String, arguments : Array(String), &relay : String ->) : ProcessTransport | Problem
+    def self.open(
+      command : String,
+      arguments : Array(String),
+      &relay : String ->
+    ) : ProcessTransport | Problem
       case (process = start(command, arguments, Process::Redirect::Pipe))
       in Problem
         process
@@ -26,7 +30,11 @@ module Pylon::Session
       end
     end
 
-    private def self.start(command : String, arguments : Array(String), error : Process::Redirect) : Process | Problem
+    private def self.start(
+      command : String,
+      arguments : Array(String),
+      error : Process::Redirect,
+    ) : Process | Problem
       Process.new(
         command,
         arguments,

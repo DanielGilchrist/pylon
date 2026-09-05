@@ -15,7 +15,11 @@ private def in_sandbox(& : String ->) : Nil
   end
 end
 
-private def schedule(path : String, interval : Time::Span, problems : Array(String)) : Checkpoint::Schedule
+private def schedule(
+  path : String,
+  interval : Time::Span,
+  problems : Array(String),
+) : Checkpoint::Schedule
   Checkpoint::Schedule.new(
     path,
     -> : Checkpoint { Checkpoint.new },
