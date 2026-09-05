@@ -22,7 +22,7 @@ private def cycle_against(script : IO::Memory) : {Report | Fault, RemoteEndpoint
   Dir.mkdir_p(root)
 
   begin
-    endpoint = RemoteEndpoint.new(script, IO::Memory.new, remote_configuration(root))
+    endpoint = RemoteEndpoint.new(script, IO::Memory.new, remote_configuration(root), resume: nil)
     {build_session(local_endpoint(root), endpoint).cycle(Time.utc.to_unix_ns.to_i64), endpoint}
   ensure
     FileUtils.rm_rf(root)
@@ -72,7 +72,7 @@ describe "what the client learns while waiting for the remote tree" do
     serve_remote_end(socket)
 
     begin
-      endpoint = RemoteEndpoint.new(client, client, remote_configuration(remote, watch: true))
+      endpoint = RemoteEndpoint.new(client, client, remote_configuration(remote, watch: true), resume: nil)
       cycle!(build_session(local_endpoint(local), endpoint), Time.utc.to_unix_ns.to_i64)
 
       phase = endpoint.inbound.phase

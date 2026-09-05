@@ -40,7 +40,7 @@ private def rejected_with(message : String, brand : Pylon::Brand = Pylon::Brand:
 
   begin
     yield socket
-    session = build_session(local_endpoint(root), RemoteEndpoint.new(client, client, remote_configuration(root, brand: brand)))
+    session = build_session(local_endpoint(root), RemoteEndpoint.new(client, client, remote_configuration(root, brand: brand), resume: nil))
 
     result = session.cycle(Time.utc.to_unix_ns.to_i64)
 
@@ -144,6 +144,7 @@ describe "the wire greeting" do
         brand: Pylon::Brand.new("Test Sync"),
         state: state,
         watch: false,
+        known: nil,
       )
       Pylon::Wire::Message.write(client, configure)
 

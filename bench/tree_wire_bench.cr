@@ -1,6 +1,7 @@
 require "../src/pylon/core"
 require "../src/pylon/core/digests"
 require "../src/pylon/core/reconciler"
+require "../src/pylon/discard"
 require "../src/pylon/scan/scanner"
 require "../src/pylon/disk"
 require "../src/pylon/wire/chunks"
@@ -12,7 +13,7 @@ root = ARGV[0]? || abort("usage: tree_wire_bench <root>")
 ignores = Scan::Ignores.new((ENV["BULK_IGNORE"]? || ".git").split(','))
 now = Time.utc.to_unix_ns.to_i64
 
-snapshot = Scan::Scanner.new(Disk.new(root), Scan::Cache.new, now, ignores, baseline: nil, recheck: Set(String).new, tally: Scan::Tally.new).scan
+snapshot = Scan::Scanner.new(Disk.new(root), Scan::Cache.new, now, ignores, baseline: nil, recheck: Set(String).new, tally: Scan::Tally.new, keeper: Pylon::Discard.new).scan
 puts "files:         #{snapshot.cache.size}"
 
 raw = IO::Memory.new

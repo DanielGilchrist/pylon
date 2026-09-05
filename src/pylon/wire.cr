@@ -2,7 +2,7 @@ require "./wire/patch"
 require "./wire/prefixed"
 
 module Pylon::Wire
-  PROTOCOL = 8_u32
+  PROTOCOL = 9_u32
   IDENTITY = "PYLON"
 
   FORMAT            = IO::ByteFormat::LittleEndian

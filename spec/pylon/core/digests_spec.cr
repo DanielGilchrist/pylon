@@ -42,3 +42,22 @@ describe Pylon::Core::Digests do
     Digests.all(nil).should be_empty
   end
 end
+
+describe "Pylon::Core::Digests.fingerprint" do
+  it "does not depend on the order directory contents were inserted" do
+    forwards = Directory.new({"a.rb" => Fixtures.f1, "b.rb" => Fixtures.f2})
+    backwards = Directory.new({"b.rb" => Fixtures.f2, "a.rb" => Fixtures.f1})
+
+    Digests.fingerprint(forwards).should eq(Digests.fingerprint(backwards))
+  end
+
+  it "changes when any entry changes" do
+    original = Fixtures.dir({"app" => Fixtures.dir({"a.rb" => Fixtures.f1})})
+    edited = Fixtures.dir({"app" => Fixtures.dir({"a.rb" => Fixtures.f2})})
+    flipped = Fixtures.dir({"app" => Fixtures.dir({"a.rb" => Fixtures.f1x})})
+
+    Digests.fingerprint(original).should_not eq(Digests.fingerprint(edited))
+    Digests.fingerprint(original).should_not eq(Digests.fingerprint(flipped))
+    Digests.fingerprint(nil).should_not eq(Digests.fingerprint(Directory.new))
+  end
+end

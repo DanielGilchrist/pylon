@@ -41,7 +41,7 @@ private def in_counted_pair(& : String, String, Session(LocalEndpoint, RemoteEnd
   counting = CountingIO.new(client)
 
   begin
-    session = build_session(local_endpoint(local_root), RemoteEndpoint.new(client, counting, remote_configuration(remote_root)))
+    session = build_session(local_endpoint(local_root), RemoteEndpoint.new(client, counting, remote_configuration(remote_root), resume: nil))
     yield local_root, remote_root, session, counting
   ensure
     client.close

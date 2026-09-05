@@ -10,7 +10,7 @@ require "./ignores"
 require "./snapshot"
 
 module Pylon::Scan
-  struct Scanner(F)
+  struct Scanner(F, K)
     READ_BUFFER_BYTES   = 64 * 1024
     MEBIBYTE            = 1024 * 1024
     DEFAULT_PARALLELISM = System.cpu_count.to_i * 2
@@ -28,6 +28,7 @@ module Pylon::Scan
       @baseline : Core::Entry?,
       @recheck : Set(String),
       @tally : Tally,
+      @keeper : K,
       @parallelism : Int32 = DEFAULT_PARALLELISM,
     ) : Nil
       @next_cache = Cache.new
@@ -94,7 +95,7 @@ module Pylon::Scan
       in .directory?
         survey.nodes[path] = SurveyedDirectory.new
         names = Array(String).new
-        baseline_contents = baseline.is_a?(Core::Directory) ? baseline.contents : nil
+        baseline_contents = baseline.contents if baseline.is_a?(Core::Directory)
 
         listed = @filesystem.each_child(path) do |name|
           child = Core::Paths.join(path, name)
@@ -194,7 +195,11 @@ module Pylon::Scan
         file = pending[index]
         digest = @filesystem.digest(file.path, buffer, hasher)
         into[file.path] = digest
-        @tally.hashed(file.size) if digest.is_a?(Bytes)
+
+        if digest.is_a?(Bytes)
+          @tally.hashed(file.size)
+          @keeper.keep(file.path, digest)
+        end
         index += stride
       end
     end

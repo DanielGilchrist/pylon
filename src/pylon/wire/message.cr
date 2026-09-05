@@ -14,6 +14,8 @@ require "./message/tree_delta"
 require "./message/configure"
 require "./message/scan_progress"
 require "./message/tree_announce"
+require "./message/availability_request"
+require "./message/availability_response"
 require "../wire"
 require "./closed"
 require "./greeting"
@@ -44,7 +46,9 @@ module Pylon::Wire
                 TreeDelta |
                 Configure |
                 ScanProgress |
-                TreeAnnounce
+                TreeAnnounce |
+                AvailabilityRequest |
+                AvailabilityResponse
 
     def write(io : IO, message : Any) : Problem?
       message.write(io)
@@ -74,20 +78,22 @@ module Pylon::Wire
 
     private def decode(tag : Tag, reader : Reader) : Any
       case tag
-      in .failure?             then Failure.new(reader.required_string)
-      in .scan_request?        then ScanRequest.new(reader.i64)
-      in .scan_response?       then ScanResponse.new(Chunks.read_entry(reader))
-      in .contents_request?    then read_contents_request(reader)
-      in .contents_response?   then ContentsResponse.new(Chunks.read_contents(reader))
-      in .signatures_request?  then read_signatures_request(reader)
-      in .signatures_response? then SignaturesResponse.new(Binary.read_signatures(reader))
-      in .write_request?       then WriteRequest.new(Chunks.read_changes(reader), Chunks.read_relocations(reader), Chunks.read_contents(reader))
-      in .write_response?      then WriteResponse.new(Chunks.read_outcomes(reader))
-      in .tree_update?         then read_tree_update(reader)
-      in .tree_delta?          then TreeDelta.new(reader.u32, Chunks.read_changes(reader))
-      in .configure?           then read_configure(reader)
-      in .scan_progress?       then ScanProgress.new(reader.i64, reader.i64)
-      in .tree_announce?       then TreeAnnounce.new(reader.u32)
+      in .failure?               then Failure.new(reader.required_string)
+      in .scan_request?          then ScanRequest.new(reader.i64)
+      in .scan_response?         then ScanResponse.new(Chunks.read_entry(reader))
+      in .contents_request?      then read_contents_request(reader)
+      in .contents_response?     then ContentsResponse.new(Chunks.read_contents(reader))
+      in .signatures_request?    then read_signatures_request(reader)
+      in .signatures_response?   then SignaturesResponse.new(Binary.read_signatures(reader))
+      in .write_request?         then read_write_request(reader)
+      in .write_response?        then WriteResponse.new(Chunks.read_outcomes(reader))
+      in .tree_update?           then read_tree_update(reader)
+      in .tree_delta?            then read_tree_delta(reader)
+      in .configure?             then read_configure(reader)
+      in .scan_progress?         then ScanProgress.new(reader.i64, reader.i64)
+      in .tree_announce?         then TreeAnnounce.new(reader.u32)
+      in .availability_request?  then AvailabilityRequest.new(Binary.read_digests(reader))
+      in .availability_response? then AvailabilityResponse.new(Binary.read_digests(reader))
       end
     end
 
@@ -106,11 +112,22 @@ module Pylon::Wire
       SignaturesRequest.new(pairs)
     end
 
+    private def read_write_request(reader : Reader) : WriteRequest
+      WriteRequest.new(Chunks.read_changes(reader), Chunks.read_relocations(reader), Chunks.read_contents(reader))
+    end
+
     private def read_tree_update(reader : Reader) : TreeUpdate
       sequence = reader.u32
       live = reader.bool
 
       TreeUpdate.new(sequence, Chunks.read_entry(reader), live: live)
+    end
+
+    private def read_tree_delta(reader : Reader) : TreeDelta
+      sequence = reader.u32
+      live = reader.bool
+
+      TreeDelta.new(sequence, Chunks.read_changes(reader), live: live)
     end
 
     private def read_configure(reader : Reader) : Configure
@@ -127,8 +144,18 @@ module Pylon::Wire
 
       state = reader.string?
       watch = reader.bool
+      known = reader.bytes?
+      reader.fail("the known tree fingerprint has the wrong length") if known && known.size != DIGEST_BYTES
 
-      Configure.new(root: root, ignores: ignores, compression: compression, brand: Brand.new(brand), state: state, watch: watch)
+      Configure.new(
+        root: root,
+        ignores: ignores,
+        compression: compression,
+        brand: Brand.new(brand),
+        state: state,
+        watch: watch,
+        known: known,
+      )
     end
   end
 end

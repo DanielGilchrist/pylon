@@ -19,7 +19,7 @@ private def in_remote_pair(& : String, String, Session(LocalEndpoint, RemoteEndp
   serve_remote_end(socket)
 
   begin
-    remote = RemoteEndpoint.new(client, client, remote_configuration(remote_root))
+    remote = RemoteEndpoint.new(client, client, remote_configuration(remote_root), resume: nil)
     session = build_session(local_endpoint(local_root), remote)
     yield local_root, remote_root, session, remote
   ensure
@@ -63,7 +63,7 @@ describe "a session over the wire protocol" do
       cycle!(session, tick)
 
       3.times { |index| File.size(File.join(local, "blob#{index}.bin")).should eq(third) }
-      endpoint.exchanges.should eq(3)
+      endpoint.exchanges.should eq(2)
       cycle!(session, tick).quiet?.should be_true
     end
   end

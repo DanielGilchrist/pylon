@@ -69,7 +69,7 @@ transport =
   end
 
 left = Session::LocalEndpoint.new(local_root, Scan::Ignores::NONE, compression: level)
-right = Session::RemoteEndpoint.new(transport.reader, transport.writer, Pylon::Wire::Message::Configure.new(root: remote_root, ignores: Array(String).new, compression: level, brand: Pylon::Brand::DEFAULT, state: nil, watch: watch))
+right = Session::RemoteEndpoint.new(transport.reader, transport.writer, Pylon::Wire::Message::Configure.new(root: remote_root, ignores: Array(String).new, compression: level, brand: Pylon::Brand::DEFAULT, state: nil, watch: watch, known: nil), resume: nil)
 preferences = Core::Preferences.build(Array(String).new, Array(String).new)
 raise "expected empty preferences to build" if preferences.is_a?(Core::Preferences::Invalid)
 session = Session::Session.new(left, right, preferences: preferences, base: nil, dry_run: false, push_first: true, on_progress: nil)

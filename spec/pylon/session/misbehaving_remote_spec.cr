@@ -20,7 +20,7 @@ private def cycle_against(script : IO::Memory, watch : Bool = false) : Report | 
   Dir.mkdir_p(root)
 
   begin
-    session = build_session(local_endpoint(root), RemoteEndpoint.new(script, IO::Memory.new, remote_configuration(root, watch: watch)))
+    session = build_session(local_endpoint(root), RemoteEndpoint.new(script, IO::Memory.new, remote_configuration(root, watch: watch), resume: nil))
     session.cycle(Time.utc.to_unix_ns.to_i64)
   ensure
     FileUtils.rm_rf(root)

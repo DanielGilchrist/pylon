@@ -5,14 +5,16 @@ def remote_configuration(
   ignores : Array(String) = Array(String).new,
   watch : Bool = false,
   brand : Pylon::Brand = Pylon::Brand::DEFAULT,
+  state : String? = nil,
 ) : Pylon::Wire::Message::Configure
   Pylon::Wire::Message::Configure.new(
     root: root,
     ignores: ignores,
     compression: Pylon::Compress::Zstd::DEFAULT_LEVEL,
     brand: brand,
-    state: nil,
+    state: state,
     watch: watch,
+    known: nil,
   )
 end
 

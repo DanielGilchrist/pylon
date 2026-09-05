@@ -6,7 +6,16 @@ module Pylon::Wire::Message
   struct Configure
     include Writable
 
-    def initialize(*, @root : String, @ignores : Array(String), @compression : Int32, @brand : Brand, @state : String?, @watch : Bool) : Nil
+    def initialize(
+      *,
+      @root : String,
+      @ignores : Array(String),
+      @compression : Int32,
+      @brand : Brand,
+      @state : String?,
+      @watch : Bool,
+      @known : Bytes?,
+    ) : Nil
     end
 
     getter root : String
@@ -15,6 +24,7 @@ module Pylon::Wire::Message
     getter brand : Brand
     getter state : String?
     getter? watch : Bool
+    getter known : Bytes?
 
     def tag : Tag
       Tag::Configure
@@ -28,6 +38,7 @@ module Pylon::Wire::Message
       Binary.write_string(io, brand.name)
       Binary.write_string(io, state)
       Binary.write_bool(io, watch?)
+      Binary.write_bytes(io, known)
     end
   end
 end

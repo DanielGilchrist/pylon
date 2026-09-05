@@ -1,3 +1,4 @@
+require "../src/pylon/discard"
 require "../src/pylon/scan/scanner"
 require "../src/pylon/disk"
 require "../src/pylon/session/checkpoint"
@@ -18,14 +19,14 @@ filesystem = Pylon::Disk.new(root)
 now = Time.utc.to_unix_ns.to_i64
 
 puts "cold scan of #{root}:"
-cold = allocated("full scan + hashing") { Scan::Scanner.new(filesystem, Scan::Cache.new, now, IGNORES, baseline: nil, recheck: Set(String).new, tally: Scan::Tally.new).scan }
+cold = allocated("full scan + hashing") { Scan::Scanner.new(filesystem, Scan::Cache.new, now, IGNORES, baseline: nil, recheck: Set(String).new, tally: Scan::Tally.new, keeper: Pylon::Discard.new).scan }
 puts "  files: #{cold.cache.size}"
 
 puts "warm scan (cache hit, no hashing):"
-allocated("stat only") { Scan::Scanner.new(filesystem, cold.cache, now, IGNORES, baseline: nil, recheck: Set(String).new, tally: Scan::Tally.new).scan }
+allocated("stat only") { Scan::Scanner.new(filesystem, cold.cache, now, IGNORES, baseline: nil, recheck: Set(String).new, tally: Scan::Tally.new, keeper: Pylon::Discard.new).scan }
 
 puts "accelerated scan (nothing dirty):"
-allocated("baseline reuse") { Scan::Scanner.new(filesystem, cold.cache, now, IGNORES, baseline: cold.root, recheck: Set(String).new, tally: Scan::Tally.new).scan }
+allocated("baseline reuse") { Scan::Scanner.new(filesystem, cold.cache, now, IGNORES, baseline: cold.root, recheck: Set(String).new, tally: Scan::Tally.new, keeper: Pylon::Discard.new).scan }
 
 puts "reading every file's bytes:"
 allocated("contents of 500 files") do

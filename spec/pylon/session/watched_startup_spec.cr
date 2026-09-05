@@ -23,7 +23,7 @@ private def in_pair(watch : Bool, create_remote : Bool = true, & : String, Strin
   serve_remote_end(socket)
 
   begin
-    endpoint = RemoteEndpoint.new(client, client, remote_configuration(remote, watch: watch), ::Channel(Nil).new(16))
+    endpoint = RemoteEndpoint.new(client, client, remote_configuration(remote, watch: watch), ::Channel(Nil).new(16), resume: nil)
     session = build_session(local_endpoint(local), endpoint)
     yield local, remote, session, endpoint
   ensure
@@ -33,7 +33,7 @@ private def in_pair(watch : Bool, create_remote : Bool = true, & : String, Strin
   end
 end
 
-describe "the first remote tree of a watched session" do
+describe "the first remote tree of a session" do
   it "arrives with the server's first push instead of a scan request" do
     in_pair(watch: true) do |local, remote, session, endpoint|
       File.write(File.join(remote, "pushed.rb"), "from the box")
@@ -45,14 +45,21 @@ describe "the first remote tree of a watched session" do
     end
   end
 
-  it "costs a scan request when nothing pushes" do
+  it "arrives with the server's first push even when nobody is watching" do
     in_pair(watch: false) do |local, remote, session, endpoint|
       File.write(File.join(remote, "pushed.rb"), "from the box")
 
       cycle!(session, tick)
 
       File.read(File.join(local, "pushed.rb")).should eq("from the box")
-      endpoint.exchanges.should eq(2)
+      endpoint.exchanges.should eq(1)
+
+      File.write(File.join(remote, "later.rb"), "also from the box")
+
+      cycle!(session, tick)
+
+      File.read(File.join(local, "later.rb")).should eq("also from the box")
+      endpoint.exchanges.should eq(3)
     end
   end
 

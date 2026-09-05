@@ -19,7 +19,6 @@ module Pylon
       ScanDigest
       Inotify
       FSEvents
-      Mirror
       ServerScan
     end
 

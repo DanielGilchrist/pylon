@@ -75,6 +75,13 @@ module Pylon
       problem(error)
     end
 
+    def link(from : String, to : String) : Problem?
+      ::File.link(from, to)
+      nil
+    rescue error : ::File::Error
+      problem(error)
+    end
+
     def rename(from : String, to : String) : Problem?
       ::File.rename(from, to)
       nil
@@ -103,7 +110,7 @@ module Pylon
       problem(error)
     end
 
-    def clone(from : String, to : String) : Problem?
+    def snapshot(from : String, to : String) : Problem?
       Platform.select do
         macos do
           return if LibClone.clonefile(from.check_no_null_byte, to.check_no_null_byte, LibClone::NOFOLLOW) == 0
@@ -111,10 +118,7 @@ module Pylon
           Problem.new("could not be cloned (#{Errno.value})")
         end
 
-        linux do
-          # TODO: Implement using FICLONE ioctl
-          Problem.new("file cloning is not implemented for Linux yet.")
-        end
+        linux { link(from, to) }
       end
     end
 

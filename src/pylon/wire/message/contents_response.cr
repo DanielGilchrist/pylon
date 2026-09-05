@@ -7,25 +7,21 @@ module Pylon::Wire::Message
   struct ContentsResponse
     include Writable
 
-    def initialize(@source : ContentSource) : Nil
+    def initialize(@payload : ContentSource) : Nil
     end
 
     def initialize(contents : Contents) : Nil
-      @source = ContentSource::Materialised.new(contents)
+      @payload = ContentSource::Materialised.new(contents)
     end
 
-    getter source : ContentSource
-
-    def contents : Contents
-      source.contents
-    end
+    getter payload : ContentSource
 
     def tag : Tag
       Tag::ContentsResponse
     end
 
     def write_payload(io : IO) : Nil
-      source.write(io)
+      payload.write(io)
     end
   end
 end

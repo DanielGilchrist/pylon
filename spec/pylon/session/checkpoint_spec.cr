@@ -32,7 +32,7 @@ describe Pylon::Session::Checkpoint do
     in_sandbox do |path|
       base = Pylon::Core::Directory.new({"app" => Pylon::Core::Directory.new({"user.rb" => Fixtures.f1})})
 
-      Checkpoint.new(base, sample_cache, Pylon::Scan::Cache.new).save(path).should be_nil
+      Checkpoint.new(base, sample_cache, nil).save(path).should be_nil
 
       loaded = Checkpoint.load(path)
       loaded.should be_a(Checkpoint)
@@ -45,7 +45,7 @@ describe Pylon::Session::Checkpoint do
       entry.metadata.mtime_ns.should eq(1_700_i64)
       entry.metadata.size.should eq(42_u64)
       entry.digest.should eq(Digest::SHA256.digest("digest-a"))
-      loaded.remote_cache.should be_empty
+      loaded.exchanged.should be_nil
     end
   end
 
@@ -81,7 +81,7 @@ describe Pylon::Session::Checkpoint do
 
   it "reports a truncated store as damaged rather than half a state" do
     in_sandbox do |path|
-      Checkpoint.new(Pylon::Core::Directory.new({"a" => Fixtures.f1}), sample_cache, sample_cache).save(path)
+      Checkpoint.new(Pylon::Core::Directory.new({"a" => Fixtures.f1}), sample_cache, nil).save(path)
       bytes = File.read(path).to_slice.dup
 
       File.write(path, bytes[0, bytes.size // 2])
@@ -107,7 +107,7 @@ describe Pylon::Session::Checkpoint do
 
   it "leaves no temporary files behind" do
     in_sandbox do |path|
-      Checkpoint.new(nil, sample_cache, sample_cache).save(path)
+      Checkpoint.new(nil, sample_cache, nil).save(path)
 
       Dir.children(File.dirname(path)).should eq(["state"])
     end

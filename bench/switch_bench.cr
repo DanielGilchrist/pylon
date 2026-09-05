@@ -44,13 +44,13 @@ transport =
 
 left = Session::LocalEndpoint.new(local_root, Scan::Ignores.new([ignore]), compression: level)
 if (store_directory = ENV["BULK_STORE"]?)
-  case (store = Session::ContentStore.open(store_directory))
+  case (store = Session::ContentStore.open(store_directory, local_root))
   in Session::ContentStore              then left.store = store
   in Session::ContentStore::Unavailable then abort("the content store could not be opened: #{store.reason}")
   end
 end
 
-right = Session::RemoteEndpoint.new(transport.reader, transport.writer, Pylon::Wire::Message::Configure.new(root: remote_root, ignores: [ignore], compression: level, brand: Pylon::Brand::DEFAULT, state: nil, watch: false))
+right = Session::RemoteEndpoint.new(transport.reader, transport.writer, Pylon::Wire::Message::Configure.new(root: remote_root, ignores: [ignore], compression: level, brand: Pylon::Brand::DEFAULT, state: nil, watch: false, known: nil), resume: nil)
 preferences = Core::Preferences.build(Array(String).new, Array(String).new)
 raise "expected empty preferences to build" if preferences.is_a?(Core::Preferences::Invalid)
 session = Session::Session.new(left, right, preferences: preferences, base: nil, dry_run: false, push_first: true, on_progress: nil)

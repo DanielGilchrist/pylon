@@ -118,7 +118,10 @@ describe "Writer running independent file writes in parallel" do
   it "still reports a skip per missing staged content" do
     changes = bulk_changes
     contents = staged_contents(changes)
-    missing = changes.compact_map { |change| (entry = change.new).is_a?(Pylon::Core::File) ? entry.digest : nil }.first(5)
+    missing = changes.compact_map do |change|
+      entry = change.new
+      entry.digest if entry.is_a?(Pylon::Core::File)
+    end.first(5)
     missing.each { |digest| contents.delete(digest) }
 
     root = File.tempname("pylon-parallel-skip")

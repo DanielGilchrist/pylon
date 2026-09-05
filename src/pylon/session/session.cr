@@ -5,7 +5,8 @@ require "./progress"
 require "./report"
 require "../core/digests"
 require "../write/writer"
-require "./pending_write"
+require "./settled"
+require "./awaiting"
 
 module Pylon::Session
   class Session(A, B)
@@ -17,7 +18,16 @@ module Pylon::Session
     # of the whole file. To do this we need to perform a round trip. For smaller batches
     # the round trip ends up costing more than sending the whole batch anyway so we don't
     # bother if the batch is under a certain size.
-    DELTA_WAIT_BYTES = 256_u64 * 1024
+    ROUND_TRIP_WORTH_BYTES = 256_u64 * 1024
+
+    alias PendingSignatures = Settled(Wire::Delta::Signatures) |
+                              Awaiting(Wire::Message::SignaturesResponse, Wire::Delta::Signatures)
+    alias PendingAvailability = Settled(Array(Bytes)) |
+                                Awaiting(Wire::Message::AvailabilityResponse, Array(Bytes))
+    alias PendingContents = Settled(Wire::ContentSource) |
+                            Awaiting(Wire::Message::ContentsResponse, Wire::ContentSource)
+    alias PendingOutcomes = Settled(Array(Write::Outcome)) |
+                            Awaiting(Wire::Message::WriteResponse, Array(Write::Outcome))
 
     {% if flag?(:timing) %}
       @reused = 0
@@ -115,19 +125,12 @@ module Pylon::Session
       commit!(reconciliation.base_changes, local_outcomes, remote_outcomes)
 
       {% if flag?(:timing) %}
-        committed = Time.instant
-      {% end %}
-
-      @local.mirror(remote_root, remote_outcomes)
-
-      {% if flag?(:timing) %}
-        STDERR.puts("  client scans=%.1f reconcile=%.1f contents=%.1f write=%.1f commit=%.1f mirror=%.1f" % [
+        STDERR.puts("  client scans=%.1f reconcile=%.1f contents=%.1f write=%.1f commit=%.1f" % [
           (scanned - started).total_milliseconds,
           (reconciled - scanned).total_milliseconds,
           (fetched - reconciled).total_milliseconds,
           (written - fetched).total_milliseconds,
-          (committed - written).total_milliseconds,
-          (Time.instant - committed).total_milliseconds,
+          (Time.instant - written).total_milliseconds,
         ])
         STDERR.puts("  client alloc scans=%.1f reconcile=%.1f transfer=%.1f commit=%.1f MiB" % [
           (alloc_scanned - alloc_started) / 1_048_576.0,
@@ -180,7 +183,7 @@ module Pylon::Session
       relocations_pending = !relocations.empty?
       none = Array(Core::Relocation).new
       offset = 0
-      inflight = Deque(PendingWrite).new(WRITE_WINDOW)
+      inflight = Deque(PendingOutcomes).new(WRITE_WINDOW)
       total_bytes = source.payload_size(changes)
       collector = Core::Digests::Collector.new
       signatures = Wire::Delta::Signatures.new
@@ -193,8 +196,17 @@ module Pylon::Session
         pending_signatures = target.signatures_begin(pairs) unless pairs.empty?
       end
 
-      if pending_signatures && source.delta_capable? && (fault = pending_signatures.settle_into(signatures))
-        return fault
+      if pending_signatures && source.delta_capable?
+        if (fault = settle(pending_signatures, signatures))
+          return fault
+        end
+
+        pending_signatures = nil
+      end
+
+      case (held = target.availability_begin(availability_query(changes, source, target_holds, bases)).await)
+      in Fault        then return held
+      in Array(Bytes) then held.each { |digest| target_holds << digest }
       end
 
       changes = changes.deletes_last(candidates)
@@ -226,8 +238,12 @@ module Pylon::Session
           pending_contents = source.content_begin(wanted_from(changes, offset, collector, target_holds), TRANSFER_BUDGET, signatures, bases)
         end
 
-        if pending_signatures && worth_waiting_for_signature?(batch, source, candidates) && (fault = pending_signatures.settle_into(signatures))
-          return fault
+        if pending_signatures && worth_waiting_for_signature?(batch, source, candidates)
+          if (fault = settle(pending_signatures, signatures))
+            return fault
+          end
+
+          pending_signatures = nil
         end
 
         if relocations_pending && offset == changes.size
@@ -246,7 +262,7 @@ module Pylon::Session
         end
       end
 
-      if pending_signatures && (fault = pending_signatures.settle_into(signatures))
+      if pending_signatures && (fault = settle(pending_signatures, signatures))
         return fault
       end
 
@@ -283,6 +299,14 @@ module Pylon::Session
       outcomes
     end
 
+    private def settle(pending : PendingSignatures, signatures : Wire::Delta::Signatures) : Fault?
+      received = pending.await
+      return received if received.is_a?(Fault)
+
+      signatures.merge!(received)
+      nil
+    end
+
     private def wanted_from(changes : Core::Changes, offset : Int32, collector : Core::Digests::Collector, target_holds : Set(Bytes)) : Array(Bytes)
       wanted = collector.required(changes, offset)
 
@@ -299,6 +323,35 @@ module Pylon::Session
       wanted
     end
 
+    private def availability_query(
+      changes : Core::Changes,
+      source : A | B,
+      target_holds : Set(Bytes),
+      bases : Wire::Prefixed::Bases,
+    ) : Array(Bytes)
+      asked = Array(Bytes).new
+      seen = Set(Bytes).new
+      weight = 0_u64
+      unsized = false
+
+      changes.each do |change|
+        entry = change.new
+        next unless entry.is_a?(Core::File)
+
+        digest = entry.digest
+        next if target_holds.includes?(digest)
+        next if (base = bases[digest]?) && source.retained?(base)
+        next unless seen.add?(digest)
+
+        asked << digest
+        size = source.known_size(change.path)
+        unsized ||= size.nil?
+        weight += size if size
+      end
+
+      unsized || weight >= ROUND_TRIP_WORTH_BYTES ? asked : Array(Bytes).new
+    end
+
     private def worth_waiting_for_signature?(batch : Core::Changes, source : A | B, candidates : Set(Bytes)) : Bool
       return false if candidates.empty?
 
@@ -312,7 +365,7 @@ module Pylon::Session
         return true if size.nil?
 
         weight += size
-        return true if weight >= DELTA_WAIT_BYTES
+        return true if weight >= ROUND_TRIP_WORTH_BYTES
       end
 
       false
@@ -362,7 +415,7 @@ module Pylon::Session
 
       changes.each(within: offset...) do |change|
         entry = change.new
-        digest = entry.is_a?(Core::File) ? entry.digest : nil
+        digest = entry.digest if entry.is_a?(Core::File)
 
         break if digest && !available.includes?(digest) && !target_holds.includes?(digest)
 

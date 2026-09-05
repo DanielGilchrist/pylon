@@ -1,5 +1,6 @@
 require "../../spec_helper"
 require "../../support/memory_filesystem"
+require "../../../src/pylon/discard"
 require "../../../src/pylon/scan/scanner"
 
 private def scan_with(tally : Pylon::Scan::Tally, files : Hash(String, String)) : Nil
@@ -10,7 +11,7 @@ private def scan_with(tally : Pylon::Scan::Tally, files : Hash(String, String)) 
     Pylon::Scan::Ignores::NONE,
     baseline: nil,
     recheck: Set(String).new,
-    tally: tally,
+    tally: tally, keeper: Pylon::Discard.new,
   ).scan
 end
 

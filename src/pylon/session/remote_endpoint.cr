@@ -4,11 +4,9 @@ require "../wire/message"
 require "./fault"
 require "./inbound"
 require "./metered_reader"
-require "./pending_write"
 require "./session"
-require "./settled_contents"
-require "./remote_endpoint/pending_contents"
-require "./remote_endpoint/pending_signatures"
+require "./settled"
+require "./awaiting"
 
 module Pylon::Session
   class RemoteEndpoint
@@ -16,12 +14,21 @@ module Pylon::Session
     @tree : Core::Entry? = nil
     @unapplied = Core::Changes.new
 
-    def initialize(input : IO, @output : IO, @configure : Wire::Message::Configure, @signals : Channel(Nil)? = nil) : Nil
+    def initialize(
+      input : IO,
+      @output : IO,
+      @configure : Wire::Message::Configure,
+      @signals : Channel(Nil)? = nil,
+      *,
+      resume : Core::Entry?,
+    ) : Nil
+      @tree = resume
       @inbound = Inbound.new
       @input = MeteredReader.new(input, @inbound.meter)
       @scanned = Channel(Wire::Message::ScanResponse).new(1)
       @contents = Channel(Wire::Message::ContentsResponse).new(1)
       @signatures = Channel(Wire::Message::SignaturesResponse).new(1)
+      @availability = Channel(Wire::Message::AvailabilityResponse).new(1)
       @written = Channel(Wire::Message::WriteResponse).new(Session::WRITE_WINDOW)
       @greeting = Channel(Nil).new
       @initial = Channel(Nil).new
@@ -35,8 +42,8 @@ module Pylon::Session
     getter inbound : Inbound
 
     def scan(now_ns : Int64) : Core::Entry? | Fault
-      return settled_tree if @known
-      return initial_tree if @configure.watch? && !@initial.closed?
+      return tree if @known
+      return initial_tree unless @initial.closed?
 
       reply = exchange(Wire::Message::ScanRequest.new(now_ns), @scanned)
       return reply if reply.is_a?(Fault)
@@ -49,18 +56,34 @@ module Pylon::Session
       true
     end
 
-    def signatures_begin(pairs : Array(Wire::Message::SignaturesRequest::Pair)) : PendingSignatures
-      PendingSignatures.new(self, transmit(Wire::Message::SignaturesRequest.new(pairs)))
+    def signatures_begin(pairs : Array(Wire::Message::SignaturesRequest::Pair)) : Session::PendingSignatures
+      fault = transmit(Wire::Message::SignaturesRequest.new(pairs))
+      Awaiting(Wire::Message::SignaturesResponse, Wire::Delta::Signatures).new(self, @signatures, fault)
     end
 
     def retained?(digest : Bytes) : Bool
       false
     end
 
-    def content_begin(digests : Array(Bytes), budget : UInt64, signatures : Wire::Delta::Signatures, bases : Wire::Prefixed::Bases) : PendingContents | SettledContents
-      return SettledContents.new(Wire::ContentSource::Materialised.new(Wire::Contents.new)) if digests.empty?
+    def availability_begin(digests : Array(Bytes)) : Session::PendingAvailability
+      return Settled.new(Array(Bytes).new) if digests.empty?
 
-      PendingContents.new(self, transmit(Wire::Message::ContentsRequest.new(digests, budget, signatures)))
+      fault = transmit(Wire::Message::AvailabilityRequest.new(digests))
+      Awaiting(Wire::Message::AvailabilityResponse, Array(Bytes)).new(self, @availability, fault)
+    end
+
+    def content_begin(
+      digests : Array(Bytes),
+      budget : UInt64,
+      signatures : Wire::Delta::Signatures,
+      bases : Wire::Prefixed::Bases,
+    ) : Session::PendingContents
+      if digests.empty?
+        return Settled(Wire::ContentSource).new(Wire::ContentSource::Materialised.new(Wire::Contents.new))
+      end
+
+      fault = transmit(Wire::Message::ContentsRequest.new(digests, budget, signatures))
+      Awaiting(Wire::Message::ContentsResponse, Wire::ContentSource).new(self, @contents, fault)
     end
 
     def known_size(path : String) : UInt64?
@@ -71,31 +94,26 @@ module Pylon::Session
       nil
     end
 
-    def write_begin(changes : Core::Changes, source : Wire::ContentSource, relocations : Array(Core::Relocation)) : PendingWrite
-      transmit(Wire::Message::WriteRequest.new(changes, relocations, source))
-      PendingWrite.new(Proc(Array(Write::Outcome) | Fault).new { receive_written })
+    def write_begin(
+      changes : Core::Changes,
+      source : Wire::ContentSource,
+      relocations : Array(Core::Relocation),
+    ) : Session::PendingOutcomes
+      fault = transmit(Wire::Message::WriteRequest.new(changes, relocations, source))
+      Awaiting(Wire::Message::WriteResponse, Array(Write::Outcome)).new(self, @written, fault)
     end
 
-    protected def receive_contents : Wire::ContentSource | Fault
-      reply = receive(@contents)
-      return reply if reply.is_a?(Fault)
+    def tree : Core::Entry?
+      unless @unapplied.empty?
+        @tree = Core::Applier.apply(@tree, @unapplied)
+        @unapplied.clear
+      end
 
-      Wire::ContentSource::Materialised.new(reply.contents)
+      @tree
     end
 
-    protected def receive_signatures : Wire::Delta::Signatures | Fault
-      reply = receive(@signatures)
-      return reply if reply.is_a?(Fault)
-
-      reply.signatures
-    end
-
-    private def receive_written : Array(Write::Outcome) | Fault
-      reply = receive(@written)
-      return reply if reply.is_a?(Fault)
-
-      reply.outcomes.each { |outcome| @unapplied << Core::Change.new(outcome.path, nil, outcome.entry) }
-      reply.outcomes
+    protected def receive(channel : Channel(T)) : T | Fault forall T
+      channel.receive? || @fault || Stopped.new
     end
 
     private def initial_tree : Core::Entry? | Fault
@@ -105,16 +123,7 @@ module Pylon::Session
         return fault
       end
 
-      settled_tree
-    end
-
-    private def settled_tree : Core::Entry?
-      unless @unapplied.empty?
-        @tree = Core::Applier.apply(@tree, @unapplied)
-        @unapplied.clear
-      end
-
-      @tree
+      tree
     end
 
     private def listen : Nil
@@ -156,21 +165,21 @@ module Pylon::Session
           @known = message.live?
           @initial.close
         in Wire::Message::TreeDelta
-          if message.sequence == @sequence + 1
-            @tree = Core::Applier.apply(settled_tree, message.changes)
-            @sequence = message.sequence
+          if @initial.closed?
+            follow(message)
           else
-            @known = false
+            open_with(message)
           end
-
-          signal
         in Wire::Message::ScanResponse
           return unless deliver(@scanned, message)
         in Wire::Message::ContentsResponse
           return unless deliver(@contents, message)
         in Wire::Message::SignaturesResponse
           return unless deliver(@signatures, message)
+        in Wire::Message::AvailabilityResponse
+          return unless deliver(@availability, message)
         in Wire::Message::WriteResponse
+          message.payload.each { |outcome| @unapplied << Core::Change.new(outcome.path, nil, outcome.entry) }
           return unless deliver(@written, message)
         in Wire::Message::ScanProgress
           @inbound.scanning(message.files, message.hashed_bytes)
@@ -183,11 +192,31 @@ module Pylon::Session
            Wire::Message::ContentsRequest,
            Wire::Message::SignaturesRequest,
            Wire::Message::WriteRequest,
+           Wire::Message::AvailabilityRequest,
            Wire::Message::Configure
           stop_with(Misbehaved.new("the server sent a #{message.class.name}, which only clients send"))
           return
         end
       end
+    end
+
+    private def open_with(message : Wire::Message::TreeDelta) : Nil
+      @unapplied.clear
+      @tree = Core::Applier.apply(@tree, message.changes)
+      @sequence = message.sequence
+      @known = message.live?
+      @initial.close
+    end
+
+    private def follow(message : Wire::Message::TreeDelta) : Nil
+      if message.sequence == @sequence + 1
+        @tree = Core::Applier.apply(tree, message.changes)
+        @sequence = message.sequence
+      else
+        @known = false
+      end
+
+      signal
     end
 
     private def deliver(channel : Channel(T), message : T) : Bool forall T
@@ -205,6 +234,7 @@ module Pylon::Session
       @scanned.close
       @contents.close
       @signatures.close
+      @availability.close
       @written.close
       @greeting.close
       @initial.close
@@ -242,10 +272,6 @@ module Pylon::Session
       end
 
       nil
-    end
-
-    private def receive(channel : Channel(T)) : T | Fault forall T
-      channel.receive? || @fault || Stopped.new
     end
   end
 end

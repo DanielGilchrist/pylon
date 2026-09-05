@@ -14,5 +14,7 @@ module Pylon::Wire::Message
     Configure
     ScanProgress
     TreeAnnounce
+    AvailabilityRequest
+    AvailabilityResponse
   end
 end

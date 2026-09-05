@@ -5,7 +5,7 @@ require "../wire/binary"
 module Pylon::Session
   struct Checkpoint
     MAGIC   = "PYLON\0"
-    VERSION = 3_u32
+    VERSION = 4_u32
     DIGEST  = "sha256"
 
     record Absent
@@ -29,23 +29,23 @@ module Pylon::Session
 
       base = Wire::Binary.read_entry(reader)
       local_cache = Wire::Binary.read_cache(reader)
-      remote_cache = Wire::Binary.read_cache(reader)
+      exchanged = Wire::Binary.read_entry(reader)
 
       return Damaged.new(reader.reason) if reader.failed?
 
-      new(base: base, local_cache: local_cache, remote_cache: remote_cache)
+      new(base: base, local_cache: local_cache, exchanged: exchanged)
     end
 
     def initialize(
       @base : Core::Entry? = nil,
       @local_cache : Scan::Cache = Scan::Cache.new,
-      @remote_cache : Scan::Cache = Scan::Cache.new,
+      @exchanged : Core::Entry? = nil,
     ) : Nil
     end
 
     getter base : Core::Entry?
     getter local_cache : Scan::Cache
-    getter remote_cache : Scan::Cache
+    getter exchanged : Core::Entry?
 
     def save(path : String) : Damaged?
       if (blocked = Filesystem.ensure_directory(File.dirname(path)))
@@ -60,7 +60,7 @@ module Pylon::Session
         Wire::Binary.write_string(io, DIGEST)
         Wire::Binary.write_entry(io, base)
         Wire::Binary.write_cache(io, local_cache)
-        Wire::Binary.write_cache(io, remote_cache)
+        Wire::Binary.write_entry(io, exchanged)
         nil
       end
 

@@ -96,7 +96,7 @@ module Pylon::Wire
 
       buffer = Bytes.new(size)
       fill(buffer)
-      @failed ? nil : buffer
+      buffer unless @failed
     end
 
     def required_bytes : Bytes

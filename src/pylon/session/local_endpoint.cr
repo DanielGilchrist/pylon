@@ -11,9 +11,8 @@ require "../write/writer"
 require "../wire/message"
 require "./staging"
 require "./content_store"
-require "./pending_write"
-require "./settled_contents"
-require "./local_endpoint/settled_signatures"
+require "../discard"
+require "./settled"
 
 module Pylon::Session
   class LocalEndpoint
@@ -76,6 +75,7 @@ module Pylon::Session
         baseline: @baseline,
         recheck: @recheck,
         tally: @tally,
+        keeper: @store || Discard.new,
       ).scan
 
       @tally.finish
@@ -83,8 +83,9 @@ module Pylon::Session
       unless @cache.same?(snapshot.cache)
         @cache = snapshot.cache
         @by_digest = index(snapshot.cache)
+        @store.try(&.prune { |digest| @by_digest.has_key?(digest) })
       end
-      @baseline = @accelerated ? snapshot.root : nil
+      @baseline = snapshot.root if @accelerated
       @recheck = Set(String).new
       snapshot.root
     end
@@ -93,8 +94,8 @@ module Pylon::Session
       false
     end
 
-    def signatures_begin(pairs : Array(Wire::Message::SignaturesRequest::Pair)) : SettledSignatures
-      SettledSignatures.new(signatures(pairs))
+    def signatures_begin(pairs : Array(Wire::Message::SignaturesRequest::Pair)) : Settled(Wire::Delta::Signatures)
+      Settled.new(signatures(pairs))
     end
 
     def signatures(pairs : Array(Wire::Message::SignaturesRequest::Pair)) : Wire::Delta::Signatures
@@ -118,31 +119,28 @@ module Pylon::Session
       store = @store
       return false if store.nil?
 
-      store.retained?(digest)
+      store.holds?(digest)
     end
 
-    def mirror(remote : Core::Entry?, outcomes : Array(Write::Outcome)) : Nil
+    def availability_begin(digests : Array(Bytes)) : Settled(Array(Bytes))
+      Settled.new(available(digests))
+    end
+
+    def available(digests : Array(Bytes)) : Array(Bytes)
       store = @store
-      return if store.nil?
+      indexed = digests.select { |digest| @by_digest.has_key?(digest) }
+      return indexed if store.nil?
 
-      holdings = Core::Digests.all(Core::Applier.apply(remote, Write::Outcome.changes(outcomes)))
-      retentions = Array(ContentStore::Retention).new
-
-      holdings.each do |digest|
-        next if store.retained?(digest)
-
-        located = @by_digest[digest]?
-        next if located.nil?
-
-        retentions << ContentStore::Retention.new(File.join(@root, located.path), digest)
-      end
-
-      store.retain(retentions)
-      store.prune(holdings)
+      indexed.concat(store.available(digests.reject { |digest| @by_digest.has_key?(digest) }))
     end
 
-    def content_begin(digests : Array(Bytes), budget : UInt64, signatures : Wire::Delta::Signatures, bases : Wire::Prefixed::Bases) : SettledContents
-      SettledContents.new(content_source(digests, budget, signatures, bases))
+    def content_begin(
+      digests : Array(Bytes),
+      budget : UInt64,
+      signatures : Wire::Delta::Signatures,
+      bases : Wire::Prefixed::Bases,
+    ) : Settled(Wire::ContentSource)
+      Settled(Wire::ContentSource).new(content_source(digests, budget, signatures, bases))
     end
 
     def content_source(digests : Array(Bytes), budget : UInt64, signatures : Wire::Delta::Signatures, bases : Wire::Prefixed::Bases) : Wire::ContentSource
@@ -201,18 +199,28 @@ module Pylon::Session
 
     def recovered_content(digest : Bytes) : Bytes?
       located = @by_digest[digest]?
-      return if located.nil?
+      return stored_content(digest) if located.nil?
 
-      verified_read(located.path, digest)
+      verified_read(located.path, digest) || stored_content(digest)
     end
 
     def base_content(digest : Bytes, path : String) : Bytes?
       verified_read(path, digest) || recovered_content(digest)
     end
 
-    def write_begin(changes : Core::Changes, source : Wire::ContentSource, relocations : Array(Core::Relocation)) : PendingWrite
-      outcomes = write(changes, source, relocations)
-      PendingWrite.new(Proc(Array(Write::Outcome) | Fault).new { outcomes })
+    def write_begin(
+      changes : Core::Changes,
+      source : Wire::ContentSource,
+      relocations : Array(Core::Relocation),
+    ) : Settled(Array(Write::Outcome))
+      Settled.new(write(changes, source, relocations))
+    end
+
+    private def stored_content(digest : Bytes) : Bytes?
+      store = @store
+      return if store.nil?
+
+      store.content(digest)
     end
 
     private def plan_delivery(want : Wanted, bases : Wire::Prefixed::Bases, signatures : Wire::Delta::Signatures, prefix : Compress::Prefix) : Wire::Prefixed | Wire::Patch | Nil
@@ -324,7 +332,7 @@ module Pylon::Session
       in Problem
         nil
       in Bytes
-        Core::Digests.matches?(content, digest) ? content : nil
+        content if Core::Digests.matches?(content, digest)
       end
     end
 

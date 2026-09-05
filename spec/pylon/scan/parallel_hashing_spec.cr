@@ -1,6 +1,7 @@
 require "digest/sha256"
 require "file_utils"
 require "../../spec_helper"
+require "../../../src/pylon/discard"
 require "../../../src/pylon/scan/scanner"
 require "../../../src/pylon/disk"
 
@@ -32,7 +33,7 @@ private def digests(root : String, parallelism : Int32) : Hash(String, String)
     Ignores::NONE,
     baseline: nil,
     recheck: Set(String).new,
-    tally: Tally.new,
+    tally: Tally.new, keeper: Pylon::Discard.new,
     parallelism: parallelism,
   ).scan
 

@@ -48,7 +48,7 @@ private def in_retaining_pair(retain_from_start : Bool = true, & : Pair ->) : Ni
   Dir.mkdir_p(local_root)
   Dir.mkdir_p(remote_root)
 
-  store = ContentStore.open(File.join(base, "store"))
+  store = ContentStore.open(File.join(base, "store"), local_root)
   raise "the store could not be opened: #{store.reason}" if store.is_a?(ContentStore::Unavailable)
 
   client, socket = UNIXSocket.pair
@@ -57,7 +57,7 @@ private def in_retaining_pair(retain_from_start : Bool = true, & : Pair ->) : Ni
   metered = MeteredIO.new(client)
   left = local_endpoint(local_root)
   left.store = store if retain_from_start
-  endpoint = RemoteEndpoint.new(metered, metered, remote_configuration(remote_root))
+  endpoint = RemoteEndpoint.new(metered, metered, remote_configuration(remote_root), resume: nil)
 
   begin
     yield Pair.new(local_root, remote_root, build_session(left, endpoint), endpoint, metered, left, store)
@@ -129,7 +129,7 @@ describe "patches against retained copies" do
       cycle!(pair.session, tick)
 
       File.read(File.join(pair.remote, "big.bin")).to_slice.should eq(once)
-      (pair.endpoint.exchanges - exchanges_before).should eq(3)
+      (pair.endpoint.exchanges - exchanges_before).should eq(4)
 
       twice = with_byte_flipped(once)
       File.write(File.join(pair.local, "big.bin"), twice)
@@ -141,7 +141,7 @@ describe "patches against retained copies" do
     end
   end
 
-  it "keeps the store in step with what the remote holds" do
+  it "keeps every version it has hashed until the orphan bound prunes it" do
     in_retaining_pair do |pair|
       original = Digest::SHA256.digest(INCOMPRESSIBLE)
       edited = with_byte_flipped(INCOMPRESSIBLE)
@@ -149,16 +149,16 @@ describe "patches against retained copies" do
 
       File.write(File.join(pair.local, "a.bin"), INCOMPRESSIBLE)
       cycle!(pair.session, tick)
-      pair.store.retained?(original).should be_true
+      pair.store.holds?(original).should be_true
 
       File.write(File.join(pair.local, "a.bin"), edited)
       cycle!(pair.session, tick)
-      pair.store.retained?(original).should be_false
-      pair.store.retained?(replacement).should be_true
+      pair.store.holds?(original).should be_true
+      pair.store.holds?(replacement).should be_true
 
       File.delete(File.join(pair.local, "a.bin"))
       cycle!(pair.session, tick)
-      pair.store.retained?(replacement).should be_false
+      String.new(pair.store.content(replacement) || Bytes.empty).to_slice.should eq(edited)
     end
   end
 end

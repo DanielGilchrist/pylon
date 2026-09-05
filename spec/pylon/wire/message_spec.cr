@@ -10,7 +10,7 @@ private def round_trip(message : Message::Any) : Message::Any | Closed | Invalid
   Message.read(io)
 end
 
-private def configuration(root : String = "/srv/app", brand : String = "Test Sync", state : String? = "/srv/.state") : Message::Configure
+private def configuration(root : String = "/srv/app", brand : String = "Test Sync", state : String? = "/srv/.state", known : Bytes? = nil) : Message::Configure
   Message::Configure.new(
     root: root,
     ignores: ["node_modules", ".git"],
@@ -18,7 +18,43 @@ private def configuration(root : String = "/srv/app", brand : String = "Test Syn
     brand: Pylon::Brand.new(brand),
     state: state,
     watch: true,
+    known: known,
   )
+end
+
+describe Pylon::Wire::Message::AvailabilityRequest do
+  it "round trips the digests the sender would otherwise ship in full" do
+    digests = [Bytes.new(DIGEST_BYTES, 1_u8), Bytes.new(DIGEST_BYTES, 2_u8)]
+    received = round_trip(Message::AvailabilityRequest.new(digests))
+
+    received.should be_a(Message::AvailabilityRequest)
+    received.digests.should eq(digests) if received.is_a?(Message::AvailabilityRequest)
+  end
+end
+
+describe Pylon::Wire::Message::AvailabilityResponse do
+  it "round trips the digests the receiver can recover itself" do
+    received = round_trip(Message::AvailabilityResponse.new([Bytes.new(DIGEST_BYTES, 3_u8)]))
+
+    received.should be_a(Message::AvailabilityResponse)
+    received.payload.should eq([Bytes.new(DIGEST_BYTES, 3_u8)]) if received.is_a?(Message::AvailabilityResponse)
+  end
+end
+
+describe Pylon::Wire::Message::TreeDelta do
+  it "round trips the changes since the tree the client already holds" do
+    changes = Pylon::Core::Changes[Pylon::Core::Change.new("a.rb", Fixtures.f1, Fixtures.f2)]
+    received = round_trip(Message::TreeDelta.new(4_u32, changes, live: true))
+
+    received.should be_a(Message::TreeDelta)
+    next unless received.is_a?(Message::TreeDelta)
+
+    received.sequence.should eq(4_u32)
+    received.live?.should be_true
+    received.changes.size.should eq(1)
+    received.changes[0].path.should eq("a.rb")
+    (received.changes[0].new == Fixtures.f2).should be_true
+  end
 end
 
 describe Pylon::Wire::Message::TreeUpdate do
@@ -79,6 +115,21 @@ describe Pylon::Wire::Message::Configure do
     received.brand.should eq(Pylon::Brand.new("Test Sync"))
     received.state.should eq("/srv/.state")
     received.watch?.should be_true
+  end
+
+  it "round trips the fingerprint of the tree the client already holds" do
+    known = Bytes.new(DIGEST_BYTES, 9_u8)
+    received = round_trip(configuration(known: known))
+
+    received.should be_a(Message::Configure)
+    received.known.should eq(known) if received.is_a?(Message::Configure)
+  end
+
+  it "refuses a fingerprint of the wrong length" do
+    received = round_trip(configuration(known: Bytes.new(5, 9_u8)))
+
+    received.should be_a(Invalid)
+    received.reason.should contain("fingerprint") if received.is_a?(Invalid)
   end
 
   it "keeps having no state path distinct from an empty one" do

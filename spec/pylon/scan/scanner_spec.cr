@@ -1,5 +1,7 @@
 require "../../spec_helper"
 require "../../support/memory_filesystem"
+require "../../support/memory_keeper"
+require "../../../src/pylon/discard"
 require "../../../src/pylon/scan/scanner"
 
 include Pylon::Scan
@@ -11,7 +13,7 @@ private def scan(
   cache : Cache = Cache.new,
   ignores : Ignores = Ignores::NONE,
 ) : Snapshot
-  Scanner.new(filesystem, cache, NOW, ignores, baseline: nil, recheck: Set(String).new, tally: Tally.new, parallelism: 1).scan
+  Scanner.new(filesystem, cache, NOW, ignores, baseline: nil, recheck: Set(String).new, tally: Tally.new, keeper: Pylon::Discard.new, parallelism: 1).scan
 end
 
 private def sample : MemoryFilesystem
@@ -44,7 +46,7 @@ describe Pylon::Scan::Scanner do
     warm = scan(filesystem).cache
 
     rescanned = MemoryFilesystem.new(filesystem.@nodes)
-    Scanner.new(rescanned, warm, NOW, Ignores::NONE, baseline: nil, recheck: Set(String).new, tally: Tally.new, parallelism: 1).scan
+    Scanner.new(rescanned, warm, NOW, Ignores::NONE, baseline: nil, recheck: Set(String).new, tally: Tally.new, keeper: Pylon::Discard.new, parallelism: 1).scan
 
     rescanned.reads.should be_empty
   end
@@ -54,7 +56,7 @@ describe Pylon::Scan::Scanner do
     warm = scan(filesystem).cache
 
     changed = filesystem.with("README.md", content: "goodbye", inode: 99_u64)
-    Scanner.new(changed, warm, NOW, Ignores::NONE, baseline: nil, recheck: Set(String).new, tally: Tally.new, parallelism: 1).scan
+    Scanner.new(changed, warm, NOW, Ignores::NONE, baseline: nil, recheck: Set(String).new, tally: Tally.new, keeper: Pylon::Discard.new, parallelism: 1).scan
 
     changed.reads.should eq(["README.md"])
   end
@@ -64,7 +66,7 @@ describe Pylon::Scan::Scanner do
     warm = scan(filesystem).cache
 
     moved = filesystem.moved("app/models/user.rb", "app/models/person.rb")
-    snapshot = Scanner.new(moved, warm, NOW, Ignores::NONE, baseline: nil, recheck: Set(String).new, tally: Tally.new, parallelism: 1).scan
+    snapshot = Scanner.new(moved, warm, NOW, Ignores::NONE, baseline: nil, recheck: Set(String).new, tally: Tally.new, keeper: Pylon::Discard.new, parallelism: 1).scan
 
     moved.reads.should be_empty
     Fixtures.file!(Fixtures.dig!(snapshot.root, "app", "models", "person.rb")).digest
@@ -79,7 +81,7 @@ describe Pylon::Scan::Scanner do
 
     edited = filesystem.moved("app/models/user.rb", "app/models/person.rb")
       .with("app/models/person.rb", content: "class Person; end", mtime_ns: 2_000_i64)
-    snapshot = Scanner.new(edited, warm, NOW, Ignores::NONE, baseline: nil, recheck: Set(String).new, tally: Tally.new, parallelism: 1).scan
+    snapshot = Scanner.new(edited, warm, NOW, Ignores::NONE, baseline: nil, recheck: Set(String).new, tally: Tally.new, keeper: Pylon::Discard.new, parallelism: 1).scan
 
     edited.reads.should eq(["app/models/person.rb"])
     Fixtures.file!(Fixtures.dig!(snapshot.root, "app", "models", "person.rb")).digest
@@ -92,7 +94,7 @@ describe Pylon::Scan::Scanner do
 
     recycled = filesystem.moved("app/models/user.rb", "app/models/person.rb")
       .with("app/models/person.rb", content: "class Person; end")
-    Scanner.new(recycled, warm, NOW, Ignores::NONE, baseline: nil, recheck: Set(String).new, tally: Tally.new, parallelism: 1).scan
+    Scanner.new(recycled, warm, NOW, Ignores::NONE, baseline: nil, recheck: Set(String).new, tally: Tally.new, keeper: Pylon::Discard.new, parallelism: 1).scan
 
     recycled.reads.should eq(["app/models/person.rb"])
   end
@@ -102,7 +104,7 @@ describe Pylon::Scan::Scanner do
     warm = scan(filesystem).cache
 
     racy = filesystem.with("README.md", mtime_ns: NOW)
-    Scanner.new(racy, warm, NOW, Ignores::NONE, baseline: nil, recheck: Set(String).new, tally: Tally.new, parallelism: 1).scan
+    Scanner.new(racy, warm, NOW, Ignores::NONE, baseline: nil, recheck: Set(String).new, tally: Tally.new, keeper: Pylon::Discard.new, parallelism: 1).scan
 
     racy.reads.should eq(["README.md"])
   end
@@ -113,7 +115,7 @@ describe Pylon::Scan::Scanner do
 
     edited = filesystem.with("README.md", content: "howdy")
     later = NOW + Metadata::GRANULARITY_NS * 10
-    snapshot = Scanner.new(edited, warm, later, Ignores::NONE, baseline: nil, recheck: Set(String).new, tally: Tally.new, parallelism: 1).scan
+    snapshot = Scanner.new(edited, warm, later, Ignores::NONE, baseline: nil, recheck: Set(String).new, tally: Tally.new, keeper: Pylon::Discard.new, parallelism: 1).scan
 
     edited.reads.should eq(["README.md"])
     root = snapshot.root.should_not be_nil
@@ -128,7 +130,7 @@ describe Pylon::Scan::Scanner do
     warm = scan(filesystem).cache
 
     executable = filesystem.with("README.md", executable: true)
-    snapshot = Scanner.new(executable, warm, NOW, Ignores::NONE, baseline: nil, recheck: Set(String).new, tally: Tally.new, parallelism: 1).scan
+    snapshot = Scanner.new(executable, warm, NOW, Ignores::NONE, baseline: nil, recheck: Set(String).new, tally: Tally.new, keeper: Pylon::Discard.new, parallelism: 1).scan
     root = snapshot.root.should_not be_nil
     next if root.nil?
 
@@ -221,7 +223,7 @@ describe "accelerated scanning" do
     first = scan(filesystem)
 
     quiet = MemoryFilesystem.new(filesystem.@nodes)
-    second = Scanner.new(quiet, first.cache, NOW, Ignores::NONE, baseline: first.root, recheck: Set(String).new, tally: Tally.new, parallelism: 1).scan
+    second = Scanner.new(quiet, first.cache, NOW, Ignores::NONE, baseline: first.root, recheck: Set(String).new, tally: Tally.new, keeper: Pylon::Discard.new, parallelism: 1).scan
 
     quiet.reads.should be_empty
     (second.root == first.root).should be_true
@@ -236,7 +238,7 @@ describe "accelerated scanning" do
     second = Scanner.new(
       changed, first.cache, NOW, Ignores::NONE,
       parallelism: 1,
-      tally: Tally.new,
+      tally: Tally.new, keeper: Pylon::Discard.new,
       baseline: first.root,
       recheck: Set{"app/models/pay.rb"},
     ).scan
@@ -258,7 +260,7 @@ describe "accelerated scanning" do
     second = Scanner.new(
       changed, first.cache, NOW, Ignores::NONE,
       parallelism: 1,
-      tally: Tally.new,
+      tally: Tally.new, keeper: Pylon::Discard.new,
       baseline: first.root,
       recheck: Set{"README.md"},
     ).scan
@@ -281,7 +283,7 @@ describe "accelerated scanning" do
     second = Scanner.new(
       added, first.cache, NOW, Ignores::NONE,
       parallelism: 1,
-      tally: Tally.new,
+      tally: Tally.new, keeper: Pylon::Discard.new,
       baseline: first.root,
       recheck: Set{"app/models/new.rb"},
     ).scan
@@ -304,7 +306,7 @@ describe "accelerated scanning" do
     second = Scanner.new(
       remaining, first.cache, NOW, Ignores::NONE,
       parallelism: 1,
-      tally: Tally.new,
+      tally: Tally.new, keeper: Pylon::Discard.new,
       baseline: first.root,
       recheck: Set{"app/models/pay.rb"},
     ).scan
@@ -313,5 +315,20 @@ describe "accelerated scanning" do
     next if root.nil?
 
     Fixtures.directory!(Fixtures.dig!(root, "app", "models")).contents.keys.should eq(["user.rb"])
+  end
+end
+
+describe "the scanner handing hashed content to a keeper" do
+  it "keeps every file it hashes and nothing it reused" do
+    filesystem = sample
+    keeper = MemoryKeeper.new
+    first = Scanner.new(filesystem, Cache.new, NOW, Ignores::NONE, baseline: nil, recheck: Set(String).new, tally: Tally.new, keeper: keeper, parallelism: 1).scan
+
+    keeper.kept.map(&.path).sort!.should eq(["README.md", "app/models/pay.rb", "app/models/user.rb"])
+    keeper.kept.map(&.digest).should eq(keeper.kept.map { |kept| first.cache[kept.path].digest })
+
+    Scanner.new(filesystem, first.cache, NOW + 60_000_000_000_i64, Ignores::NONE, baseline: nil, recheck: Set(String).new, tally: Tally.new, keeper: keeper, parallelism: 1).scan
+
+    keeper.kept.size.should eq(3)
   end
 end

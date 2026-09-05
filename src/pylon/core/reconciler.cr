@@ -90,7 +90,7 @@ module Pylon::Core
       end
 
       private def descend(path : String, base : Entry?, local : Directory, remote : Directory) : Nil
-        base_directory = base.is_a?(Directory) ? base : nil
+        base_directory = base if base.is_a?(Directory)
 
         if base_directory.nil?
           adopt(path, base, Directory.new)

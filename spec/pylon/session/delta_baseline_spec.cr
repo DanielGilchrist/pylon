@@ -29,7 +29,7 @@ private def in_watched_pair(& : String, String, Session(LocalEndpoint, RemoteEnd
   begin
     session = build_session(
       local_endpoint(local),
-      RemoteEndpoint.new(client, client, remote_configuration(remote, watch: true), pushes),
+      RemoteEndpoint.new(client, client, remote_configuration(remote, watch: true), pushes, resume: nil),
       push_first: true,
     )
     yield local, remote, session, pushes

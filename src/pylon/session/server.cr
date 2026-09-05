@@ -6,8 +6,10 @@ require "../scan/ignores"
 require "../watch/watcher"
 require "../core/applier"
 require "../core/differ"
+require "../core/digests"
 require "../wire/message"
 require "./local_endpoint"
+require "./content_store"
 require "./checkpoint/schedule"
 
 module Pylon::Session
@@ -39,7 +41,9 @@ module Pylon::Session
          Wire::Message::TreeUpdate,
          Wire::Message::TreeDelta,
          Wire::Message::ScanProgress,
-         Wire::Message::TreeAnnounce
+         Wire::Message::TreeAnnounce,
+         Wire::Message::AvailabilityRequest,
+         Wire::Message::AvailabilityResponse
         refusal = "the first message must configure this side, not a #{message.class.name}"
         Wire::Message.write(output, Wire::Message::Failure.new(refusal))
         Problem.new(refusal)
@@ -49,13 +53,23 @@ module Pylon::Session
     private def self.configured(configure : Wire::Message::Configure, input : IO, output : IO, log : IO) : Server
       brand = configure.brand
       endpoint = LocalEndpoint.new(configure.root, Scan::Ignores.new(configure.ignores), compression: configure.compression)
+      resumable = nil
 
       if (state = configure.state)
         case (restored = Checkpoint.load(state))
-        in Checkpoint then endpoint.cache = restored.local_cache
+        in Checkpoint
+          endpoint.cache = restored.local_cache
+          resumable = restored.exchanged
         in Checkpoint::Absent
         in Checkpoint::Damaged
           log.puts(brand.prefix("ignoring the sync state at #{state} (#{restored.reason}), scanning from scratch"))
+        end
+
+        case (store = ContentStore.open("#{state}.content", configure.root))
+        in ContentStore
+          endpoint.store = store
+        in ContentStore::Unavailable
+          log.puts(brand.prefix("content will not be kept for reuse or patching: #{store.reason}"))
         end
       end
 
@@ -71,34 +85,45 @@ module Pylon::Session
         end
       end
 
-      checkpoints = configure.state.try do |path|
-        Checkpoint::Schedule.new(
-          path,
-          -> : Checkpoint { Checkpoint.new(nil, endpoint.cache) },
-          on_problem: ->(problem : String) : Nil { log.puts(brand.prefix(problem)) },
-        )
-      end
-
-      new(endpoint, input, output, subscriber, checkpoints, log, brand: brand, watch: configure.watch?)
+      new(
+        endpoint,
+        input,
+        output,
+        subscriber,
+        log,
+        brand: brand,
+        state: configure.state,
+        known: configure.known,
+        resumable: resumable,
+      )
     end
 
     @sent : Core::Entry? = nil
     @pushed : Channel(Nil)? = nil
+    @checkpoints : Checkpoint::Schedule? = nil
 
     private def initialize(
       @endpoint : LocalEndpoint,
       @input : IO,
       @output : IO,
       @subscriber : Watch::Any?,
-      @checkpoints : Checkpoint::Schedule?,
       @log : IO,
       *,
       @brand : Brand,
-      @watch : Bool,
+      state : String?,
+      @known : Bytes?,
+      @resumable : Core::Entry?,
     ) : Nil
       @lock = Sync::Mutex.new
       @stopping = false
       @sequence = 0_u32
+      return if state.nil?
+
+      @checkpoints = Checkpoint::Schedule.new(
+        state,
+        -> : Checkpoint { Checkpoint.new(nil, @endpoint.cache, @sent) },
+        on_problem: ->(problem : String) : Nil { @log.puts(@brand.prefix(problem)) },
+      )
     end
 
     def run : Nil
@@ -139,8 +164,6 @@ module Pylon::Session
     end
 
     private def announce : Nil
-      return unless @watch
-
       push
 
       subscriber = @subscriber
@@ -184,10 +207,9 @@ module Pylon::Session
         {% end %}
 
         failed =
-          if @sent.nil?
-            announce(current) || Wire::Message.write(@output, Wire::Message::TreeUpdate.new(@sequence, current, live: !@subscriber.nil?))
-          else
-            Wire::Message.write(@output, Wire::Message::TreeDelta.new(@sequence, Core::Differ.diff(@sent, current)))
+          case (sent = @sent)
+          in Nil         then open_with(current)
+          in Core::Entry then Wire::Message.write(@output, delta_since(sent, current))
           end
 
         {% if flag?(:timing) %}
@@ -234,6 +256,31 @@ module Pylon::Session
       Wire::Message.write(@output, Wire::Message::TreeAnnounce.new(Wire::Chunks.measure_entry(current)))
     end
 
+    private def open_with(current : Core::Entry?) : Problem?
+      resumable = @resumable
+
+      if resumable && resumes?(resumable)
+        return Wire::Message.write(@output, delta_since(resumable, current))
+      end
+
+      announce(current) || Wire::Message.write(@output, Wire::Message::TreeUpdate.new(@sequence, current, live: live?))
+    end
+
+    private def live? : Bool
+      !@subscriber.nil?
+    end
+
+    private def delta_since(sent : Core::Entry, current : Core::Entry?) : Wire::Message::TreeDelta
+      Wire::Message::TreeDelta.new(@sequence, Core::Differ.diff(sent, current), live: live?)
+    end
+
+    private def resumes?(resumable : Core::Entry) : Bool
+      known = @known
+      return false if known.nil?
+
+      known == Core::Digests.fingerprint(resumable)
+    end
+
     private def serve(request : Wire::Message::Any) : Bool
       problem =
         case request
@@ -255,6 +302,11 @@ module Pylon::Session
             response = Wire::Message::SignaturesResponse.new(@endpoint.signatures(request.pairs))
             Wire::Message.write(@output, response)
           end
+        in Wire::Message::AvailabilityRequest
+          @lock.synchronize do
+            response = Wire::Message::AvailabilityResponse.new(@endpoint.available(request.digests))
+            Wire::Message.write(@output, response)
+          end
         in Wire::Message::WriteRequest
           @lock.synchronize do
             outcomes = @endpoint.write(request.changes, Wire::ContentSource::Materialised.new(request.contents), request.relocations)
@@ -272,7 +324,8 @@ module Pylon::Session
            Wire::Message::WriteResponse,
            Wire::Message::Configure,
            Wire::Message::ScanProgress,
-           Wire::Message::TreeAnnounce
+           Wire::Message::TreeAnnounce,
+           Wire::Message::AvailabilityResponse
           @lock.synchronize do
             failure = Wire::Message::Failure.new("the client sent a #{request.class.name} where a request was expected")
             Wire::Message.write(@output, failure)

@@ -109,8 +109,16 @@ struct Pylon::CLI
         reporter.starting(local, remote) unless dry_run?
 
         signals = Channel(Nil).new(16)
-        remote_endpoint = Session::RemoteEndpoint.new(transport.reader, transport.writer, configuration(target.path), signals)
+        remote_endpoint = Session::RemoteEndpoint.new(
+          transport.reader,
+          transport.writer,
+          configuration(target.path, restored.exchanged),
+          signals,
+          resume: restored.exchanged,
+        )
+
         reporter.observe(remote_endpoint.inbound)
+
         session = Session::Session.new(
           left,
           remote_endpoint,
@@ -124,7 +132,7 @@ struct Pylon::CLI
         checkpoints = state.try do |path|
           Session::Checkpoint::Schedule.new(
             path,
-            -> : Session::Checkpoint { Session::Checkpoint.new(session.base, left.cache, restored.remote_cache) },
+            -> : Session::Checkpoint { Session::Checkpoint.new(session.base, left.cache, remote_endpoint.tree) },
             on_problem: ->(problem : String) : Nil { reporter.warn(problem) },
           )
         end
@@ -175,11 +183,12 @@ struct Pylon::CLI
       first = true
 
       fault = runner.run do |report, elapsed|
-        reporter.report(report, first ? nil : elapsed)
-
         if first
           first = false
+          reporter.report(report, nil)
           reporter.ready(Time.instant - started, local_endpoint.cache.size)
+        else
+          reporter.report(report, elapsed)
         end
 
         checkpoints.try(&.save_if_due)
@@ -204,10 +213,10 @@ struct Pylon::CLI
       path = state
       return if path.nil?
 
-      case (opened = Session::ContentStore.open("#{path}.content"))
+      case (opened = Session::ContentStore.open("#{path}.content", local))
       in Session::ContentStore then opened
       in Session::ContentStore::Unavailable
-        reporter.warn("modified files will not be sent as patches against retained copies: #{opened.reason}")
+        reporter.warn("content will not be kept for reuse or patching: #{opened.reason}")
         nil
       end
     end
@@ -231,7 +240,7 @@ struct Pylon::CLI
       exit(1)
     end
 
-    private def configuration(remote_root : String) : Wire::Message::Configure
+    private def configuration(remote_root : String, exchanged : Core::Entry?) : Wire::Message::Configure
       Wire::Message::Configure.new(
         root: remote_root,
         ignores: ignore,
@@ -239,6 +248,7 @@ struct Pylon::CLI
         brand: brand,
         state: remote_state,
         watch: watch?,
+        known: (Core::Digests.fingerprint(exchanged) if exchanged),
       )
     end
   end
