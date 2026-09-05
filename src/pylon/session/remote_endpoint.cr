@@ -24,15 +24,15 @@ module Pylon::Session
     ) : Nil
       @tree = resume
       @inbound = Inbound.new
-      @input = MeteredReader.new(input, @inbound.meter)
+      @input = MeteredReader.new(input, @inbound)
       @scanned = Channel(Wire::Message::ScanResponse).new(1)
       @contents = Channel(Wire::Message::ContentsResponse).new(1)
-      @signatures = Channel(Wire::Message::SignaturesResponse).new(1)
-      @availability = Channel(Wire::Message::AvailabilityResponse).new(1)
+      @checksums = Channel(Wire::Message::ChecksumsResponse).new(1)
+      @reusable = Channel(Wire::Message::ReusableResponse).new(1)
       @written = Channel(Wire::Message::WriteResponse).new(Session::WRITE_WINDOW)
       @greeting = Channel(Nil).new
       @initial = Channel(Nil).new
-      @known = false
+      @live = false
       @sequence = 0_u32
 
       Fibers.detach(:endpoint_listen) { listen }
@@ -42,7 +42,7 @@ module Pylon::Session
     getter inbound : Inbound
 
     def scan(now_ns : Int64) : Core::Entry? | Fault
-      return tree if @known
+      return tree if @live
       return initial_tree unless @initial.closed?
 
       reply = exchange(Wire::Message::ScanRequest.new(now_ns), @scanned)
@@ -52,37 +52,31 @@ module Pylon::Session
       @tree = reply.root
     end
 
-    def delta_capable? : Bool
+    def remote? : Bool
       true
     end
 
-    def signatures_begin(
-      pairs : Array(Wire::Message::SignaturesRequest::Pair),
-    ) : Session::PendingSignatures
-      fault = transmit(Wire::Message::SignaturesRequest.new(pairs))
-      Awaiting(Wire::Message::SignaturesResponse, Wire::Delta::Signatures).new(
-        self,
-        @signatures,
-        fault,
-      )
+    def request_checksums(bases : Wire::Bases) : Session::PendingChecksums
+      fault = transmit(Wire::Message::ChecksumsRequest.new(bases))
+      Awaiting(Wire::Message::ChecksumsResponse, Wire::Checksums::Map).new(self, @checksums, fault)
     end
 
-    def retained?(digest : Bytes) : Bool
+    def holds?(digest : Bytes) : Bool
       false
     end
 
-    def availability_begin(digests : Array(Bytes)) : Session::PendingAvailability
+    def request_reusable(digests : Array(Bytes)) : Session::PendingReusable
       return Settled.new(Array(Bytes).new) if digests.empty?
 
-      fault = transmit(Wire::Message::AvailabilityRequest.new(digests))
-      Awaiting(Wire::Message::AvailabilityResponse, Array(Bytes)).new(self, @availability, fault)
+      fault = transmit(Wire::Message::ReusableRequest.new(digests))
+      Awaiting(Wire::Message::ReusableResponse, Array(Bytes)).new(self, @reusable, fault)
     end
 
-    def content_begin(
+    def request_content(
       digests : Array(Bytes),
       budget : UInt64,
-      signatures : Wire::Delta::Signatures,
-      bases : Wire::Prefixed::Bases,
+      checksums : Wire::Checksums::Map,
+      bases : Wire::Bases,
     ) : Session::PendingContents
       if digests.empty?
         return Settled(Wire::ContentSource).new(
@@ -90,19 +84,19 @@ module Pylon::Session
         )
       end
 
-      fault = transmit(Wire::Message::ContentsRequest.new(digests, budget, signatures))
+      fault = transmit(Wire::Message::ContentsRequest.new(digests, budget, checksums))
       Awaiting(Wire::Message::ContentsResponse, Wire::ContentSource).new(self, @contents, fault)
     end
 
-    def known_size(path : String) : UInt64?
+    def size_of(path : String) : UInt64?
       nil
     end
 
-    def payload_size(changes : Core::Changes) : UInt64?
+    def total_size(changes : Core::Changes) : UInt64?
       nil
     end
 
-    def write_begin(
+    def request_write(
       changes : Core::Changes,
       source : Wire::ContentSource,
       relocations : Array(Core::Relocation),
@@ -136,7 +130,7 @@ module Pylon::Session
 
     private def listen : Nil
       case (greeting = Wire::Greeting.read(@input))
-      in Wire::Greeting::Compatible
+      in Nil
         if (problem = Wire::Message.write(@output, @configure))
           stop_with(Stopped.new("the configuration could not be sent: #{problem.reason}"))
           return
@@ -155,7 +149,7 @@ module Pylon::Session
           "outdated binary or the wrong command",
         ))
         return
-      in Wire::Greeting::Unreachable
+      in Problem
         reason = "the connection failed before the remote identified itself: #{greeting.reason}"
         stop_with(Stopped.new(reason))
         return
@@ -166,16 +160,16 @@ module Pylon::Session
         in Wire::Closed
           stop_with(Stopped.new)
           return
-        in Wire::Invalid
+        in Problem
           stop_with(Stopped.new(message.reason))
           return
         in Wire::Message::TreeUpdate
           @unapplied.clear
           @tree = message.root
           @sequence = message.sequence
-          @known = message.live?
+          @live = message.live?
           @initial.close
-        in Wire::Message::TreeDelta
+        in Wire::Message::TreeChanges
           if @initial.closed?
             follow(message)
           else
@@ -185,17 +179,17 @@ module Pylon::Session
           return unless deliver(@scanned, message)
         in Wire::Message::ContentsResponse
           return unless deliver(@contents, message)
-        in Wire::Message::SignaturesResponse
-          return unless deliver(@signatures, message)
-        in Wire::Message::AvailabilityResponse
-          return unless deliver(@availability, message)
+        in Wire::Message::ChecksumsResponse
+          return unless deliver(@checksums, message)
+        in Wire::Message::ReusableResponse
+          return unless deliver(@reusable, message)
         in Wire::Message::WriteResponse
           message.payload.each do |outcome|
             @unapplied << Core::Change.new(outcome.path, nil, outcome.entry)
           end
           return unless deliver(@written, message)
         in Wire::Message::ScanProgress
-          @inbound.scanning(message.files, message.hashed_bytes)
+          @inbound.scanning(message.files, message.bytes)
         in Wire::Message::TreeAnnounce
           @inbound.announced(message.bytes)
         in Wire::Message::Failure
@@ -203,9 +197,9 @@ module Pylon::Session
           return
         in Wire::Message::ScanRequest,
            Wire::Message::ContentsRequest,
-           Wire::Message::SignaturesRequest,
+           Wire::Message::ChecksumsRequest,
            Wire::Message::WriteRequest,
-           Wire::Message::AvailabilityRequest,
+           Wire::Message::ReusableRequest,
            Wire::Message::Configure
           stop_with(
             Misbehaved.new("the server sent a #{message.class.name}, which only clients send"),
@@ -215,20 +209,20 @@ module Pylon::Session
       end
     end
 
-    private def open_with(message : Wire::Message::TreeDelta) : Nil
+    private def open_with(message : Wire::Message::TreeChanges) : Nil
       @unapplied.clear
       @tree = Core::Applier.apply(@tree, message.changes)
       @sequence = message.sequence
-      @known = message.live?
+      @live = message.live?
       @initial.close
     end
 
-    private def follow(message : Wire::Message::TreeDelta) : Nil
+    private def follow(message : Wire::Message::TreeChanges) : Nil
       if message.sequence == @sequence + 1
         @tree = Core::Applier.apply(tree, message.changes)
         @sequence = message.sequence
       else
-        @known = false
+        @live = false
       end
 
       signal
@@ -250,8 +244,8 @@ module Pylon::Session
       @fault ||= fault
       @scanned.close
       @contents.close
-      @signatures.close
-      @availability.close
+      @checksums.close
+      @reusable.close
       @written.close
       @greeting.close
       @initial.close

@@ -1,15 +1,15 @@
 require "./paths"
 require "./name"
-require "./malformed"
+require "../problem"
 
 module Pylon::Core
   struct RelativePath
     ROOT                = new("")
     PATH_SEPARATOR_BYTE = '/'.ord.to_u8
 
-    def self.parse(raw : String) : RelativePath | Malformed
+    def self.parse(raw : String) : RelativePath | Problem
       return ROOT if raw.empty?
-      return Malformed.new(raw, "contains a NUL byte") if raw.includes?('\0')
+      return Problem.new("contains a NUL byte") if raw.includes?('\0')
 
       bytes = raw.to_slice
       start = 0
@@ -18,13 +18,13 @@ module Pylon::Core
         separator = bytes.index(PATH_SEPARATOR_BYTE, start) || bytes.size
         length = separator - start
 
-        return Malformed.new(raw, "is empty") if length == 0
+        return Problem.new("is empty") if length == 0
         if length == 1 && bytes[start] == '.'.ord
-          return Malformed.new(raw, "is a '.' path component")
+          return Problem.new("is a '.' path component")
         end
 
         if length == 2 && bytes[start] == '.'.ord && bytes[start + 1] == '.'.ord
-          return Malformed.new(raw, "is a '..' path component")
+          return Problem.new("is a '..' path component")
         end
 
         start = separator + 1

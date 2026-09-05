@@ -52,11 +52,12 @@ describe Pylon::Compress::Zstd do
   end
 
   it "reports an error rather than corrupting when the buffer is too small" do
-    Zstd.new.compress((RUBY * 40).to_slice, Bytes.new(4)).should be_a(Error)
+    Zstd.new.compress((RUBY * 40).to_slice, Bytes.new(4)).should be_a(Pylon::Problem)
   end
 
   it "reports an error for a corrupt frame" do
-    Zstd.new.decompress("not a zstd frame at all".to_slice, Bytes.new(1024)).should be_a(Error)
+    garbage = "not a zstd frame at all".to_slice
+    Zstd.new.decompress(garbage, Bytes.new(1024)).should be_a(Pylon::Problem)
   end
 end
 
@@ -68,6 +69,6 @@ describe Pylon::Compress::Identity do
   end
 
   it "reports an error rather than overflowing" do
-    Identity.new.compress(RUBY.to_slice, Bytes.new(2)).should be_a(Error)
+    Identity.new.compress(RUBY.to_slice, Bytes.new(2)).should be_a(Pylon::Problem)
   end
 end

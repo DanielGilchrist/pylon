@@ -133,7 +133,7 @@ describe "the wire greeting" do
 
       accepted.should be_a(Pylon::Problem)
       accepted.reason.should contain("must configure this side") if accepted.is_a?(Pylon::Problem)
-      Pylon::Wire::Greeting.read(client).should be_a(Pylon::Wire::Greeting::Compatible)
+      Pylon::Wire::Greeting.read(client).should be_nil
       Pylon::Wire::Message.read(client).should be_a(Pylon::Wire::Message::Failure)
     ensure
       client.close
@@ -157,7 +157,7 @@ describe "the wire greeting" do
         brand: Pylon::Brand.new("Test Sync"),
         state: state,
         watch: false,
-        known: nil,
+        tree_fingerprint: nil,
       )
       Pylon::Wire::Message.write(client, configure)
 

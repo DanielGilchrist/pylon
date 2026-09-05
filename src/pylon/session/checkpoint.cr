@@ -1,55 +1,50 @@
 require "../filesystem"
+require "../missing"
+require "../problem"
 require "../scan/snapshot"
 require "../wire/binary"
 
 module Pylon::Session
   struct Checkpoint
     MAGIC   = "PYLON\0"
-    VERSION = 4_u32
+    VERSION = 5_u32
     DIGEST  = "sha256"
 
-    record Absent
-    record Damaged, reason : String
-
-    def self.load(path : String) : Checkpoint | Absent | Damaged
-      case (loaded = Filesystem.open(path, "rb") { |io| read(io) })
-      in Missing             then Absent.new
-      in Problem             then Damaged.new(loaded.reason)
-      in Checkpoint, Damaged then loaded
-      end
+    def self.load(path : String) : Checkpoint | Missing | Problem
+      Filesystem.open(path, "rb") { |io| read(io) }
     end
 
-    private def self.read(io : IO) : Checkpoint | Damaged
+    private def self.read(io : IO) : Checkpoint | Problem
       reader = Wire::Reader.new(io)
 
       magic = reader.take(MAGIC.bytesize)
-      return Damaged.new("not a sync state file") if reader.failed? || String.new(magic) != MAGIC
-      return Damaged.new("written by a different version") if reader.u32 != VERSION
-      return Damaged.new("unknown digest algorithm") if reader.string? != DIGEST
+      return Problem.new("not a sync state file") if reader.failed? || String.new(magic) != MAGIC
+      return Problem.new("written by a different version") if reader.u32 != VERSION
+      return Problem.new("unknown digest algorithm") if reader.string? != DIGEST
 
       base = Wire::Binary.read_entry(reader)
       local_cache = Wire::Binary.read_cache(reader)
-      exchanged = Wire::Binary.read_entry(reader)
+      shared_tree = Wire::Binary.read_entry(reader)
 
-      return Damaged.new(reader.reason) if reader.failed?
+      return Problem.new(reader.reason) if reader.failed?
 
-      new(base: base, local_cache: local_cache, exchanged: exchanged)
+      new(base: base, local_cache: local_cache, shared_tree: shared_tree)
     end
 
     def initialize(
       @base : Core::Entry? = nil,
       @local_cache : Scan::Cache = Scan::Cache.new,
-      @exchanged : Core::Entry? = nil,
+      @shared_tree : Core::Entry? = nil,
     ) : Nil
     end
 
     getter base : Core::Entry?
     getter local_cache : Scan::Cache
-    getter exchanged : Core::Entry?
+    getter shared_tree : Core::Entry?
 
-    def save(path : String) : Damaged?
+    def save(path : String) : Problem?
       if (blocked = Filesystem.ensure_directory(File.dirname(path)))
-        return Damaged.new(blocked.reason)
+        return Problem.new(blocked.reason)
       end
 
       temporary = "#{path}.#{Random::Secure.hex(8)}"
@@ -60,22 +55,22 @@ module Pylon::Session
         Wire::Binary.write_string(io, DIGEST)
         Wire::Binary.write_entry(io, base)
         Wire::Binary.write_cache(io, local_cache)
-        Wire::Binary.write_entry(io, exchanged)
+        Wire::Binary.write_entry(io, shared_tree)
         nil
       end
 
       case written
       in Nil
       in Missing
-        return Damaged.new("the state directory vanished while saving")
+        return Problem.new("the state directory vanished while saving")
       in Problem
         Filesystem.delete(temporary)
-        return Damaged.new(written.reason)
+        return Problem.new(written.reason)
       end
 
       if (blocked = Filesystem.rename(temporary, path))
         Filesystem.delete(temporary)
-        return Damaged.new(blocked.reason)
+        return Problem.new(blocked.reason)
       end
 
       nil

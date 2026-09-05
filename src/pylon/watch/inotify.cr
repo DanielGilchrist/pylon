@@ -1,20 +1,15 @@
 {% skip_file unless flag?(:linux) %}
 
-require "sync"
 require "../brand"
 require "../core/paths"
 require "../fibers"
-require "../filesystem"
+require "../problem"
 require "../scan/ignores"
-require "./dirty"
-require "./unavailable"
-require "./walk"
+require "./dirty_paths"
 require "./lib_inotify"
 
 module Pylon::Watch
   class Inotify
-    include Walk
-
     WATCH_MASK = LibInotify::IN_MODIFY | LibInotify::IN_ATTRIB | LibInotify::IN_CLOSE_WRITE |
                  LibInotify::IN_MOVED_FROM | LibInotify::IN_MOVED_TO | LibInotify::IN_CREATE |
                  LibInotify::IN_DELETE | LibInotify::IN_DELETE_SELF | LibInotify::IN_MOVE_SELF |
@@ -25,26 +20,28 @@ module Pylon::Watch
     def self.open(
       root : String,
       ignores : Array(String),
-      signals : Channel(Nil),
+      dirty_paths : DirtyPaths,
       *,
       brand : Brand,
-    ) : Inotify | Unavailable
+    ) : Inotify | Problem
       descriptor = LibInotify.inotify_init1(LibInotify::IN_CLOEXEC)
-      return Unavailable.new("inotify could not be initialised: #{Errno.value}") if descriptor < 0
+      return Problem.new("inotify could not be initialised: #{Errno.value}") if descriptor < 0
 
       wake = StaticArray(LibC::Int, 2).new(0)
 
       if LibC.pipe(wake) < 0
         failed = Errno.value
         LibC.close(descriptor)
-        return Unavailable.new("the wake pipe could not be created: #{failed}")
+        return Problem.new("the wake pipe could not be created: #{failed}")
       end
 
-      watcher = new(descriptor, wake[0], wake[1], root, Scan::Ignores.new(ignores), signals, brand)
+      watcher = new(
+        descriptor, wake[0], wake[1], root, Scan::Ignores.new(ignores), dirty_paths, brand,
+      )
       return watcher if watcher.watching?
 
       watcher.close
-      Unavailable.new("the sync root could not be watched (inotify watch limit?)")
+      Problem.new("the sync root could not be watched (inotify watch limit?)")
     end
 
     def initialize(
@@ -53,16 +50,13 @@ module Pylon::Watch
       wake_write : Int32,
       @root : String,
       @ignores : Scan::Ignores,
-      @signals : Channel(Nil),
+      @dirty_paths : DirtyPaths,
       @brand : Brand,
     ) : Nil
       @descriptor = descriptor
       @wake_read = wake_read
       @wake_write = wake_write
       @paths = Hash(Int32, String).new
-      @dirty = Set(String).new
-      @lock = Sync::Mutex.new
-      @fresh = false
       @stopping = false
       @done = Channel(Nil).new
       @missed = false
@@ -74,16 +68,7 @@ module Pylon::Watch
       @context = Fibers.isolated(:inotify) { listen }
     end
 
-    getter signals : Channel(Nil)
-
-    def drain : Dirty
-      @lock.synchronize do
-        dirty = @fresh ? Everything.new : Touched.new(@dirty.to_a)
-        @dirty.clear
-        @fresh = false
-        dirty
-      end
-    end
+    getter dirty_paths : DirtyPaths
 
     def close : Nil
       return if @stopping
@@ -106,7 +91,7 @@ module Pylon::Watch
 
       add_watch(relative)
 
-      walk(absolute(relative)) do |name|
+      @dirty_paths.each_child(absolute(relative)) do |name|
         child = Core::Paths.join(relative, name)
         next unless Dir.exists?(absolute(child))
 
@@ -146,7 +131,7 @@ module Pylon::Watch
         break if read <= 0
 
         consume(buffer[0, read])
-        signal
+        @dirty_paths.signal
       end
     ensure
       @done.close
@@ -194,7 +179,7 @@ module Pylon::Watch
 
     private def record(event : LibInotify::Event, name : String) : Nil
       if event.mask & LibInotify::IN_Q_OVERFLOW != 0
-        @lock.synchronize { @fresh = true }
+        @dirty_paths.all_dirty!
         return
       end
 
@@ -209,30 +194,13 @@ module Pylon::Watch
       path = name.empty? ? directory : Core::Paths.join(directory, name)
       return if @ignores.ignore?(path)
 
-      @lock.synchronize { @dirty << path }
+      @dirty_paths.add(path)
 
       return unless event.mask & LibInotify::IN_ISDIR != 0
       return unless event.mask & (LibInotify::IN_CREATE | LibInotify::IN_MOVED_TO) != 0
 
       watch_tree(path)
-      mark_contents(path)
-    end
-
-    private def mark_contents(relative : String) : Nil
-      walk(absolute(relative)) do |name|
-        child = Core::Paths.join(relative, name)
-        next if @ignores.ignore?(child)
-
-        @lock.synchronize { @dirty << child }
-        mark_contents(child) if Dir.exists?(absolute(child))
-      end
-    end
-
-    private def signal : Nil
-      select
-      when @signals.send(nil)
-      else
-      end
+      @dirty_paths.add_tree(@root, path, @ignores)
     end
 
     private def absolute(relative : String) : String

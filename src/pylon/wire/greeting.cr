@@ -1,7 +1,5 @@
-require "./greeting/compatible"
 require "./greeting/incompatible"
 require "./greeting/foreign"
-require "./greeting/unreachable"
 require "../wire"
 require "../problem"
 
@@ -9,7 +7,7 @@ module Pylon::Wire
   module Greeting
     extend self
 
-    alias Any = Compatible | Incompatible | Foreign | Unreachable
+    alias Any = Incompatible | Foreign | Problem | Nil
 
     def write(io : IO) : Problem?
       io.write(IDENTITY.to_slice)
@@ -26,9 +24,9 @@ module Pylon::Wire
       return Foreign.new unless identity == IDENTITY.to_slice
 
       version = io.read_bytes(UInt32, FORMAT)
-      version == PROTOCOL ? Compatible.new : Incompatible.new(version)
+      Incompatible.new(version) unless version == PROTOCOL
     rescue error : IO::Error
-      Unreachable.new(error.message || "the stream ended during the greeting")
+      Problem.new(error.message || "the stream ended during the greeting")
     end
   end
 end

@@ -1,21 +1,20 @@
 require "./changes"
 require "./entry"
-require "./malformed"
+require "../problem"
 
 module Pylon::Core
   struct Relocation
     record Extraction, changes : Changes, relocations : Array(Relocation)
 
-    def self.parse(from : String, to : String, entry : Entry?) : Relocation | Malformed
-      return Malformed.new(from, "is the sync root, which cannot move") if from.empty?
-      return Malformed.new(to, "is the sync root, which cannot move") if to.empty?
-      return Malformed.new(to, "is the path it moves from") if from == to
-      return Malformed.new(to, "is inside the path it moves from") if to.starts_with?("#{from}/")
-      return Malformed.new(from, "is inside the path it moves to") if from.starts_with?("#{to}/")
+    def self.parse(from : String, to : String, entry : Entry?) : Relocation | Problem
+      return Problem.new("moves the sync root") if from.empty? || to.empty?
+      return Problem.new("moves #{to.inspect} onto itself") if from == to
+      return Problem.new("moves #{from.inspect} inside itself") if to.starts_with?("#{from}/")
+      return Problem.new("moves #{from.inspect} out of itself") if from.starts_with?("#{to}/")
 
       case entry
       in Syncable                    then new(from, to, entry)
-      in Nil, Untracked, Problematic then Malformed.new(to, "carries nothing that can be moved")
+      in Nil, Untracked, Problematic then Problem.new("moves nothing at #{from.inspect}")
       end
     end
 
@@ -45,7 +44,7 @@ module Pylon::Core
         next unless unambiguous_case?(folded, from, change.path)
 
         case (relocation = parse(from, change.path, new))
-        in Malformed
+        in Problem
           next
         in Relocation
           deleted_at.delete(new)

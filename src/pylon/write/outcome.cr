@@ -1,36 +1,23 @@
 require "../core/change"
 require "../core/entry"
+require "../problem"
 
 module Pylon::Write
-  alias Skipped = ModificationDetected | UnknownState | StagedContentMissing | DryRun | WriteFailed
+  alias Skipped = Skip | Problem
 
-  record ModificationDetected do
-    def explain : String
-      "modification detected"
-    end
-  end
+  enum Skip
+    ModificationDetected
+    UnknownState
+    StagedContentMissing
+    DryRun
 
-  record UnknownState do
     def explain : String
-      "unknown state"
-    end
-  end
-
-  record StagedContentMissing do
-    def explain : String
-      "staged content missing"
-    end
-  end
-
-  record DryRun do
-    def explain : String
-      "dry run"
-    end
-  end
-
-  record WriteFailed, reason : String do
-    def explain : String
-      reason
+      case self
+      in .modification_detected?  then "modification detected"
+      in .unknown_state?          then "unknown state"
+      in .staged_content_missing? then "staged content missing"
+      in .dry_run?                then "dry run"
+      end
     end
   end
 
@@ -48,6 +35,14 @@ module Pylon::Write
 
     def applied? : Bool
       skipped.nil?
+    end
+
+    def explanation : String?
+      case (skipped = @skipped)
+      in Nil     then nil
+      in Skip    then skipped.explain
+      in Problem then skipped.reason
+      end
     end
   end
 end

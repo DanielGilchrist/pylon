@@ -1,3 +1,4 @@
+require "../compress"
 require "./codec"
 require "./lib_zstd"
 
@@ -14,7 +15,7 @@ module Pylon::Compress
     def initialize(@level : Int32 = DEFAULT_LEVEL) : Nil
     end
 
-    def compress(source : Bytes, into : Bytes) : Bytes | Error
+    def compress(source : Bytes, into : Bytes) : Bytes | Problem
       written = LibZstd.compress(
         into.to_unsafe.as(Void*),
         LibC::SizeT.new(into.size),
@@ -23,10 +24,10 @@ module Pylon::Compress
         @level,
       )
 
-      Error.from_zstd(written) || into[0, written]
+      Compress.check(written) || into[0, written]
     end
 
-    def decompress(frame : Bytes, into : Bytes) : Bytes | Error
+    def decompress(frame : Bytes, into : Bytes) : Bytes | Problem
       written = LibZstd.decompress(
         into.to_unsafe.as(Void*),
         LibC::SizeT.new(into.size),
@@ -34,7 +35,7 @@ module Pylon::Compress
         LibC::SizeT.new(frame.size),
       )
 
-      Error.from_zstd(written) || into[0, written]
+      Compress.check(written) || into[0, written]
     end
 
     def bound(size : Int32) : Int32

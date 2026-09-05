@@ -5,7 +5,7 @@ require "../wire"
 require "../core/entry"
 require "../core/paths"
 require "./cache_entry"
-require "./tally"
+require "../progress"
 require "./ignores"
 require "./snapshot"
 
@@ -17,9 +17,9 @@ module Pylon::Scan
 
     private alias Surveyed = SurveyedDirectory |
                              SurveyedFile |
-                             SurveyedLink |
-                             SurveyedUntracked |
-                             SurveyedProblem
+                             Core::SymbolicLink |
+                             Core::Untracked |
+                             Core::Problematic
 
     @next_cache : Cache
     @dirty : Set(String)
@@ -31,12 +31,12 @@ module Pylon::Scan
       @ignores : Ignores,
       @baseline : Core::Entry?,
       @recheck : Set(String),
-      @tally : Tally,
+      @scanned : Progress,
       @keeper : K,
       @parallelism : Int32 = DEFAULT_PARALLELISM,
     ) : Nil
       @next_cache = Cache.new
-      @dirty = expand(@recheck)
+      @dirty = with_ancestors(@recheck)
     end
 
     def scan : Snapshot
@@ -44,16 +44,16 @@ module Pylon::Scan
 
       return Snapshot.new(baseline, @cache) if baseline && @recheck.empty?
 
-      survey = Survey.new
-      look(survey, "", baseline)
+      findings = Findings.new
+      survey(findings, "", baseline)
 
-      digests = survey.reused
-      hash_pending(survey, digests)
+      digests = findings.cached_digests
+      hash_pending(findings, digests)
 
-      Snapshot.new(build(survey, digests, ""), @next_cache)
+      Snapshot.new(build(findings, digests, ""), @next_cache)
     end
 
-    private def expand(recheck : Set(String)) : Set(String)
+    private def with_ancestors(recheck : Set(String)) : Set(String)
       dirty = Set(String).new
 
       recheck.each do |path|
@@ -74,15 +74,15 @@ module Pylon::Scan
       !@baseline.nil? && !@dirty.includes?(path)
     end
 
-    private def look(survey : Survey, path : String, baseline : Core::Entry?) : Nil
+    private def survey(findings : Findings, path : String, baseline : Core::Entry?) : Nil
       if baseline && trusted?(path)
-        survey.carried[path] = baseline
+        findings.trusted[path] = baseline
         carry_cache(path, baseline)
         return
       end
 
       if @ignores.ignore?(path)
-        survey.nodes[path] = SurveyedUntracked.new
+        findings.nodes[path] = Core::Untracked.new
         return
       end
 
@@ -90,62 +90,62 @@ module Pylon::Scan
       in Nil
         return
       in Problem
-        survey.nodes[path] = SurveyedProblem.new(observed.reason)
+        findings.nodes[path] = Core::Problematic.new(observed.reason)
         return
       in Metadata
       end
 
       case observed.kind
       in .directory?
-        survey.nodes[path] = SurveyedDirectory.new
+        findings.nodes[path] = SurveyedDirectory.new
         names = Array(String).new
         baseline_contents = baseline.contents if baseline.is_a?(Core::Directory)
 
         listed = @filesystem.each_child(path) do |name|
           child = Core::Paths.join(path, name)
-          look(survey, child, baseline_contents.try(&.[name]?))
-          names << name if survey.nodes.has_key?(child) || survey.carried.has_key?(child)
+          survey(findings, child, baseline_contents.try(&.[name]?))
+          names << name if findings.nodes.has_key?(child) || findings.trusted.has_key?(child)
         end
 
         case listed
         in Nil
-          survey.children[path] = names
+          findings.children[path] = names
         in Missing
-          survey.nodes.delete(path)
+          findings.nodes.delete(path)
         in Problem
-          survey.nodes[path] = SurveyedProblem.new(listed.reason)
+          findings.nodes[path] = Core::Problematic.new(listed.reason)
         end
       in .file?
         if observed.size > Wire::MAX_CONTENT_BYTES
           size_mib = (observed.size / MEBIBYTE).round(1)
           limit_mib = Wire::MAX_CONTENT_BYTES // MEBIBYTE
-          survey.nodes[path] = SurveyedProblem.new(
+          findings.nodes[path] = Core::Problematic.new(
             "the file is #{size_mib} MiB and the limit is #{limit_mib} MiB",
           )
           return
         end
 
-        survey.nodes[path] = SurveyedFile.new(observed)
-        @tally.saw_file
+        findings.nodes[path] = SurveyedFile.new(observed)
+        @scanned.add_file
 
-        if (digest = reusable_digest(survey, path, observed))
-          survey.reused[path] = digest
+        if (digest = reusable_digest(findings, path, observed))
+          findings.cached_digests[path] = digest
         else
-          survey.pending << PendingFile.new(path, observed.size.to_i64)
+          findings.to_hash << PendingFile.new(path, observed.size.to_i64)
         end
       in .symbolic_link?
-        survey.nodes[path] = SurveyedLink.new(@filesystem.link_target(path))
+        findings.nodes[path] = link(@filesystem.link_target(path))
       in .untracked?
-        survey.nodes[path] = SurveyedUntracked.new
+        findings.nodes[path] = Core::Untracked.new
       end
     end
 
-    private def reusable_digest(survey : Survey, path : String, observed : Metadata) : Bytes?
+    private def reusable_digest(findings : Findings, path : String, observed : Metadata) : Bytes?
       if (cached = @cache[path]?)
         return cached.reuse(observed, @now_ns, Metadata::GRANULARITY_NS)
       end
 
-      relocated = survey.by_inode(@cache)[observed.inode]?
+      relocated = findings.by_inode(@cache)[observed.inode]?
       return if relocated.nil?
 
       relocated.reuse(observed, @now_ns, Metadata::GRANULARITY_NS)
@@ -164,28 +164,28 @@ module Pylon::Scan
       end
     end
 
-    private def hash_pending(survey : Survey, digests : Hash(String, Bytes | Problem)) : Nil
-      pending = survey.pending
+    private def hash_pending(findings : Findings, digests : Hash(String, Bytes | Problem)) : Nil
+      pending = findings.to_hash
       return if pending.empty?
 
       workers = Math.min(@parallelism, pending.size)
 
       if workers <= 1
-        hash_slice(survey, pending, digests, 0, 1)
+        hash_slice(findings, pending, digests, 0, 1)
         return
       end
 
       partials = Array.new(workers) { Hash(String, Bytes | Problem).new }
 
       Pylon::Fibers.parallel(:scan_digest, workers) do |worker|
-        hash_slice(survey, pending, partials[worker], worker, workers)
+        hash_slice(findings, pending, partials[worker], worker, workers)
       end
 
       partials.each { |partial| digests.merge!(partial) }
     end
 
     private def hash_slice(
-      survey : Survey,
+      findings : Findings,
       pending : Array(PendingFile),
       into : Hash(String, Bytes | Problem),
       offset : Int32,
@@ -201,7 +201,7 @@ module Pylon::Scan
         into[file.path] = digest
 
         if digest.is_a?(Bytes)
-          @tally.hashed(file.size)
+          @scanned.add_bytes(file.size)
           @keeper.keep(file.path, digest)
         end
         index += stride
@@ -209,23 +209,23 @@ module Pylon::Scan
     end
 
     private def build(
-      survey : Survey,
+      findings : Findings,
       digests : Hash(String, Bytes | Problem),
       path : String,
     ) : Core::Entry?
-      if (carried = survey.carried[path]?)
+      if (carried = findings.trusted[path]?)
         return carried
       end
 
-      node = survey.nodes[path]?
+      node = findings.nodes[path]?
       return if node.nil?
 
       case node
       in SurveyedDirectory
         contents = Hash(String, Core::Entry).new
 
-        survey.children[path]?.try &.each do |name|
-          if (child = build(survey, digests, Core::Paths.join(path, name)))
+        findings.children[path]?.try &.each do |name|
+          if (child = build(findings, digests, Core::Paths.join(path, name)))
             contents[name] = child
           end
         end
@@ -241,22 +241,20 @@ module Pylon::Scan
           @next_cache[path] = CacheEntry.new(
             node.metadata,
             digest,
-            provisional: node.metadata.freshly_modified?(@now_ns, Metadata::GRANULARITY_NS),
+            freshly_written: node.metadata.freshly_modified?(@now_ns, Metadata::GRANULARITY_NS),
           )
 
           Core::File.new(digest, executable: node.metadata.executable?)
         end
-      in SurveyedLink
-        case (target = node.target)
-        in Problem
-          Core::Problematic.new("the link target #{target.reason}")
-        in String
-          Core::SymbolicLink.new(target)
-        end
-      in SurveyedUntracked
-        Core::Untracked.new
-      in SurveyedProblem
-        Core::Problematic.new(node.reason)
+      in Core::SymbolicLink, Core::Untracked, Core::Problematic
+        node
+      end
+    end
+
+    private def link(target : String | Problem) : Core::SymbolicLink | Core::Problematic
+      case target
+      in Problem then Core::Problematic.new("the link target #{target.reason}")
+      in String  then Core::SymbolicLink.new(target)
       end
     end
 
@@ -264,18 +262,15 @@ module Pylon::Scan
 
     private record SurveyedDirectory
     private record SurveyedFile, metadata : Metadata
-    private record SurveyedLink, target : String | Problem
-    private record SurveyedUntracked
-    private record SurveyedProblem, reason : String
 
-    private class Survey
+    private class Findings
       @by_inode : Hash(UInt64, CacheEntry)? = nil
 
       getter nodes = Hash(String, Surveyed).new
       getter children = Hash(String, Array(String)).new
-      getter pending = Array(PendingFile).new
-      getter reused = Hash(String, Bytes | Problem).new
-      getter carried = Hash(String, Core::Entry).new
+      getter to_hash = Array(PendingFile).new
+      getter cached_digests = Hash(String, Bytes | Problem).new
+      getter trusted = Hash(String, Core::Entry).new
 
       def by_inode(cache : Cache) : Hash(UInt64, CacheEntry)
         @by_inode ||= index_inodes(cache)

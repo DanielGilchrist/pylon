@@ -3,7 +3,8 @@ require "../compress/identity"
 require "../compress/zstd"
 require "./binary"
 require "./content_kind"
-require "./patch"
+require "./spliced"
+require "./dictionary"
 
 module Pylon::Wire
   module Chunks
@@ -102,18 +103,18 @@ module Pylon::Wire
           hasher.final(sum)
 
           contents[digest] = content if sum == digest
-        in .patch?
+        in .spliced?
           base = reader.digest
           ops = read_all(reader, codec, scratch)
           next if ops.nil?
 
-          contents[digest] = Patch.new(base, ops)
-        in .prefixed?
+          contents[digest] = Spliced.new(base, ops)
+        in .dictionary?
           base = reader.digest
           frame = read_all(reader, Compress::Identity.new, scratch)
           next if frame.nil?
 
-          contents[digest] = Prefixed.new(base, frame)
+          contents[digest] = Dictionary.new(base, frame)
         end
       end
 
@@ -126,19 +127,19 @@ module Pylon::Wire
       scratch = scratch()
 
       contents.each do |digest, payload|
-        Binary.write_bytes(io, digest)
+        Binary.write_digest(io, digest)
 
         case payload
         in Bytes
           ContentKind::Full.write(io)
           write_all(io, payload, codec, scratch)
-        in Patch
-          ContentKind::Patch.write(io)
-          Binary.write_bytes(io, payload.base)
+        in Spliced
+          ContentKind::Spliced.write(io)
+          Binary.write_digest(io, payload.base)
           write_all(io, payload.ops, codec, scratch)
-        in Prefixed
-          ContentKind::Prefixed.write(io)
-          Binary.write_bytes(io, payload.base)
+        in Dictionary
+          ContentKind::Dictionary.write(io)
+          Binary.write_digest(io, payload.base)
           write_all(io, payload.frame, Compress::Identity.new, scratch)
         end
       end
@@ -195,8 +196,8 @@ module Pylon::Wire
 
         unpacked = codec.decompress(packed, content[filled, raw_size])
 
-        if unpacked.is_a?(Compress::Error)
-          reader.fail("decompression failed: #{unpacked.message}")
+        if unpacked.is_a?(Problem)
+          reader.fail("decompression failed: #{unpacked.reason}")
           break
         end
 
@@ -236,9 +237,9 @@ module Pylon::Wire
 
       # An error here is a bug where the caller built mismatched buffers so we want to blow up
       # loudly.
-      if packed.is_a?(Compress::Error)
+      if packed.is_a?(Problem)
         raise "compression into a bound-sized buffer failed, a caller passed mismatched buffers: " \
-              "#{packed.message}"
+              "#{packed.reason}"
       end
 
       packed

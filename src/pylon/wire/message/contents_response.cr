@@ -1,4 +1,3 @@
-require "../patch"
 require "../content_source"
 require "../binary"
 require "./writable"

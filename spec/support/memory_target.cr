@@ -2,7 +2,7 @@ require "digest/sha256"
 require "sync"
 require "../../src/pylon/scan/metadata"
 require "../../src/pylon/scan/observed"
-require "../../src/pylon/write/problem"
+require "../../src/pylon/problem"
 
 class MemoryTarget
   record Node,
@@ -30,7 +30,7 @@ class MemoryTarget
     metadata_for(node)
   end
 
-  def observe(path : String) : Pylon::Scan::Observed | Pylon::Write::Problem | Nil
+  def observe(path : String) : Pylon::Scan::Observed | Pylon::Problem | Nil
     node = @lock.synchronize { @nodes[path]? }
     return if node.nil?
 
@@ -58,7 +58,7 @@ class MemoryTarget
     nil
   end
 
-  def create_directory(path : String) : Pylon::Write::Problem?
+  def create_directory(path : String) : Pylon::Problem?
     return read_only unless writable?
 
     @lock.synchronize do
@@ -69,7 +69,7 @@ class MemoryTarget
     nil
   end
 
-  def write_file(path : String, content : Bytes, executable : Bool) : Pylon::Write::Problem?
+  def write_file(path : String, content : Bytes, executable : Bool) : Pylon::Problem?
     return read_only unless writable?
 
     @lock.synchronize do
@@ -86,7 +86,7 @@ class MemoryTarget
     nil
   end
 
-  def create_symlink(path : String, target : String) : Pylon::Write::Problem?
+  def create_symlink(path : String, target : String) : Pylon::Problem?
     return read_only unless writable?
 
     @lock.synchronize do
@@ -101,10 +101,10 @@ class MemoryTarget
     nil
   end
 
-  def set_executable(path : String, executable : Bool) : Pylon::Write::Problem?
+  def set_executable(path : String, executable : Bool) : Pylon::Problem?
     @lock.synchronize do
       node = @nodes[path]?
-      return Pylon::Write::Problem.new("no such file") if node.nil?
+      return Pylon::Problem.new("no such file") if node.nil?
       return read_only unless writable?
 
       operations << "chmod #{path}"
@@ -114,9 +114,9 @@ class MemoryTarget
     nil
   end
 
-  def rename(from : String, to : String) : Pylon::Write::Problem?
+  def rename(from : String, to : String) : Pylon::Problem?
     return read_only unless writable?
-    return Pylon::Write::Problem.new("Cross-device link") unless renamable?
+    return Pylon::Problem.new("Cross-device link") unless renamable?
 
     @lock.synchronize do
       operations << "rename #{from} #{to}"
@@ -129,7 +129,7 @@ class MemoryTarget
     nil
   end
 
-  def remove(path : String) : Pylon::Write::Problem?
+  def remove(path : String) : Pylon::Problem?
     return read_only unless writable?
 
     @lock.synchronize do
@@ -199,8 +199,8 @@ class MemoryTarget
     names
   end
 
-  private def read_only : Pylon::Write::Problem
-    Pylon::Write::Problem.new("the target is read-only")
+  private def read_only : Pylon::Problem
+    Pylon::Problem.new("the target is read-only")
   end
 
   private def take_inode : UInt64

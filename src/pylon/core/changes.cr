@@ -5,7 +5,7 @@ module Pylon::Core
   struct Changes
     include Indexable(Change)
 
-    def self.expand(reconciled : Indexable(Change)) : Changes
+    def self.flatten(reconciled : Indexable(Change)) : Changes
       Changes.new(initial_capacity: reconciled.size).tap do |expanded|
         reconciled.each { |change| widen(change.path, change.old, change.new, expanded) }
       end
@@ -73,13 +73,15 @@ module Pylon::Core
       combined
     end
 
-    def deletes_last(late : Set(Bytes)) : Changes
+    def ordered_for_writing(deferred : Set(Bytes)) : Changes
       leading = case_colliding_delete_indexes
 
       Changes.new(initial_capacity: size).tap do |ordered|
         leading.each { |index| ordered << @changes[index] }
-        @changes.each { |change| ordered << change unless change.new.nil? || late?(change, late) }
-        @changes.each { |change| ordered << change if late?(change, late) }
+        @changes.each do |change|
+          ordered << change unless change.new.nil? || deferred?(change, deferred)
+        end
+        @changes.each { |change| ordered << change if deferred?(change, deferred) }
 
         @changes.each_with_index do |change, index|
           next unless change.new.nil?
@@ -121,11 +123,11 @@ module Pylon::Core
       folded
     end
 
-    private def late?(change : Change, late : Set(Bytes)) : Bool
-      return false if late.empty?
+    private def deferred?(change : Change, deferred : Set(Bytes)) : Bool
+      return false if deferred.empty?
 
       entry = change.new
-      entry.is_a?(File) && late.includes?(entry.digest)
+      entry.is_a?(File) && deferred.includes?(entry.digest)
     end
   end
 end

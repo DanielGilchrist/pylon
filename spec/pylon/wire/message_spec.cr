@@ -3,7 +3,7 @@ require "../../../src/pylon/wire/message"
 
 include Pylon::Wire
 
-private def round_trip(message : Message::Any) : Message::Any | Closed | Invalid
+private def round_trip(message : Message::Any) : Message::Any | Closed | Pylon::Problem
   io = IO::Memory.new
   Message.write(io, message)
   io.rewind
@@ -14,7 +14,7 @@ private def configuration(
   root : String = "/srv/app",
   brand : String = "Test Sync",
   state : String? = "/srv/.state",
-  known : Bytes? = nil,
+  tree_fingerprint : Bytes? = nil,
 ) : Message::Configure
   Message::Configure.new(
     root: root,
@@ -23,38 +23,38 @@ private def configuration(
     brand: Pylon::Brand.new(brand),
     state: state,
     watch: true,
-    known: known,
+    tree_fingerprint: tree_fingerprint,
   )
 end
 
-describe Pylon::Wire::Message::AvailabilityRequest do
-  it "round trips the digests the sender would otherwise ship in full" do
+describe Pylon::Wire::Message::ReusableRequest do
+  it "round trips the digests the sender would otherwise send in full" do
     digests = [Bytes.new(DIGEST_BYTES, 1_u8), Bytes.new(DIGEST_BYTES, 2_u8)]
-    received = round_trip(Message::AvailabilityRequest.new(digests))
+    received = round_trip(Message::ReusableRequest.new(digests))
 
-    received.should be_a(Message::AvailabilityRequest)
-    received.digests.should eq(digests) if received.is_a?(Message::AvailabilityRequest)
+    received.should be_a(Message::ReusableRequest)
+    received.digests.should eq(digests) if received.is_a?(Message::ReusableRequest)
   end
 end
 
-describe Pylon::Wire::Message::AvailabilityResponse do
+describe Pylon::Wire::Message::ReusableResponse do
   it "round trips the digests the receiver can recover itself" do
-    received = round_trip(Message::AvailabilityResponse.new([Bytes.new(DIGEST_BYTES, 3_u8)]))
+    received = round_trip(Message::ReusableResponse.new([Bytes.new(DIGEST_BYTES, 3_u8)]))
 
-    received.should be_a(Message::AvailabilityResponse)
-    if received.is_a?(Message::AvailabilityResponse)
+    received.should be_a(Message::ReusableResponse)
+    if received.is_a?(Message::ReusableResponse)
       received.payload.should eq([Bytes.new(DIGEST_BYTES, 3_u8)])
     end
   end
 end
 
-describe Pylon::Wire::Message::TreeDelta do
+describe Pylon::Wire::Message::TreeChanges do
   it "round trips the changes since the tree the client already holds" do
     changes = Pylon::Core::Changes[Pylon::Core::Change.new("a.rb", Fixtures.f1, Fixtures.f2)]
-    received = round_trip(Message::TreeDelta.new(4_u32, changes, live: true))
+    received = round_trip(Message::TreeChanges.new(4_u32, changes, live: true))
 
-    received.should be_a(Message::TreeDelta)
-    next unless received.is_a?(Message::TreeDelta)
+    received.should be_a(Message::TreeChanges)
+    next unless received.is_a?(Message::TreeChanges)
 
     received.sequence.should eq(4_u32)
     received.live?.should be_true
@@ -98,7 +98,7 @@ describe Pylon::Wire::Message::ScanProgress do
     next unless received.is_a?(Message::ScanProgress)
 
     received.files.should eq(12_400_i64)
-    received.hashed_bytes.should eq(325_000_000_i64)
+    received.bytes.should eq(325_000_000_i64)
   end
 end
 
@@ -127,18 +127,18 @@ describe Pylon::Wire::Message::Configure do
   end
 
   it "round trips the fingerprint of the tree the client already holds" do
-    known = Bytes.new(DIGEST_BYTES, 9_u8)
-    received = round_trip(configuration(known: known))
+    fingerprint = Bytes.new(DIGEST_BYTES, 9_u8)
+    received = round_trip(configuration(tree_fingerprint: fingerprint))
 
     received.should be_a(Message::Configure)
-    received.known.should eq(known) if received.is_a?(Message::Configure)
+    received.tree_fingerprint.should eq(fingerprint) if received.is_a?(Message::Configure)
   end
 
   it "refuses a fingerprint of the wrong length" do
-    received = round_trip(configuration(known: Bytes.new(5, 9_u8)))
+    received = round_trip(configuration(tree_fingerprint: Bytes.new(5, 9_u8)))
 
-    received.should be_a(Invalid)
-    received.reason.should contain("fingerprint") if received.is_a?(Invalid)
+    received.should be_a(Pylon::Problem)
+    received.reason.should contain("fingerprint") if received.is_a?(Pylon::Problem)
   end
 
   it "keeps having no state path distinct from an empty one" do
@@ -151,22 +151,22 @@ describe Pylon::Wire::Message::Configure do
   it "refuses a blank brand" do
     received = round_trip(configuration(brand: "  "))
 
-    received.should be_a(Invalid)
-    received.reason.should contain("blank") if received.is_a?(Invalid)
+    received.should be_a(Pylon::Problem)
+    received.reason.should contain("blank") if received.is_a?(Pylon::Problem)
   end
 
   it "refuses an empty root" do
     received = round_trip(configuration(root: ""))
 
-    received.should be_a(Invalid)
-    received.reason.should contain("root") if received.is_a?(Invalid)
+    received.should be_a(Pylon::Problem)
+    received.reason.should contain("root") if received.is_a?(Pylon::Problem)
   end
 
   it "refuses a NUL byte in a path before it can reach a syscall" do
     received = round_trip(configuration(root: "/srv/app\0"))
 
-    received.should be_a(Invalid)
-    if received.is_a?(Invalid)
+    received.should be_a(Pylon::Problem)
+    if received.is_a?(Pylon::Problem)
       received.reason.should eq("a string in the message contains a NUL byte")
     end
   end

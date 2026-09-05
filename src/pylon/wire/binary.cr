@@ -1,5 +1,5 @@
 require "../core/change"
-require "./delta"
+require "./checksums"
 require "./reader"
 require "../core/entry"
 require "../scan/cache_entry"
@@ -8,6 +8,8 @@ require "../write/writer"
 module Pylon::Wire
   module Binary
     extend self
+
+    PROBLEM_SKIP = 255_u8
 
     def write_bool(io : IO, value : Bool) : Nil
       io.write_byte(value ? 1_u8 : 0_u8)
@@ -26,6 +28,31 @@ module Pylon::Wire
       write_bytes(io, value.try(&.to_slice))
     end
 
+    def write_digest(io : IO, digest : Bytes) : Nil
+      io.write(digest)
+    end
+
+    def write_digests(io : IO, digests : Array(Bytes)) : Nil
+      io.write_bytes(digests.size.to_u32, FORMAT)
+      digests.each { |digest| write_digest(io, digest) }
+    end
+
+    def write_bases(io : IO, bases : Bases) : Nil
+      io.write_bytes(bases.size.to_u32, FORMAT)
+
+      bases.each do |wanted, base|
+        write_digest(io, wanted)
+        write_digest(io, base)
+      end
+    end
+
+    def read_bases(reader : Reader) : Bases
+      count = reader.count
+      bases = Bases.new(initial_capacity: Wire.capacity_hint(count))
+      reader.repeat(count) { bases[reader.digest] = reader.digest }
+      bases
+    end
+
     def write_entry(io : IO, entry : Core::Entry?) : Nil
       case entry
       in Nil
@@ -40,7 +67,7 @@ module Pylon::Wire
         end
       in Core::File
         io.write_byte(2_u8)
-        write_bytes(io, entry.digest)
+        write_digest(io, entry.digest)
         write_bool(io, entry.executable?)
       in Core::SymbolicLink
         io.write_byte(3_u8)
@@ -163,8 +190,8 @@ module Pylon::Wire
 
         case (relocation = Core::Relocation.parse(from, to, entry))
         in Core::Relocation then relocations << relocation
-        in Core::Malformed
-          reader.fail("a relocation names #{relocation.raw.inspect}, which #{relocation.reason}")
+        in Problem
+          reader.fail("a relocation #{relocation.reason}")
         end
       end
 
@@ -194,31 +221,25 @@ module Pylon::Wire
 
     def write_skipped(io : IO, skipped : Write::Skipped?) : Nil
       case skipped
-      in Nil                         then io.write_byte(0_u8)
-      in Write::ModificationDetected then io.write_byte(1_u8)
-      in Write::UnknownState         then io.write_byte(2_u8)
-      in Write::StagedContentMissing then io.write_byte(3_u8)
-      in Write::DryRun               then io.write_byte(4_u8)
-      in Write::WriteFailed
-        io.write_byte(5_u8)
+      in Nil         then io.write_byte(0_u8)
+      in Write::Skip then io.write_byte(skipped.value.to_u8 + 1)
+      in Problem
+        io.write_byte(PROBLEM_SKIP)
         write_string(io, skipped.reason)
       end
     end
 
     def read_skipped(reader : Reader) : Write::Skipped?
-      case reader.byte
-      when 0 then nil
-      when 1 then Write::ModificationDetected.new
-      when 2 then Write::UnknownState.new
-      when 3 then Write::StagedContentMissing.new
-      when 4 then Write::DryRun.new
-      when 5 then Write::WriteFailed.new(reader.required_string)
-      else
-        unless reader.failed?
-          reader.fail("unknown skip reason in message, both sides must run the same version")
-        end
-        nil
-      end
+      byte = reader.byte
+      return if byte.zero?
+      return Problem.new(reader.required_string) if byte == PROBLEM_SKIP
+
+      skip = Write::Skip.from_value?(byte.to_i32 - 1)
+      return skip if skip
+
+      return if reader.failed?
+
+      reader.fail("unknown skip reason in message, both sides must run the same version")
     end
 
     def write_cache(io : IO, cache : Scan::Cache) : Nil
@@ -232,8 +253,8 @@ module Pylon::Wire
         io.write_bytes(metadata.size, FORMAT)
         io.write_bytes(metadata.mtime_ns, FORMAT)
         io.write_bytes(metadata.inode, FORMAT)
-        write_bytes(io, entry.digest)
-        write_bool(io, entry.provisional?)
+        write_digest(io, entry.digest)
+        write_bool(io, entry.freshly_written?)
       end
     end
 
@@ -252,7 +273,7 @@ module Pylon::Wire
         )
 
         digest = reader.digest
-        cache[path] = Scan::CacheEntry.new(metadata, digest, provisional: reader.bool)
+        cache[path] = Scan::CacheEntry.new(metadata, digest, freshly_written: reader.bool)
       end
 
       cache
@@ -265,49 +286,59 @@ module Pylon::Wire
       digests
     end
 
-    def read_signatures(reader : Reader) : Delta::Signatures
+    def read_checksums_map(reader : Reader) : Checksums::Map
       count = reader.count
-      signatures = Delta::Signatures.new(initial_capacity: Wire.capacity_hint(count))
+      map = Checksums::Map.new(initial_capacity: Wire.capacity_hint(count))
 
       reader.repeat(count) do
         wanted = reader.digest
-        base = reader.digest
-        signature = read_signature(reader)
-        signatures[wanted] = Delta::Based.new(base, signature) if signature
+        checksums = read_checksums(reader)
+        map[wanted] = checksums if checksums
       end
 
-      signatures
+      map
     end
 
-    def read_signature(reader : Reader) : Delta::Signature?
+    def write_checksums_map(io : IO, map : Checksums::Map) : Nil
+      io.write_bytes(map.size.to_u32, FORMAT)
+
+      map.each do |wanted, checksums|
+        write_digest(io, wanted)
+        write_checksums(io, checksums)
+      end
+    end
+
+    def read_checksums(reader : Reader) : Checksums?
+      base = reader.digest
       block_size = reader.u32
       base_size = reader.u64
 
-      unless Delta.plausible_dimensions?(block_size, base_size)
-        reader.fail("a content signature claims impossible dimensions")
+      unless Checksums.plausible?(block_size, base_size)
+        reader.fail("a checksum list claims impossible dimensions")
         return
       end
 
       count = ((base_size + block_size - 1) // block_size).to_u32
-      blocks = Array(Delta::Block).new(Wire.capacity_hint(count))
+      blocks = Array(Checksums::Block).new(Wire.capacity_hint(count))
 
       reader.repeat(count) do
         weak = reader.u32
-        strong = Bytes.new(Delta::STRONG_BYTES)
+        strong = Bytes.new(Checksums::STRONG_BYTES)
         reader.fill(strong)
-        blocks << Delta::Block.new(weak, strong)
+        blocks << Checksums::Block.new(weak, strong)
       end
 
       return if reader.failed?
 
-      Delta::Signature.new(block_size.to_i32, base_size.to_i64, blocks)
+      Checksums.new(base, block_size.to_i32, base_size.to_i64, blocks)
     end
 
-    def write_signature(io : IO, signature : Delta::Signature) : Nil
-      io.write_bytes(signature.block_size.to_u32, FORMAT)
-      io.write_bytes(signature.base_size.to_u64, FORMAT)
+    def write_checksums(io : IO, checksums : Checksums) : Nil
+      write_digest(io, checksums.base)
+      io.write_bytes(checksums.block_size.to_u32, FORMAT)
+      io.write_bytes(checksums.base_size.to_u64, FORMAT)
 
-      signature.blocks.each do |block|
+      checksums.blocks.each do |block|
         io.write_bytes(block.weak, FORMAT)
         io.write(block.strong)
       end

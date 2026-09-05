@@ -21,7 +21,7 @@ private def sample_cache : Pylon::Scan::Cache
   cache["app/user.rb"] = Pylon::Scan::CacheEntry.new(
     Pylon::Scan::Metadata.new(mode: 33188_u32, size: 42_u64, mtime_ns: 1_700_i64, inode: 9_u64),
     Digest::SHA256.digest("digest-a"),
-    provisional: false,
+    freshly_written: false,
   )
 
   cache
@@ -47,7 +47,7 @@ describe Pylon::Session::Checkpoint do
       entry.metadata.mtime_ns.should eq(1_700_i64)
       entry.metadata.size.should eq(42_u64)
       entry.digest.should eq(Digest::SHA256.digest("digest-a"))
-      loaded.exchanged.should be_nil
+      loaded.shared_tree.should be_nil
     end
   end
 
@@ -65,7 +65,7 @@ describe Pylon::Session::Checkpoint do
 
   it "reports a missing state file as absent" do
     in_sandbox do |path|
-      Checkpoint.load(path).should be_a(Checkpoint::Absent)
+      Checkpoint.load(path).should be_a(Pylon::Missing)
     end
   end
 
@@ -74,8 +74,8 @@ describe Pylon::Session::Checkpoint do
       File.write(path, "not a pylon state file at all")
 
       loaded = Checkpoint.load(path)
-      loaded.should be_a(Checkpoint::Damaged)
-      next unless loaded.is_a?(Checkpoint::Damaged)
+      loaded.should be_a(Pylon::Problem)
+      next unless loaded.is_a?(Problem)
 
       loaded.reason.should eq("not a sync state file")
     end
@@ -88,7 +88,7 @@ describe Pylon::Session::Checkpoint do
 
       File.write(path, bytes[0, bytes.size // 2])
 
-      Checkpoint.load(path).should be_a(Checkpoint::Damaged)
+      Checkpoint.load(path).should be_a(Pylon::Problem)
     end
   end
 
@@ -100,8 +100,8 @@ describe Pylon::Session::Checkpoint do
       File.write(path, bytes)
 
       loaded = Checkpoint.load(path)
-      loaded.should be_a(Checkpoint::Damaged)
-      next unless loaded.is_a?(Checkpoint::Damaged)
+      loaded.should be_a(Pylon::Problem)
+      next unless loaded.is_a?(Problem)
 
       loaded.reason.should eq("written by a different version")
     end

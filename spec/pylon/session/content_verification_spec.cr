@@ -25,8 +25,8 @@ describe "content verification against the advertised digest" do
       source = endpoint.content_source(
         [digest],
         1_u64 * 1024 * 1024,
-        Pylon::Wire::Delta::Signatures.new,
-        Pylon::Wire::Prefixed::Bases.new,
+        Pylon::Wire::Checksums::Map.new,
+        Pylon::Wire::Bases.new,
       )
       source.write(wire)
       wire.rewind
@@ -54,8 +54,8 @@ describe "content verification against the advertised digest" do
       source = endpoint.content_source(
         [digest],
         1_u64 * 1024 * 1024,
-        Pylon::Wire::Delta::Signatures.new,
-        Pylon::Wire::Prefixed::Bases.new,
+        Pylon::Wire::Checksums::Map.new,
+        Pylon::Wire::Bases.new,
       )
       source.write(wire)
       wire.rewind
@@ -78,8 +78,8 @@ describe "content verification against the advertised digest" do
       contents = endpoint.content_source(
         [digest],
         1_u64 * 1024 * 1024,
-        Pylon::Wire::Delta::Signatures.new,
-        Pylon::Wire::Prefixed::Bases.new,
+        Pylon::Wire::Checksums::Map.new,
+        Pylon::Wire::Bases.new,
       ).contents
       contents.has_key?(digest).should be_false
     ensure

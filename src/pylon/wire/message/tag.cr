@@ -8,13 +8,13 @@ module Pylon::Wire::Message
     WriteRequest
     WriteResponse
     TreeUpdate
-    TreeDelta
-    SignaturesRequest
-    SignaturesResponse
+    TreeChanges
+    ChecksumsRequest
+    ChecksumsResponse
     Configure
     ScanProgress
     TreeAnnounce
-    AvailabilityRequest
-    AvailabilityResponse
+    ReusableRequest
+    ReusableResponse
   end
 end

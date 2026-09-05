@@ -48,7 +48,7 @@ end
 private def connect(
   ends : Ends,
   resume : Core::Entry?,
-  & : Session(LocalEndpoint, RemoteEndpoint), RemoteEndpoint, CountingReader ->
+  & : Session(LocalEndpoint, RemoteEndpoint, Pylon::Discard), RemoteEndpoint, CountingReader ->
 ) : Nil
   client, socket = UNIXSocket.pair
   serve_remote_end(socket)
@@ -61,7 +61,7 @@ private def connect(
     brand: Pylon::Brand::DEFAULT,
     state: ends.state,
     watch: false,
-    known: (Digests.fingerprint(resume) if resume),
+    tree_fingerprint: (Digests.fingerprint(resume) if resume),
   )
 
   begin
@@ -92,16 +92,16 @@ describe "resuming from a persisted remote tree" do
     with_roots do |ends|
       300.times { |index| File.write(File.join(ends.remote, "file_#{index}.rb"), "body #{index}") }
 
-      exchanged = nil
+      shared_tree = nil
       connect(ends, nil) do |session, endpoint, _|
         cycle!(session, tick)
-        exchanged = endpoint.tree
+        shared_tree = endpoint.tree
       end
       wait_for_state(ends.state)
 
       File.write(File.join(ends.remote, "file_300.rb"), "late arrival")
 
-      connect(ends, exchanged) do |session, _, counting|
+      connect(ends, shared_tree) do |session, _, counting|
         cycle!(session, tick)
 
         File.read(File.join(ends.local, "file_300.rb")).should eq("late arrival")

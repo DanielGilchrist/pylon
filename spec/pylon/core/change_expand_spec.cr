@@ -30,11 +30,11 @@ describe "expanding changes" do
   it "leaves a file change alone" do
     changes = [Change.new("a.rb", nil, Fixtures.f1)]
 
-    Changes.expand(changes).size.should eq(1)
+    Changes.flatten(changes).size.should eq(1)
   end
 
   it "leaves a deletion as a single change" do
-    Changes.expand([Change.new("app", Fixtures.d1, nil)]).size.should eq(1)
+    Changes.flatten([Change.new("app", Fixtures.d1, nil)]).size.should eq(1)
   end
 
   it "turns a subtree into one change per entry" do
@@ -42,7 +42,7 @@ describe "expanding changes" do
       {"models" => Pylon::Core::Directory.new({"user.rb" => Fixtures.f1})},
     )
 
-    expanded = Changes.expand([Change.new("app", nil, subtree)])
+    expanded = Changes.flatten([Change.new("app", nil, subtree)])
 
     expanded.map(&.path).should eq(["app", "app/models", "app/models/user.rb"])
     root = expanded.first.new
@@ -60,7 +60,7 @@ describe "expanding changes" do
       change = Changes[Change.new("", base, target)]
 
       direct = Applier.apply(base, change)
-      widened = Applier.apply(base, Changes.expand(change))
+      widened = Applier.apply(base, Changes.flatten(change))
 
       (direct == widened).should be_true, "seed=#{seed} iteration=#{iteration}"
     end

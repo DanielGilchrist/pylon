@@ -29,7 +29,7 @@ private class CountingIO < IO
 end
 
 private def in_counted_pair(
-  & : String, String, Session(LocalEndpoint, RemoteEndpoint), CountingIO ->
+  & : String, String, Session(LocalEndpoint, RemoteEndpoint, Pylon::Discard), CountingIO ->
 ) : Nil
   base = File.join(Dir.tempdir, "pylon-reuse-#{Random::Secure.hex(8)}")
   local_root = File.join(base, "local")

@@ -2,7 +2,7 @@ require "../../spec_helper"
 require "../../support/unrecoverable"
 require "../../../src/pylon/write/writer"
 require "../../../src/pylon/session/staging"
-require "../../../src/pylon/wire/patch"
+require "../../../src/pylon/wire/spliced"
 require "../../../src/pylon/disk"
 
 private FILES = 120
@@ -150,7 +150,7 @@ describe "Writer running independent file writes in parallel" do
       outcomes = build_writer(Pylon::Disk.new(root), contents).write(changes)
 
       unrecovered = outcomes.count do |outcome|
-        outcome.skipped.is_a?(Pylon::Write::StagedContentMissing)
+        outcome.skipped == Pylon::Write::Skip::StagedContentMissing
       end
 
       unrecovered.should eq(missing.size)

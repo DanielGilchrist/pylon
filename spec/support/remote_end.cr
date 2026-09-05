@@ -14,7 +14,7 @@ def remote_configuration(
     brand: brand,
     state: state,
     watch: watch,
-    known: nil,
+    tree_fingerprint: nil,
   )
 end
 

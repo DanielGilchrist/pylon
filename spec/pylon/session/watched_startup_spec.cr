@@ -15,7 +15,7 @@ end
 private def in_pair(
   watch : Bool,
   create_remote : Bool = true,
-  & : String, String, Session(LocalEndpoint, RemoteEndpoint), RemoteEndpoint ->
+  & : String, String, Session(LocalEndpoint, RemoteEndpoint, Pylon::Discard), RemoteEndpoint ->
 ) : Nil
   base = File.join(Dir.tempdir, "pylon-startup-#{Random::Secure.hex(8)}")
   local = File.join(base, "local")

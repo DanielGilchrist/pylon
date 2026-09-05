@@ -1,27 +1,22 @@
+require "../problem"
+
 struct Pylon::CLI
   struct Target
-    struct Invalid
-      def initialize(@message : String) : Nil
-      end
-
-      getter message : String
-    end
-
-    def self.parse(specification : String) : Target | Invalid
+    def self.parse(specification : String) : Target | Problem
       separator = specification.index(':')
 
       if separator.nil?
-        return Invalid.new("remote target #{specification.inspect} needs the form user@host:/path")
+        return Problem.new("remote target #{specification.inspect} needs the form user@host:/path")
       end
 
       host = specification[0, separator]
       path = specification[(separator + 1)..]
 
-      return Invalid.new("remote target #{specification.inspect} is missing a host") if host.empty?
-      return Invalid.new("remote target #{specification.inspect} is missing a path") if path.empty?
+      return Problem.new("remote target #{specification.inspect} is missing a host") if host.empty?
+      return Problem.new("remote target #{specification.inspect} is missing a path") if path.empty?
 
       if host.starts_with?('-')
-        return Invalid.new(
+        return Problem.new(
           "remote target #{specification.inspect} has a host starting with '-', which ssh would " \
           "read as an option",
         )

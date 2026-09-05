@@ -1,19 +1,14 @@
 {% skip_file unless flag?(:darwin) %}
 
-require "sync"
-require "../core/paths"
 require "../fibers"
 require "../filesystem"
+require "../problem"
 require "../scan/ignores"
-require "./dirty"
-require "./unavailable"
-require "./walk"
+require "./dirty_paths"
 require "./lib_fsevents"
 
 module Pylon::Watch
   class FSEvents
-    include Walk
-
     LATENCY_SECONDS   = 0.01
     STOP_POLL_SECONDS =  0.5
 
@@ -36,52 +31,40 @@ module Pylon::Watch
     def self.open(
       root : String,
       ignores : Array(String),
-      signals : Channel(Nil),
-    ) : FSEvents | Unavailable
+      dirty_paths : DirtyPaths,
+    ) : FSEvents | Problem
       case (resolved = Filesystem.realpath(root))
       in Problem
-        Unavailable.new("the sync root could not be resolved: #{resolved.reason}")
+        Problem.new("the sync root could not be resolved: #{resolved.reason}")
       in String
-        watcher = new(resolved, Scan::Ignores.new(ignores), signals)
+        watcher = new(resolved, Scan::Ignores.new(ignores), dirty_paths)
 
         case watcher.started
         in Start::Running      then watcher
-        in Start::CreateFailed then Unavailable.new("the FSEvents stream could not be created")
-        in Start::StartFailed  then Unavailable.new("the FSEvents stream could not be started")
-        in Nil                 then Unavailable.new("the watcher stopped before the stream started")
+        in Start::CreateFailed then Problem.new("the FSEvents stream could not be created")
+        in Start::StartFailed  then Problem.new("the FSEvents stream could not be started")
+        in Nil                 then Problem.new("the watcher stopped before the stream started")
         end
       end
     end
 
     @started : Start? | Unresolved = Unresolved.new
 
-    def initialize(@root : String, @ignores : Scan::Ignores, @signals : Channel(Nil)) : Nil
+    def initialize(@root : String, @ignores : Scan::Ignores, @dirty_paths : DirtyPaths) : Nil
       @prefix = "#{@root}/"
-      @paths = Set(String).new
-      @lock = Sync::Mutex.new
-      @fresh = false
       @stopping = false
       @ready = Channel(Start).new
       @done = Channel(Nil).new
       @context = Fibers.isolated(:fs_events) { watch }
     end
 
-    getter signals : Channel(Nil)
+    getter dirty_paths : DirtyPaths
 
     def started : Start?
       started = @started
       return started unless started.is_a?(Unresolved)
 
       @started = @ready.receive?
-    end
-
-    def drain : Dirty
-      @lock.synchronize do
-        dirty = @fresh ? Everything.new : Touched.new(@paths.to_a)
-        @paths.clear
-        @fresh = false
-        dirty
-      end
     end
 
     def close : Nil
@@ -96,14 +79,14 @@ module Pylon::Watch
         flag = flags[index]
 
         if flag & FRESH_FLAGS != 0
-          @lock.synchronize { @fresh = true }
+          @dirty_paths.all_dirty!
           next
         end
 
         record(String.new(paths[index]).rstrip('/'), flag)
       end
 
-      signal
+      @dirty_paths.signal
     end
 
     private def record(path : String, flag : UInt32) : Nil
@@ -111,12 +94,12 @@ module Pylon::Watch
       return if relative.nil?
       return if @ignores.ignore?(relative)
 
-      @lock.synchronize { @paths << relative }
+      @dirty_paths.add(relative)
 
       return unless flag & LibFSEvents::ITEM_IS_DIR != 0
       return unless flag & (LibFSEvents::ITEM_CREATED | LibFSEvents::ITEM_RENAMED) != 0
 
-      mark_contents(relative)
+      @dirty_paths.add_tree(@root, relative, @ignores)
     end
 
     private def relativise(path : String) : String?
@@ -124,16 +107,6 @@ module Pylon::Watch
       return unless path.starts_with?(@prefix)
 
       path[@prefix.size..]
-    end
-
-    private def mark_contents(relative : String) : Nil
-      walk(absolute(relative)) do |name|
-        child = Core::Paths.join(relative, name)
-        next if @ignores.ignore?(child)
-
-        @lock.synchronize { @paths << child }
-        mark_contents(child) if Dir.exists?(absolute(child))
-      end
     end
 
     private def watch : Nil
@@ -191,17 +164,6 @@ module Pylon::Watch
 
     private def release(*references : LibFSEvents::CFRef) : Nil
       references.each { |reference| LibFSEvents.release(reference) }
-    end
-
-    private def signal : Nil
-      select
-      when @signals.send(nil)
-      else
-      end
-    end
-
-    private def absolute(relative : String) : String
-      relative.empty? ? @root : File.join(@root, relative)
     end
 
     private record Unresolved

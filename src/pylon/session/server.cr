@@ -25,7 +25,7 @@ module Pylon::Session
       case (message = Wire::Message.read(input))
       in Wire::Closed
         Problem.new("the client went away before configuring this side")
-      in Wire::Invalid
+      in Problem
         Problem.new("the configuration could not be read: #{message.reason}")
       in Wire::Message::Configure
         configured(message, input, output, log)
@@ -34,16 +34,16 @@ module Pylon::Session
          Wire::Message::ScanResponse,
          Wire::Message::ContentsRequest,
          Wire::Message::ContentsResponse,
-         Wire::Message::SignaturesRequest,
-         Wire::Message::SignaturesResponse,
+         Wire::Message::ChecksumsRequest,
+         Wire::Message::ChecksumsResponse,
          Wire::Message::WriteRequest,
          Wire::Message::WriteResponse,
          Wire::Message::TreeUpdate,
-         Wire::Message::TreeDelta,
+         Wire::Message::TreeChanges,
          Wire::Message::ScanProgress,
          Wire::Message::TreeAnnounce,
-         Wire::Message::AvailabilityRequest,
-         Wire::Message::AvailabilityResponse
+         Wire::Message::ReusableRequest,
+         Wire::Message::ReusableResponse
         refusal = "the first message must configure this side, not a #{message.class.name}"
         Wire::Message.write(output, Wire::Message::Failure.new(refusal))
         Problem.new(refusal)
@@ -62,15 +62,15 @@ module Pylon::Session
         Scan::Ignores.new(configure.ignores),
         compression: configure.compression,
       )
-      resumable = nil
+      shared_tree = nil
 
       if (state = configure.state)
         case (restored = Checkpoint.load(state))
         in Checkpoint
           endpoint.cache = restored.local_cache
-          resumable = restored.exchanged
-        in Checkpoint::Absent
-        in Checkpoint::Damaged
+          shared_tree = restored.shared_tree
+        in Missing
+        in Problem
           log.puts(brand.prefix(
             "ignoring the sync state at #{state} (#{restored.reason}), scanning from scratch",
           ))
@@ -78,8 +78,8 @@ module Pylon::Session
 
         case (store = ContentStore.open("#{state}.content", configure.root))
         in ContentStore
-          endpoint.store = store
-        in ContentStore::Unavailable
+          endpoint.kept = store
+        in Problem
           log.puts(brand.prefix("content will not be kept for reuse or patching: #{store.reason}"))
         end
       end
@@ -87,13 +87,13 @@ module Pylon::Session
       subscriber = nil
 
       if configure.watch?
-        opened = Watch::Watcher.open(configure.root, configure.ignores, Channel(Nil).new(1), brand)
+        dirty_paths = Watch::DirtyPaths.new(Channel(Nil).new(1))
+        opened = Watch::Watcher.open(configure.root, configure.ignores, dirty_paths, brand)
 
         case opened
         in Watch::Any
           subscriber = opened
-          endpoint.accelerate!
-        in Watch::Unavailable
+        in Problem
           log.puts(brand.prefix(
             "watching is unavailable on this side (#{opened.reason}), every cycle will rescan",
           ))
@@ -108,8 +108,8 @@ module Pylon::Session
         log,
         brand: brand,
         state: configure.state,
-        known: configure.known,
-        resumable: resumable,
+        tree_fingerprint: configure.tree_fingerprint,
+        shared_tree: shared_tree,
       )
     end
 
@@ -126,19 +126,13 @@ module Pylon::Session
       *,
       @brand : Brand,
       state : String?,
-      @known : Bytes?,
-      @resumable : Core::Entry?,
+      @tree_fingerprint : Bytes?,
+      @shared_tree : Core::Entry?,
     ) : Nil
       @lock = Sync::Mutex.new
       @stopping = false
       @sequence = 0_u32
-      return if state.nil?
-
-      @checkpoints = Checkpoint::Schedule.new(
-        state,
-        -> : Checkpoint { Checkpoint.new(nil, @endpoint.cache, @sent) },
-        on_problem: ->(problem : String) : Nil { @log.puts(@brand.prefix(problem)) },
-      )
+      @checkpoints = Checkpoint::Schedule.new(state) if state
     end
 
     def run : Nil
@@ -152,7 +146,7 @@ module Pylon::Session
       @stopping = true
       wake
       @pushed.try(&.receive?)
-      @checkpoints.try(&.save)
+      checkpoint { |schedule, checkpoint| schedule.save(checkpoint) }
       @subscriber.try(&.close)
     end
 
@@ -164,7 +158,7 @@ module Pylon::Session
           message = Wire::Message.read(@input)
           break if message.is_a?(Wire::Closed)
 
-          if message.is_a?(Wire::Invalid)
+          if message.is_a?(Problem)
             @log.puts(@brand.prefix("stopped reading requests: #{message.reason}"))
             break
           end
@@ -189,7 +183,7 @@ module Pylon::Session
 
       Fibers.detach(:server_announce) do
         until @stopping
-          subscriber.signals.receive?
+          subscriber.dirty_paths.signals.receive?
           push unless @stopping
         end
       ensure
@@ -202,7 +196,7 @@ module Pylon::Session
       return if subscriber.nil?
 
       select
-      when subscriber.signals.send(nil)
+      when subscriber.dirty_paths.signals.send(nil)
       else
       end
     end
@@ -213,7 +207,7 @@ module Pylon::Session
           started = Time.instant
         {% end %}
 
-        drain
+        apply_dirty_paths
         current = scan_reporting(Time.utc.to_unix_ns.to_i64)
         @sequence += 1
 
@@ -224,7 +218,7 @@ module Pylon::Session
         failed =
           case (sent = @sent)
           in Nil         then open_with(current)
-          in Core::Entry then Wire::Message.write(@output, delta_since(sent, current))
+          in Core::Entry then Wire::Message.write(@output, changes_since(sent, current))
           end
 
         {% if flag?(:timing) %}
@@ -242,27 +236,35 @@ module Pylon::Session
       @log.puts(@brand.prefix("a tree update could not be sent: #{problem.reason}")) if problem
     end
 
-    private def drain : Nil
+    private def checkpoint(& : Checkpoint::Schedule, Checkpoint -> Problem?) : Nil
+      schedule = @checkpoints
+      return if schedule.nil?
+
+      problem = yield schedule, Checkpoint.new(nil, @endpoint.cache, @sent)
+      @log.puts(@brand.prefix(problem.reason)) if problem
+    end
+
+    private def apply_dirty_paths : Nil
       subscriber = @subscriber
       return if subscriber.nil?
 
-      @endpoint.mark_dirty(subscriber.drain)
+      @endpoint.mark_dirty(subscriber.dirty_paths.consume)
     end
 
     private def scan_reporting(now_ns : Int64) : Core::Entry?
-      scanned = Channel(Core::Entry?).new(1)
-      Fibers.isolated(:server_scan) { scanned.send(@endpoint.scan(now_ns)) }
+      result = Channel(Core::Entry?).new(1)
+      Fibers.isolated(:server_scan) { result.send(@endpoint.scan(now_ns)) }
       reporting = true
 
       loop do
         select
-        when current = scanned.receive
+        when current = result.receive
           return current
         when timeout(PROGRESS_INTERVAL)
           next unless reporting
 
-          tally = @endpoint.tally
-          progress = Wire::Message::ScanProgress.new(tally.files, tally.hashed_bytes)
+          scanned = @endpoint.scanned
+          progress = Wire::Message::ScanProgress.new(scanned.files, scanned.bytes)
           reporting = Wire::Message.write(@output, progress).nil?
         end
       end
@@ -274,10 +276,10 @@ module Pylon::Session
     end
 
     private def open_with(current : Core::Entry?) : Problem?
-      resumable = @resumable
+      shared_tree = @shared_tree
 
-      if resumable && resumes?(resumable)
-        return Wire::Message.write(@output, delta_since(resumable, current))
+      if shared_tree && resumes?(shared_tree)
+        return Wire::Message.write(@output, changes_since(shared_tree, current))
       end
 
       update = Wire::Message::TreeUpdate.new(@sequence, current, live: live?)
@@ -288,15 +290,18 @@ module Pylon::Session
       !@subscriber.nil?
     end
 
-    private def delta_since(sent : Core::Entry, current : Core::Entry?) : Wire::Message::TreeDelta
-      Wire::Message::TreeDelta.new(@sequence, Core::Differ.diff(sent, current), live: live?)
+    private def changes_since(
+      sent : Core::Entry,
+      current : Core::Entry?,
+    ) : Wire::Message::TreeChanges
+      Wire::Message::TreeChanges.new(@sequence, Core::Differ.diff(sent, current), live: live?)
     end
 
-    private def resumes?(resumable : Core::Entry) : Bool
-      known = @known
-      return false if known.nil?
+    private def resumes?(shared_tree : Core::Entry) : Bool
+      fingerprint = @tree_fingerprint
+      return false if fingerprint.nil?
 
-      known == Core::Digests.fingerprint(resumable)
+      fingerprint == Core::Digests.fingerprint(shared_tree)
     end
 
     private def serve(request : Wire::Message::Any) : Bool
@@ -304,7 +309,7 @@ module Pylon::Session
         case request
         in Wire::Message::ScanRequest
           @lock.synchronize do
-            drain
+            apply_dirty_paths
             current = scan_reporting(request.now_ns)
             @sent = current
             response = Wire::Message::ScanResponse.new(current)
@@ -315,20 +320,20 @@ module Pylon::Session
             source = @endpoint.content_source(
               request.digests,
               request.budget,
-              request.signatures,
-              Wire::Prefixed::Bases.new,
+              request.checksums,
+              Wire::Bases.new,
             )
             response = Wire::Message::ContentsResponse.new(source)
             Wire::Message.write(@output, response)
           end
-        in Wire::Message::SignaturesRequest
+        in Wire::Message::ChecksumsRequest
           @lock.synchronize do
-            response = Wire::Message::SignaturesResponse.new(@endpoint.signatures(request.pairs))
+            response = Wire::Message::ChecksumsResponse.new(@endpoint.checksums(request.bases))
             Wire::Message.write(@output, response)
           end
-        in Wire::Message::AvailabilityRequest
+        in Wire::Message::ReusableRequest
           @lock.synchronize do
-            response = Wire::Message::AvailabilityResponse.new(@endpoint.available(request.digests))
+            response = Wire::Message::ReusableResponse.new(@endpoint.reusable(request.digests))
             Wire::Message.write(@output, response)
           end
         in Wire::Message::WriteRequest
@@ -340,20 +345,20 @@ module Pylon::Session
             )
             @sent = Core::Applier.apply(@sent, Write::Outcome.changes(outcomes)) unless @sent.nil?
             failed = Wire::Message.write(@output, Wire::Message::WriteResponse.new(outcomes))
-            @checkpoints.try(&.save_if_due) if failed.nil?
+            checkpoint { |schedule, checkpoint| schedule.save_if_due(checkpoint) } if failed.nil?
             failed
           end
         in Wire::Message::Failure,
            Wire::Message::ScanResponse,
            Wire::Message::TreeUpdate,
-           Wire::Message::TreeDelta,
+           Wire::Message::TreeChanges,
            Wire::Message::ContentsResponse,
-           Wire::Message::SignaturesResponse,
+           Wire::Message::ChecksumsResponse,
            Wire::Message::WriteResponse,
            Wire::Message::Configure,
            Wire::Message::ScanProgress,
            Wire::Message::TreeAnnounce,
-           Wire::Message::AvailabilityResponse
+           Wire::Message::ReusableResponse
           @lock.synchronize do
             failure = Wire::Message::Failure.new(
               "the client sent a #{request.class.name} where a request was expected",

@@ -1,18 +1,17 @@
-require "../patch"
 require "../binary"
 require "./writable"
-require "../delta"
+require "../checksums"
 
 module Pylon::Wire::Message
   struct ContentsRequest
     include Writable
 
-    def initialize(@digests : Array(Bytes), @budget : UInt64, @signatures : Delta::Signatures) : Nil
+    def initialize(@digests : Array(Bytes), @budget : UInt64, @checksums : Checksums::Map) : Nil
     end
 
     getter digests : Array(Bytes)
     getter budget : UInt64
-    getter signatures : Delta::Signatures
+    getter checksums : Checksums::Map
 
     def tag : Tag
       Tag::ContentsRequest
@@ -20,16 +19,8 @@ module Pylon::Wire::Message
 
     def write_payload(io : IO) : Nil
       io.write_bytes(budget, FORMAT)
-      io.write_bytes(digests.size.to_u32, FORMAT)
-      digests.each { |digest| Binary.write_bytes(io, digest) }
-
-      io.write_bytes(signatures.size.to_u32, FORMAT)
-
-      signatures.each do |wanted, based|
-        Binary.write_bytes(io, wanted)
-        Binary.write_bytes(io, based.base)
-        Binary.write_signature(io, based.signature)
-      end
+      Binary.write_digests(io, digests)
+      Binary.write_checksums_map(io, checksums)
     end
   end
 end

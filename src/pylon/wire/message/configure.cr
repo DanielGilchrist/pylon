@@ -14,7 +14,7 @@ module Pylon::Wire::Message
       @brand : Brand,
       @state : String?,
       @watch : Bool,
-      @known : Bytes?,
+      @tree_fingerprint : Bytes?,
     ) : Nil
     end
 
@@ -24,7 +24,7 @@ module Pylon::Wire::Message
     getter brand : Brand
     getter state : String?
     getter? watch : Bool
-    getter known : Bytes?
+    getter tree_fingerprint : Bytes?
 
     def tag : Tag
       Tag::Configure
@@ -38,7 +38,7 @@ module Pylon::Wire::Message
       Binary.write_string(io, brand.name)
       Binary.write_string(io, state)
       Binary.write_bool(io, watch?)
-      Binary.write_bytes(io, known)
+      Binary.write_bytes(io, tree_fingerprint)
     end
   end
 end

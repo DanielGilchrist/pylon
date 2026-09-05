@@ -11,15 +11,13 @@ module Pylon::Session
     PROBE_PREFIX  = "probe-"
     PROBE_CONTENT = "pylon snapshot probe".to_slice
 
-    record Unavailable, reason : String
-
-    def self.open(directory : String, root : String) : ContentStore | Unavailable
+    def self.open(directory : String, root : String) : ContentStore | Problem
       if (blocked = Filesystem.ensure_directory(directory))
-        return Unavailable.new("the directory #{directory} could not be created: #{blocked.reason}")
+        return Problem.new("the directory #{directory} could not be created: #{blocked.reason}")
       end
 
       if (blocked = probe(directory))
-        return Unavailable.new(
+        return Problem.new(
           "the filesystem under #{directory} cannot snapshot files: #{blocked.reason}",
         )
       end
@@ -33,9 +31,9 @@ module Pylon::Session
 
       case listed
       in Missing
-        Unavailable.new("the directory #{directory} vanished while it was being opened")
+        Problem.new("the directory #{directory} vanished while it was being opened")
       in Problem
-        Unavailable.new("the directory #{directory} could not be listed: #{listed.reason}")
+        Problem.new("the directory #{directory} could not be listed: #{listed.reason}")
       in Nil then new(directory, root, held)
       end
     end
@@ -75,7 +73,7 @@ module Pylon::Session
       @lock.synchronize { @held.includes?(digest) }
     end
 
-    def available(digests : Array(Bytes)) : Array(Bytes)
+    def held(digests : Array(Bytes)) : Array(Bytes)
       @lock.synchronize { digests.select { |digest| @held.includes?(digest) } }
     end
 

@@ -21,16 +21,16 @@ describe Pylon::CLI::Target do
   end
 
   it "explains a target with no colon" do
-    Pylon::CLI::Target.parse("host").as(Pylon::CLI::Target::Invalid).message.should contain(
+    Pylon::CLI::Target.parse("host").as(Pylon::Problem).reason.should contain(
       "user@host:/path",
     )
   end
 
   it "explains a target missing a host or a path" do
-    Pylon::CLI::Target.parse(":/srv/app").as(Pylon::CLI::Target::Invalid).message.should contain(
+    Pylon::CLI::Target.parse(":/srv/app").as(Pylon::Problem).reason.should contain(
       "missing a host",
     )
-    Pylon::CLI::Target.parse("host:").as(Pylon::CLI::Target::Invalid).message.should contain(
+    Pylon::CLI::Target.parse("host:").as(Pylon::Problem).reason.should contain(
       "missing a path",
     )
   end
@@ -38,7 +38,7 @@ describe Pylon::CLI::Target do
   it "refuses a host ssh would read as an option" do
     result = Pylon::CLI::Target.parse("-oProxyCommand=touch /tmp/x:/srv/app")
 
-    result.should be_a(Pylon::CLI::Target::Invalid)
-    result.as(Pylon::CLI::Target::Invalid).message.should contain("ssh would read as an option")
+    result.should be_a(Pylon::Problem)
+    result.as(Pylon::Problem).reason.should contain("ssh would read as an option")
   end
 end

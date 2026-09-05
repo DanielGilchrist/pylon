@@ -1,6 +1,6 @@
 require "../core/relative_path"
 require "../wire"
-require "./invalid"
+require "../problem"
 
 module Pylon::Wire
   # Reads the stream until complete or first failure. When a failure occurs reading essentially
@@ -21,8 +21,8 @@ module Pylon::Wire
       @reason = reason
     end
 
-    def result(value : T) : T | Invalid forall T
-      @failed ? Invalid.new(@reason) : value
+    def result(value : T) : T | Problem forall T
+      @failed ? Problem.new(@reason) : value
     end
 
     def repeat(count : UInt32, & : ->) : Nil
@@ -99,23 +99,8 @@ module Pylon::Wire
       buffer unless @failed
     end
 
-    def required_bytes : Bytes
-      value = bytes?
-      return Bytes.empty if @failed
-      return value if value
-
-      fail("missing bytes in message")
-      Bytes.empty
-    end
-
     def digest : Bytes
-      value = required_bytes
-      return value if @failed
-
-      unless value.size == DIGEST_BYTES
-        fail("a digest was #{value.size} bytes, not #{DIGEST_BYTES}")
-      end
-      value
+      take(DIGEST_BYTES)
     end
 
     def string? : String?
@@ -160,8 +145,8 @@ module Pylon::Wire
 
       case (parsed = Core::RelativePath.parse(raw))
       in Core::RelativePath then parsed.value
-      in Core::Malformed
-        fail("the path #{parsed.raw.inspect} #{parsed.reason}")
+      in Problem
+        fail("the path #{raw.inspect} #{parsed.reason}")
         ""
       end
     end
@@ -172,8 +157,8 @@ module Pylon::Wire
 
       case (parsed = Core::Name.parse(raw))
       in Core::Name then parsed.value
-      in Core::Malformed
-        fail("the name #{parsed.raw.inspect} #{parsed.reason}")
+      in Problem
+        fail("the name #{raw.inspect} #{parsed.reason}")
         ""
       end
     end

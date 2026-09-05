@@ -1,10 +1,10 @@
-require "./malformed"
+require "../problem"
 
 module Pylon::Core
   struct Name
-    def self.parse(raw : String) : Name | Malformed
+    def self.parse(raw : String) : Name | Problem
       problem = self.problem(raw)
-      problem ? Malformed.new(raw, problem) : new(raw)
+      problem ? Problem.new(problem) : new(raw)
     end
 
     def self.problem(raw : String) : String?

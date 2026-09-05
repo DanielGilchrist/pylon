@@ -41,7 +41,7 @@ describe "what the client learns while waiting for the remote tree" do
     _, endpoint = cycle_against(script)
 
     endpoint.inbound.phase.should eq(Inbound::RemoteScanning.new(1234_i64, 5_000_000_i64))
-    endpoint.inbound.meter.bytes.should eq(script.size)
+    endpoint.inbound.bytes.should eq(script.size)
   end
 
   it "knows how large the announced tree is and how much of it has arrived" do

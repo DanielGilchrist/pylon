@@ -6,11 +6,11 @@ require "../../../src/pylon/watch/fsevents"
 
 include Pylon::Watch
 
-private def drain_within(watcher : FSEvents, seconds : Float64, & : Dirty -> Bool) : Bool
+private def consume_within(watcher : FSEvents, seconds : Float64, & : Dirty -> Bool) : Bool
   deadline = Time.instant + seconds.seconds
 
   while Time.instant < deadline
-    return true if yield watcher.drain
+    return true if yield watcher.dirty_paths.consume
 
     sleep(50.milliseconds)
   end
@@ -23,7 +23,7 @@ describe Pylon::Watch::FSEvents do
     root = File.tempname("pylon-fsevents")
     Dir.mkdir_p(File.join(root, "log"))
 
-    watcher = FSEvents.open(root, ["log"], Channel(Nil).new(1))
+    watcher = FSEvents.open(root, ["log"], DirtyPaths.new(Channel(Nil).new(1)))
     watcher.should be_a(FSEvents)
     next unless watcher.is_a?(FSEvents)
 
@@ -31,7 +31,7 @@ describe Pylon::Watch::FSEvents do
       sleep(200.milliseconds)
       File.write(File.join(root, "code.rb"), "puts 1")
 
-      seen = drain_within(watcher, 5.0) do |dirty|
+      seen = consume_within(watcher, 5.0) do |dirty|
         dirty.is_a?(Everything) || (dirty.is_a?(Touched) && dirty.paths.includes?("code.rb"))
       end
       seen.should be_true
@@ -39,7 +39,7 @@ describe Pylon::Watch::FSEvents do
       Dir.mkdir_p(File.join(root, "nested", "deeper"))
       File.write(File.join(root, "nested", "deeper", "inner.rb"), "puts 2")
 
-      seen = drain_within(watcher, 5.0) do |dirty|
+      seen = consume_within(watcher, 5.0) do |dirty|
         next true if dirty.is_a?(Everything)
 
         dirty.is_a?(Touched) && dirty.paths.any?(&.starts_with?("nested"))
@@ -49,7 +49,7 @@ describe Pylon::Watch::FSEvents do
       File.write(File.join(root, "log", "noise.log"), "ignored")
       sleep(400.milliseconds)
 
-      leftover = watcher.drain
+      leftover = watcher.dirty_paths.consume
       case leftover
       in Everything
         fail("expected per-path events, saw a fresh-instance flush")
@@ -70,7 +70,7 @@ describe Pylon::Watch::FSEvents do
     File.write(File.join(staging, "incoming", "top.rb"), "puts 1")
     File.write(File.join(staging, "incoming", "sub", "inner.rb"), "puts 2")
 
-    watcher = FSEvents.open(root, Array(String).new, Channel(Nil).new(1))
+    watcher = FSEvents.open(root, Array(String).new, DirtyPaths.new(Channel(Nil).new(1)))
     watcher.should be_a(FSEvents)
     next unless watcher.is_a?(FSEvents)
 
@@ -78,7 +78,7 @@ describe Pylon::Watch::FSEvents do
       sleep(200.milliseconds)
       File.rename(File.join(staging, "incoming"), File.join(root, "incoming"))
 
-      seen = drain_within(watcher, 5.0) do |dirty|
+      seen = consume_within(watcher, 5.0) do |dirty|
         dirty.is_a?(Everything) ||
           (dirty.is_a?(Touched) && dirty.paths.includes?("incoming/sub/inner.rb"))
       end

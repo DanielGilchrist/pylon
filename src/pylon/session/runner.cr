@@ -1,7 +1,8 @@
+require "../watch/dirty_paths"
 require "./session"
 
 module Pylon::Session
-  class Runner(A, B)
+  class Runner(A, B, N)
     DEFAULT_DEBOUNCE     = 10.milliseconds
     DEFAULT_POLL         = 250.milliseconds
     DEFAULT_BURST_QUIET  = 300.milliseconds
@@ -9,10 +10,8 @@ module Pylon::Session
     BURST_PATHS          = 8
 
     def initialize(
-      @session : Session(A, B),
-      @signals : Channel(Nil),
-      @before : Proc(Nil)?,
-      @gauge : Proc(Int32)?,
+      @session : Session(A, B, N),
+      @dirty_paths : Watch::DirtyPaths,
       @debounce : Time::Span = DEFAULT_DEBOUNCE,
       @poll : Time::Span = DEFAULT_POLL,
       @burst_quiet : Time::Span = DEFAULT_BURST_QUIET,
@@ -64,7 +63,7 @@ module Pylon::Session
 
     private def wait_for_work : Bool
       select
-      when @signals.receive?
+      when @dirty_paths.signals.receive?
         true
       when timeout(@poll)
         false
@@ -73,7 +72,7 @@ module Pylon::Session
 
     private def settle : Nil
       sleep(@debounce)
-      drain
+      clear_signals
 
       wait_out_burst if dirtied >= BURST_PATHS
     end
@@ -83,8 +82,8 @@ module Pylon::Session
 
       until @stopping || Time.instant >= deadline
         select
-        when @signals.receive?
-          drain
+        when @dirty_paths.signals.receive?
+          clear_signals
           dirtied
         when timeout(@burst_quiet)
           return
@@ -93,16 +92,13 @@ module Pylon::Session
     end
 
     private def dirtied : Int32
-      gauge = @gauge
-      return 0 if gauge.nil?
-
-      gauge.call
+      @session.local.mark_dirty(@dirty_paths.consume)
     end
 
-    private def drain : Nil
+    private def clear_signals : Nil
       loop do
         select
-        when @signals.receive?
+        when @dirty_paths.signals.receive?
         else
           return
         end
@@ -110,7 +106,7 @@ module Pylon::Session
     end
 
     private def cycle : Report | Fault
-      @before.try(&.call)
+      @session.local.mark_dirty(@dirty_paths.consume)
       @session.cycle(Time.utc.to_unix_ns.to_i64)
     end
   end

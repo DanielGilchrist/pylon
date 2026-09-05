@@ -1,6 +1,6 @@
 require "colorize"
 require "../brand"
-require "../scan/tally"
+require "../progress"
 require "../session/inbound"
 require "../session/session"
 require "./spinner"
@@ -11,8 +11,9 @@ struct Pylon::CLI
     SUMMARISE_OVER = 12
     PREVIEW_PATHS  = 40
 
-    @progress : Session::Progress? = nil
-    @scan : Scan::Tally? = nil
+    @progress : Session::TransferProgress? = nil
+    @scan : Progress? = nil
+    @sent : Progress? = nil
     @inbound : Session::Inbound? = nil
 
     def initialize(
@@ -26,13 +27,13 @@ struct Pylon::CLI
       @announced = Set(String).new
       @announced_troubles = Set(String).new
       @spinner = Spinner.new(@io)
-      @streamed = 0
-      @streamed_bytes = 0_u64
+      @sent_before = 0_i64
       @started = Time.instant
     end
 
-    def observe(scan : Scan::Tally) : Nil
+    def observe(scan : Progress, sent : Progress) : Nil
       @scan = scan
+      @sent = sent
     end
 
     def observe(inbound : Session::Inbound) : Nil
@@ -51,21 +52,14 @@ struct Pylon::CLI
       end
     end
 
-    def progress(update : Session::Progress) : Nil
+    def progress(update : Session::TransferProgress) : Nil
       if update.confirmed.zero?
-        @streamed = 0
-        @streamed_bytes = 0_u64
+        @sent_before = @sent.try(&.bytes) || 0_i64
         @started = Time.instant
       end
 
       @progress = update
-      refresh
-    end
-
-    def streamed(bytes : UInt64) : Nil
-      @streamed += 1
-      @streamed_bytes += bytes
-      refresh
+      @spinner.show { transfer_status }
     end
 
     def failed(message : String) : Nil
@@ -123,7 +117,7 @@ struct Pylon::CLI
         @io.puts "#{indent}#{"·".colorize.dark_gray} #{skipped.size} skipped".colorize.dark_gray
 
         skipped.each do |outcome|
-          reason = outcome.skipped.try(&.explain)
+          reason = outcome.explanation
           @io.puts "#{indent}  #{outcome.path} #{"(#{reason})".colorize.dark_gray}"
         end
       end
@@ -139,12 +133,12 @@ struct Pylon::CLI
       scan = @scan
       return "connecting and scanning both sides" if scan.nil?
       return remote_status(scan) if scan.finished?
-      return "scanning · #{scan.files} files" if scan.hashed_bytes.zero?
+      return "scanning · #{scan.files} files" if scan.bytes.zero?
 
-      "scanning · #{scan.files} files · #{mebibytes(scan.hashed_bytes.to_u64)} MiB hashed"
+      "scanning · #{scan.files} files · #{mebibytes(scan.bytes.to_u64)} MiB hashed"
     end
 
-    private def remote_status(scan : Scan::Tally) : String
+    private def remote_status(scan : Progress) : String
       inbound = @inbound
       return "waiting for the remote · #{scan.files} files here" if inbound.nil?
 
@@ -153,10 +147,10 @@ struct Pylon::CLI
         "waiting for the remote · #{scan.files} files here"
       in Session::Inbound::RemoteScanning
         hashed =
-          if phase.hashed_bytes.zero?
+          if phase.bytes.zero?
             ""
           else
-            " · #{mebibytes(phase.hashed_bytes.to_u64)} MiB hashed"
+            " · #{mebibytes(phase.bytes.to_u64)} MiB hashed"
           end
         "remote scanning · #{phase.files} files#{hashed}"
       in Session::Inbound::ReceivingTree
@@ -183,29 +177,30 @@ struct Pylon::CLI
       "#{(bytes / (1024.0 * 1024.0)).round(1)} MiB"
     end
 
-    private def refresh : Nil
+    private def transfer_status : String
       update = @progress
-      return if update.nil?
+      return "" if update.nil?
 
-      case update.direction
-      in .to_remote?
-        sent = Math.max(@streamed, update.confirmed)
-        @spinner.show("↑ sending #{sent}/#{update.total}#{throughput}")
-      in .to_local?
-        @spinner.show("↓ receiving #{update.confirmed}/#{update.total}")
+      case update.into
+      in .remote? then "↑ sending #{update.confirmed}/#{update.total}#{throughput(update)}"
+      in .local?  then "↓ receiving #{update.confirmed}/#{update.total}"
       end
     end
 
-    private def throughput : String
-      return "" if @streamed_bytes.zero?
+    private def throughput(update : Session::TransferProgress) : String
+      sent = @sent
+      return "" if sent.nil?
 
-      sent = mebibytes(@streamed_bytes)
-      total = @progress.try(&.total_bytes)
+      sent_bytes = (sent.bytes - @sent_before).to_u64
+      return "" if sent_bytes.zero?
+
+      sent = mebibytes(sent_bytes)
+      total = update.total_bytes
       volume = total ? "#{sent}/#{mebibytes(total)}" : sent
       elapsed = (Time.instant - @started).total_seconds
       rate =
         if elapsed > 0.5
-          " at #{(@streamed_bytes / (1024.0 * 1024.0) / elapsed).round(1)} MiB/s"
+          " at #{(sent_bytes / (1024.0 * 1024.0) / elapsed).round(1)} MiB/s"
         else
           ""
         end
@@ -219,8 +214,8 @@ struct Pylon::CLI
 
     # A conflict persists until someone acts on it, so say it once rather than
     # on every cycle, and say when it clears.
-    private def announce(conflicts : Array(Core::Conflict)) : Bool
-      current = conflicts.map(&.root).to_set
+    private def announce(conflicts : Array(String)) : Bool
+      current = conflicts.to_set
       fresh = (current - @announced).to_a.sort!
       cleared = (@announced - current).to_a.sort!
 
@@ -259,11 +254,11 @@ struct Pylon::CLI
       spoke = false
 
       troubles.each do |trouble|
-        key = "#{trouble.side}:#{trouble.path}:#{trouble.reason}"
+        key = "#{trouble.replica}:#{trouble.path}:#{trouble.reason}"
         current << key
         next if @announced_troubles.includes?(key)
 
-        where = trouble.side.remote? ? " on the remote" : ""
+        where = trouble.replica.remote? ? " on the remote" : ""
         @io.puts "#{indent}#{"!".colorize.yellow.bold} #{"cannot sync#{where}".colorize.yellow} " \
                  "#{trouble.path} " \
                  "#{"(#{trouble.reason}; it will not sync until this is fixed)".colorize.dark_gray}"
@@ -366,7 +361,7 @@ struct Pylon::CLI
       listing("↓", Colorize::ColorANSI::Blue, incoming, report.local_relocations)
 
       report.conflicts.each do |conflict|
-        @io.puts "#{indent}#{"!".colorize.yellow} conflict #{conflict.root}"
+        @io.puts "#{indent}#{"!".colorize.yellow} conflict #{conflict}"
       end
     end
 

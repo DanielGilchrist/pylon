@@ -22,7 +22,7 @@ module Pylon::Core
       getter base_changes = Changes.new
       getter local_changes = Changes.new
       getter remote_changes = Changes.new
-      getter conflicts = Array(Conflict).new
+      getter conflicts = Array(String).new
       getter troubles = Array(Trouble).new
 
       def result : Reconciliation
@@ -46,7 +46,7 @@ module Pylon::Core
         end
 
         if blocked?(local) || blocked?(remote)
-          record_conflict(path, base, local, remote)
+          record_conflict(path)
           return
         end
 
@@ -86,7 +86,7 @@ module Pylon::Core
 
         case @preferences.winner(path)
         in Nil
-          record_conflict(path, base, local, remote)
+          record_conflict(path)
         in .local?
           propagate_to_remote(path, base, local, remote)
         in .remote?
@@ -153,17 +153,8 @@ module Pylon::Core
         base_changes << Change.new(path, base, remote)
       end
 
-      private def record_conflict(
-        path : String,
-        base : Entry?,
-        local : Entry?,
-        remote : Entry?,
-      ) : Nil
-        conflicts << Conflict.new(
-          path,
-          Changes[Change.new(path, base, local)],
-          Changes[Change.new(path, base, remote)],
-        )
+      private def record_conflict(path : String) : Nil
+        conflicts << path
       end
 
       private def adopt(path : String, base : Entry?, entry : Entry?) : Nil

@@ -19,25 +19,25 @@ describe Pylon::Core::RelativePath do
   it "rejects a path with a NUL byte" do
     parsed = RelativePath.parse("app\0models")
 
-    parsed.should be_a(Malformed)
-    parsed.reason.should eq("contains a NUL byte") if parsed.is_a?(Malformed)
+    parsed.should be_a(Pylon::Problem)
+    parsed.reason.should eq("contains a NUL byte") if parsed.is_a?(Pylon::Problem)
   end
 
   it "rejects a traversal in any segment" do
     {"..", "../x", "x/..", "a/../b"}.each do |raw|
-      RelativePath.parse(raw).should be_a(Malformed), "expected #{raw.inspect} to be rejected"
+      RelativePath.parse(raw).should be_a(Pylon::Problem), "expected #{raw.inspect} to be rejected"
     end
   end
 
   it "rejects a current directory segment" do
     {".", "./x", "a/./b"}.each do |raw|
-      RelativePath.parse(raw).should be_a(Malformed), "expected #{raw.inspect} to be rejected"
+      RelativePath.parse(raw).should be_a(Pylon::Problem), "expected #{raw.inspect} to be rejected"
     end
   end
 
   it "rejects empty segments from doubled or trailing slashes" do
     {"a//b", "a/", "/a"}.each do |raw|
-      RelativePath.parse(raw).should be_a(Malformed), "expected #{raw.inspect} to be rejected"
+      RelativePath.parse(raw).should be_a(Pylon::Problem), "expected #{raw.inspect} to be rejected"
     end
   end
 end

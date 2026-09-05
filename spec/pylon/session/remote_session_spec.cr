@@ -9,7 +9,7 @@ require "../../support/remote_end"
 include Pylon::Session
 
 private def in_remote_pair(
-  & : String, String, Session(LocalEndpoint, RemoteEndpoint), RemoteEndpoint ->
+  & : String, String, Session(LocalEndpoint, RemoteEndpoint, Pylon::Discard), RemoteEndpoint ->
 ) : Nil
   base = File.join(Dir.tempdir, "pylon-remote-#{Random::Secure.hex(8)}")
   local_root = File.join(base, "local")
@@ -151,7 +151,7 @@ describe "a session over the wire protocol" do
       File.write(File.join(remote, "shared.rb"), "from remote")
       report = cycle!(session, tick)
 
-      report.conflicts.map(&.root).should eq(["shared.rb"])
+      report.conflicts.should eq(["shared.rb"])
       File.read(File.join(local, "shared.rb")).should eq("from local")
       File.read(File.join(remote, "shared.rb")).should eq("from remote")
     end

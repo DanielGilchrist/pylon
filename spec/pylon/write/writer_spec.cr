@@ -24,7 +24,7 @@ private def cache_for(target : MemoryTarget, paths : Enumerable(String)) : Pylon
     cache[path] = Pylon::Scan::CacheEntry.new(
       metadata,
       Digest::SHA256.digest(node.content),
-      provisional: false,
+      freshly_written: false,
     )
   end
 
@@ -94,7 +94,7 @@ describe Pylon::Write::Writer do
       ).first
 
     outcome.applied?.should be_false
-    outcome.skipped.should eq(WriteFailed.new("the target is read-only"))
+    outcome.skipped.should eq(Pylon::Problem.new("the target is read-only"))
     outcome.entry.should be_nil
   end
 
@@ -118,7 +118,7 @@ describe Pylon::Write::Writer do
       ).first
 
     outcome.applied?.should be_false
-    outcome.skipped.should eq(ModificationDetected.new)
+    outcome.skipped.should eq(Skip::ModificationDetected)
     target.operations.should be_empty
     String.new(target.nodes["notes.txt"].content).should eq("edited by hand")
   end
@@ -143,7 +143,7 @@ describe Pylon::Write::Writer do
       ).first
 
     outcome.applied?.should be_false
-    outcome.skipped.should eq(ModificationDetected.new)
+    outcome.skipped.should eq(Skip::ModificationDetected)
     String.new(target.nodes["notes.txt"].content).should eq("origiNAL")
   end
 
@@ -183,7 +183,7 @@ describe Pylon::Write::Writer do
         )],
       ).first
 
-    outcome.skipped.should eq(UnknownState.new)
+    outcome.skipped.should eq(Skip::UnknownState)
     target.operations.should be_empty
   end
 
@@ -221,7 +221,7 @@ describe Pylon::Write::Writer do
     ]).first
 
     outcome.applied?.should be_false
-    outcome.skipped.should eq(WriteFailed.new("the target is read-only"))
+    outcome.skipped.should eq(Pylon::Problem.new("the target is read-only"))
     outcome.entry.should eq(Pylon::Core::File.new(digest, executable: false))
   end
 
@@ -303,7 +303,7 @@ describe Pylon::Write::Writer do
       .write(Pylon::Core::Changes[Change.new("docs", old, nil)]).first
 
     outcome.applied?.should be_false
-    outcome.skipped.should eq(ModificationDetected.new)
+    outcome.skipped.should eq(Skip::ModificationDetected)
     target.nodes.has_key?("docs/fresh.md").should be_true
   end
 
@@ -322,7 +322,7 @@ describe Pylon::Write::Writer do
       .write(Pylon::Core::Changes[Change.new("docs", old, nil)]).first
 
     outcome.applied?.should be_false
-    outcome.skipped.should eq(ModificationDetected.new)
+    outcome.skipped.should eq(Skip::ModificationDetected)
     String.new(target.nodes["docs/notes.md"].content).should eq("edited by hand")
   end
 
@@ -344,7 +344,7 @@ describe Pylon::Write::Writer do
       .write(Pylon::Core::Changes[Change.new("docs", old, nil)]).first
 
     outcome.applied?.should be_false
-    outcome.skipped.should eq(ModificationDetected.new)
+    outcome.skipped.should eq(Skip::ModificationDetected)
     target.nodes.has_key?("docs/guides/fresh.md").should be_true
   end
 
@@ -431,7 +431,7 @@ describe Pylon::Write::Writer do
       ).first
 
     outcome.applied?.should be_false
-    outcome.skipped.should eq(StagedContentMissing.new)
+    outcome.skipped.should eq(Skip::StagedContentMissing)
     outcome.entry.should be_nil
     target.nodes.has_key?("ghost.txt").should be_false
   end
@@ -452,7 +452,7 @@ describe Pylon::Write::Writer do
       ).first
 
     outcome.applied?.should be_false
-    outcome.skipped.should eq(WriteFailed.new("the target is read-only"))
+    outcome.skipped.should eq(Pylon::Problem.new("the target is read-only"))
     outcome.entry.should be_nil
   end
 
@@ -473,7 +473,7 @@ describe Pylon::Write::Writer do
       ).first
 
     outcome.applied?.should be_false
-    outcome.skipped.should eq(WriteFailed.new("the target is read-only"))
+    outcome.skipped.should eq(Pylon::Problem.new("the target is read-only"))
     outcome.entry.should_not be_nil
     target.nodes.has_key?("stuck").should be_true
   end
@@ -571,7 +571,7 @@ describe "relocations" do
     outcomes = relocate(target, cache, tree)
 
     target.operations.should be_empty
-    outcomes.map(&.skipped).should eq([ModificationDetected.new, ModificationDetected.new])
+    outcomes.map(&.skipped).should eq([Skip::ModificationDetected, Skip::ModificationDetected])
     (outcomes[0].entry == tree).should be_true
     outcomes[1].entry.should be_nil
   end
@@ -584,7 +584,7 @@ describe "relocations" do
     outcomes = relocate(target, cache, tree)
 
     target.operations.should be_empty
-    outcomes.map(&.skipped).should eq([ModificationDetected.new, ModificationDetected.new])
+    outcomes.map(&.skipped).should eq([Skip::ModificationDetected, Skip::ModificationDetected])
   end
 
   it "refuses to move a directory holding a file edited since the scan" do
@@ -595,7 +595,7 @@ describe "relocations" do
     outcomes = relocate(target, cache, tree)
 
     target.operations.should be_empty
-    outcomes.map(&.skipped).should eq([ModificationDetected.new, ModificationDetected.new])
+    outcomes.map(&.skipped).should eq([Skip::ModificationDetected, Skip::ModificationDetected])
   end
 
   it "refuses to move onto a path something else now occupies" do
@@ -606,7 +606,7 @@ describe "relocations" do
     outcomes = relocate(target, cache, tree)
 
     target.operations.should be_empty
-    outcomes.map(&.skipped).should eq([ModificationDetected.new, ModificationDetected.new])
+    outcomes.map(&.skipped).should eq([Skip::ModificationDetected, Skip::ModificationDetected])
   end
 
   it "refuses to act without cache evidence for the moved files" do
@@ -616,7 +616,7 @@ describe "relocations" do
     outcomes = relocate(target, Pylon::Scan::Cache.new, tree)
 
     target.operations.should be_empty
-    outcomes.map(&.skipped).should eq([UnknownState.new, UnknownState.new])
+    outcomes.map(&.skipped).should eq([Skip::UnknownState, Skip::UnknownState])
   end
 
   it "copies and deletes when the filesystem refuses the rename" do

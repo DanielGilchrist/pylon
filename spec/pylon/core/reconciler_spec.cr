@@ -59,7 +59,7 @@ private CASES = {
     description: "both sides modified the file differently",
     preferences: Fixtures::NO_PREFERENCES,
     base: F1, local: F2, remote: FX,
-    conflicts: [Conflict.new("", Changes.new, Changes.new)],
+    conflicts: [""],
   ),
   ReconcileCase.new(
     description: "both sides modified the file differently",
@@ -111,7 +111,7 @@ private CASES = {
     description: "ignored on local but real content on remote is a conflict",
     preferences: Fixtures::ALL_PREFERENCES,
     base: nil, local: UN, remote: F1,
-    conflicts: [Conflict.new("", Changes.new, Changes.new)],
+    conflicts: [""],
   ),
   ReconcileCase.new(
     description: "unreadable content on local halts that path",

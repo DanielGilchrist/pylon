@@ -21,7 +21,7 @@ private def observed_file(**overrides) : Pylon::Scan::ObservedFile
 end
 
 private def cached(digest : Bytes = DIGEST, **overrides) : Pylon::Scan::CacheEntry
-  Pylon::Scan::CacheEntry.new(metadata(**overrides), digest, provisional: false)
+  Pylon::Scan::CacheEntry.new(metadata(**overrides), digest, freshly_written: false)
 end
 
 private NOW = MTIME + 1_000_000_000_i64 * 10
@@ -71,7 +71,7 @@ describe Pylon::Write::Guard do
 
   it "cannot conclude anything about a file modified within the clock granularity window" do
     fresh = observed_file(mtime_ns: NOW)
-    entry = Pylon::Scan::CacheEntry.new(metadata(mtime_ns: NOW), DIGEST, provisional: false)
+    entry = Pylon::Scan::CacheEntry.new(metadata(mtime_ns: NOW), DIGEST, freshly_written: false)
 
     check(Pylon::Core::File.new(DIGEST, executable: false), entry, fresh).should eq(
       Verdict::Inconclusive,
@@ -79,7 +79,7 @@ describe Pylon::Write::Guard do
   end
 
   it "cannot conclude anything from a digest that was recorded inside the granularity window" do
-    entry = Pylon::Scan::CacheEntry.new(metadata, DIGEST, provisional: true)
+    entry = Pylon::Scan::CacheEntry.new(metadata, DIGEST, freshly_written: true)
 
     check(Pylon::Core::File.new(DIGEST, executable: false), entry, observed_file).should eq(
       Verdict::Inconclusive,

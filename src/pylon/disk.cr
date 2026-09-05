@@ -6,7 +6,7 @@ require "./wire/content_kind"
 require "./scan/ignores"
 require "./scan/metadata"
 require "./scan/observed"
-require "./write/problem"
+require "./problem"
 
 module Pylon
   struct Disk
@@ -85,7 +85,7 @@ module Pylon
       scratch : Bytes,
       hasher : Digest::SHA256,
     ) : Nil
-      Wire::Binary.write_bytes(io, digest)
+      Wire::Binary.write_digest(io, digest)
       Wire::ContentKind::Full.write(io)
       hasher.reset
 
@@ -108,34 +108,34 @@ module Pylon
       Filesystem.readlink(absolute(relative_path))
     end
 
-    def create_directory(relative_path : String) : Write::Problem?
+    def create_directory(relative_path : String) : Problem?
       path = absolute(relative_path)
       return if Dir.exists?(path)
 
       Filesystem.ensure_directory(path)
     end
 
-    def write_file(relative_path : String, content : Bytes, executable : Bool) : Write::Problem?
+    def write_file(relative_path : String, content : Bytes, executable : Bool) : Problem?
       staged(absolute(relative_path)) do |temporary|
         mode = executable ? 0o755 : 0o644
         Filesystem.write(temporary, content) || Filesystem.chmod(temporary, mode)
       end
     end
 
-    def create_symlink(relative_path : String, target : String) : Write::Problem?
+    def create_symlink(relative_path : String, target : String) : Problem?
       staged(absolute(relative_path)) do |temporary|
         Filesystem.symlink(target, temporary)
       end
     end
 
-    def set_executable(relative_path : String, executable : Bool) : Write::Problem?
+    def set_executable(relative_path : String, executable : Bool) : Problem?
       path = absolute(relative_path)
 
       case (observed = Scan::Metadata.of(path))
       in Nil
-        return Write::Problem.new("the permissions could not be read: the file is missing")
+        return Problem.new("the permissions could not be read: the file is missing")
       in Problem
-        return Write::Problem.new("the permissions could not be read: #{observed.reason}")
+        return Problem.new("the permissions could not be read: #{observed.reason}")
       in Scan::Metadata
       end
 
@@ -150,11 +150,11 @@ module Pylon
       Filesystem.chmod(path, permissions.to_i32)
     end
 
-    def rename(from : String, to : String) : Write::Problem?
+    def rename(from : String, to : String) : Problem?
       Filesystem.rename(absolute(from), absolute(to))
     end
 
-    def remove(relative_path : String) : Write::Problem?
+    def remove(relative_path : String) : Problem?
       case (info = Filesystem.info(absolute(relative_path)))
       in Missing
         nil
@@ -166,7 +166,7 @@ module Pylon
       end
     end
 
-    private def staged(path : String, & : String -> Problem?) : Write::Problem?
+    private def staged(path : String, & : String -> Problem?) : Problem?
       temporary = File.join(File.dirname(path), "#{TEMPORARY_PREFIX}#{Random::Secure.hex(8)}")
 
       failed = yield temporary

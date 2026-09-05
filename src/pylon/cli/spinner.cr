@@ -19,10 +19,6 @@ struct Pylon::CLI
       @restores_cursor = false
     end
 
-    def show(text : String) : Nil
-      show { text }
-    end
-
     def show(&supplier : -> String) : Nil
       return unless @io.tty?
 

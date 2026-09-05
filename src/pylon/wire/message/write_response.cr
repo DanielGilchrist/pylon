@@ -1,4 +1,3 @@
-require "../patch"
 require "../binary"
 require "../chunks"
 require "./writable"

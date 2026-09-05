@@ -8,7 +8,9 @@ include Pylon::Core
 
 private NOW = Time.utc.to_unix_ns.to_i64
 
-private def in_pair(& : String, String, Session(LocalEndpoint, LocalEndpoint) ->) : Nil
+private def in_pair(
+  & : String, String, Session(LocalEndpoint, LocalEndpoint, Pylon::Discard) ->
+) : Nil
   base = File.join(Dir.tempdir, "pylon-session-#{Random::Secure.hex(8)}")
   local_root = File.join(base, "local")
   remote_root = File.join(base, "remote")
@@ -132,7 +134,7 @@ describe Pylon::Session::Session do
       File.write(File.join(remote, "shared.rb"), "from remote")
       report = cycle!(session, tick)
 
-      report.conflicts.map(&.root).should eq(["shared.rb"])
+      report.conflicts.should eq(["shared.rb"])
       File.read(File.join(local, "shared.rb")).should eq("from local")
       File.read(File.join(remote, "shared.rb")).should eq("from remote")
     end

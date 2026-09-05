@@ -8,19 +8,19 @@ module Pylon::Write
 
       changes.each_with_index do |change, index|
         if yield change
-          grouping.independent << index
+          grouping.parallel << index
         elsif change.new.nil? && !colliding.includes?(index)
-          grouping.removals << index
+          grouping.deletions << index
         else
-          grouping.ordered << index
+          grouping.sequential << index
         end
       end
 
       grouping
     end
 
-    getter independent = Array(Int32).new
-    getter removals = Array(Int32).new
-    getter ordered = Array(Int32).new
+    getter parallel = Array(Int32).new
+    getter deletions = Array(Int32).new
+    getter sequential = Array(Int32).new
   end
 end

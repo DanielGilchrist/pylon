@@ -1,7 +1,8 @@
 require "../brand"
 require "../platform"
+require "../problem"
 require "../watch"
-require "./unavailable"
+require "./dirty_paths"
 
 module Pylon::Watch
   module Watcher
@@ -10,12 +11,12 @@ module Pylon::Watch
     def open(
       root : String,
       ignores : Array(String),
-      signals : Channel(Nil),
+      dirty_paths : DirtyPaths,
       brand : Brand,
-    ) : Any | Unavailable
+    ) : Any | Problem
       Platform.select do
-        macos { FSEvents.open(root, ignores, signals) }
-        linux { Inotify.open(root, ignores, signals, brand: brand) }
+        macos { FSEvents.open(root, ignores, dirty_paths) }
+        linux { Inotify.open(root, ignores, dirty_paths, brand: brand) }
       end
     end
   end

@@ -1,13 +1,13 @@
-require "./meter"
+require "./inbound"
 
 module Pylon::Session
   class MeteredReader < IO
-    def initialize(@inner : IO, @meter : Meter) : Nil
+    def initialize(@inner : IO, @inbound : Inbound) : Nil
     end
 
     def read(slice : Bytes) : Int32
       filled = @inner.read(slice)
-      @meter.add(filled)
+      @inbound.arrived(filled)
       filled
     end
 

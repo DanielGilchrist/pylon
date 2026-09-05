@@ -34,7 +34,8 @@ describe "resolving a patch base" do
     in_endpoint({"a.bin" => SHARED, "b.bin" => SHARED}) do |endpoint, digests|
       File.write(File.join(endpoint.root, "a.bin"), "rewritten already")
 
-      String.new(endpoint.base_content(digests["b.bin"], "b.bin") || Bytes.empty).should eq(SHARED)
+      content = endpoint.content(digests["b.bin"], prefer: "b.bin") || Bytes.empty
+      String.new(content).should eq(SHARED)
     end
   end
 
@@ -42,7 +43,8 @@ describe "resolving a patch base" do
     in_endpoint({"a.bin" => SHARED, "b.bin" => SHARED}) do |endpoint, digests|
       File.write(File.join(endpoint.root, "b.bin"), "rewritten already")
 
-      String.new(endpoint.base_content(digests["a.bin"], "a.bin") || Bytes.empty).should eq(SHARED)
+      content = endpoint.content(digests["a.bin"], prefer: "a.bin") || Bytes.empty
+      String.new(content).should eq(SHARED)
     end
   end
 end
@@ -53,8 +55,8 @@ describe Pylon::Session::LocalEndpoint do
       offered = endpoint.content_source(
         [digests["a.rb"], digests["b.rb"], digests["c.rb"]],
         15_u64,
-        Pylon::Wire::Delta::Signatures.new,
-        Pylon::Wire::Prefixed::Bases.new,
+        Pylon::Wire::Checksums::Map.new,
+        Pylon::Wire::Bases.new,
       )
 
       offered.digests.should eq(Set{digests["a.rb"]})
@@ -66,8 +68,8 @@ describe Pylon::Session::LocalEndpoint do
       offered = endpoint.content_source(
         [digests["big.rb"]],
         1_u64,
-        Pylon::Wire::Delta::Signatures.new,
-        Pylon::Wire::Prefixed::Bases.new,
+        Pylon::Wire::Checksums::Map.new,
+        Pylon::Wire::Bases.new,
       )
 
       offered.digests.should eq(Set{digests["big.rb"]})
@@ -79,8 +81,8 @@ describe Pylon::Session::LocalEndpoint do
       offered = endpoint.content_source(
         [digests["a.rb"], digests["b.rb"]],
         20_u64,
-        Pylon::Wire::Delta::Signatures.new,
-        Pylon::Wire::Prefixed::Bases.new,
+        Pylon::Wire::Checksums::Map.new,
+        Pylon::Wire::Bases.new,
       )
 
       offered.digests.should eq(Set{digests["a.rb"], digests["b.rb"]})
@@ -94,8 +96,8 @@ describe Pylon::Session::LocalEndpoint do
       offered = endpoint.content_source(
         [unknown, digests["a.rb"]],
         1_000_u64,
-        Pylon::Wire::Delta::Signatures.new,
-        Pylon::Wire::Prefixed::Bases.new,
+        Pylon::Wire::Checksums::Map.new,
+        Pylon::Wire::Bases.new,
       )
 
       offered.digests.should eq(Set{digests["a.rb"]})
@@ -121,27 +123,23 @@ describe Pylon::Session::LocalEndpoint do
     end
   end
 
-  it "answers a signature for a base large enough to be worth a delta" do
+  it "answers checksums for a base large enough to be worth splicing" do
     body = "def item end\n" * 1000
 
     in_endpoint({"a.rb" => body}) do |endpoint, digests|
       wanted = Digest::SHA256.digest("the edited version").to_slice
 
-      found = endpoint.signatures(
-        [Pylon::Wire::Message::SignaturesRequest::Pair.new(wanted, digests["a.rb"])],
-      )
+      found = endpoint.checksums(Pylon::Wire::Bases{wanted => digests["a.rb"]})
 
       found[wanted]?.try(&.base).should eq(digests["a.rb"])
     end
   end
 
-  it "skips signatures for bases too small to be worth a delta" do
+  it "skips checksums for bases too small to be worth splicing" do
     in_endpoint({"a.rb" => "tiny"}) do |endpoint, digests|
       wanted = Digest::SHA256.digest("the edited version").to_slice
 
-      found = endpoint.signatures(
-        [Pylon::Wire::Message::SignaturesRequest::Pair.new(wanted, digests["a.rb"])],
-      )
+      found = endpoint.checksums(Pylon::Wire::Bases{wanted => digests["a.rb"]})
 
       found.should be_empty
     end
@@ -164,6 +162,37 @@ describe Pylon::Session::LocalEndpoint do
       outcomes.size.should eq(1)
       outcomes[0].applied?.should be_false
       File.exists?(File.join(endpoint.root, "copy.rb")).should be_false
+    end
+  end
+end
+
+describe "watched scanning" do
+  it "keeps a baseline from the first scan after dirty paths are reported and rechecks only them" do
+    in_endpoint({"a.rb" => "a", "b.rb" => "b", "c.rb" => "c"}) do |endpoint, _|
+      endpoint.scanned.files.should eq(3)
+
+      endpoint.scan(Time.utc.to_unix_ns.to_i64)
+      endpoint.scanned.files.should eq(3)
+
+      endpoint.mark_dirty(Pylon::Watch::Touched.new(Array(String).new)).should eq(0)
+      endpoint.scan(Time.utc.to_unix_ns.to_i64)
+      endpoint.scanned.files.should eq(3)
+
+      endpoint.mark_dirty(Pylon::Watch::Touched.new(["b.rb"])).should eq(1)
+      File.write(File.join(endpoint.root, "b.rb"), "changed")
+      tree = endpoint.scan(Time.utc.to_unix_ns.to_i64)
+      endpoint.scanned.files.should eq(1)
+      changed = Fixtures.directory!(tree).contents["b.rb"]?
+      expected = Pylon::Core::File.new(Digest::SHA256.digest("changed").to_slice, executable: false)
+      changed.should eq(expected)
+
+      endpoint.mark_dirty(Pylon::Watch::Touched.new(Array(String).new)).should eq(0)
+      endpoint.scan(Time.utc.to_unix_ns.to_i64)
+      endpoint.scanned.files.should eq(0)
+
+      endpoint.mark_dirty(Pylon::Watch::Everything.new)
+      endpoint.scan(Time.utc.to_unix_ns.to_i64)
+      endpoint.scanned.files.should eq(3)
     end
   end
 end

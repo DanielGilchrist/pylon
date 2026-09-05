@@ -5,22 +5,22 @@ require "./message/scan_request"
 require "./message/scan_response"
 require "./message/contents_request"
 require "./message/contents_response"
-require "./message/signatures_request"
-require "./message/signatures_response"
+require "./message/checksums_request"
+require "./message/checksums_response"
 require "./message/write_request"
 require "./message/write_response"
 require "./message/tree_update"
-require "./message/tree_delta"
+require "./message/tree_changes"
 require "./message/configure"
 require "./message/scan_progress"
 require "./message/tree_announce"
-require "./message/availability_request"
-require "./message/availability_response"
+require "./message/reusable_request"
+require "./message/reusable_response"
 require "../wire"
 require "./closed"
 require "./greeting"
 require "./content_kind"
-require "./delta"
+require "./checksums"
 require "./chunks"
 require "../problem"
 
@@ -38,17 +38,17 @@ module Pylon::Wire
                 ScanResponse |
                 ContentsRequest |
                 ContentsResponse |
-                SignaturesRequest |
-                SignaturesResponse |
+                ChecksumsRequest |
+                ChecksumsResponse |
                 WriteRequest |
                 WriteResponse |
                 TreeUpdate |
-                TreeDelta |
+                TreeChanges |
                 Configure |
                 ScanProgress |
                 TreeAnnounce |
-                AvailabilityRequest |
-                AvailabilityResponse
+                ReusableRequest |
+                ReusableResponse
 
     def write(io : IO, message : Any) : Problem?
       message.write(io)
@@ -57,14 +57,14 @@ module Pylon::Wire
       Problem.new(error.message || "the stream failed mid-message")
     end
 
-    def read(io : IO) : Any | Closed | Invalid
+    def read(io : IO) : Any | Closed | Problem
       case (byte = first_byte(io))
-      in Closed, Invalid
+      in Closed, Problem
         byte
       in UInt8
         tag = Tag.from_value?(byte)
         if tag.nil?
-          return Invalid.new("unknown message tag #{byte}, both sides must run the same version")
+          return Problem.new("unknown message tag #{byte}, both sides must run the same version")
         end
 
         reader = Reader.new(io)
@@ -72,30 +72,30 @@ module Pylon::Wire
       end
     end
 
-    private def first_byte(io : IO) : UInt8 | Closed | Invalid
+    private def first_byte(io : IO) : UInt8 | Closed | Problem
       io.read_byte || Closed.new
     rescue error : IO::Error
-      io.closed? ? Closed.new : Invalid.new(error.message || "the stream failed between messages")
+      io.closed? ? Closed.new : Problem.new(error.message || "the stream failed between messages")
     end
 
     private def decode(tag : Tag, reader : Reader) : Any
       case tag
-      in .failure?               then Failure.new(reader.required_string)
-      in .scan_request?          then ScanRequest.new(reader.i64)
-      in .scan_response?         then ScanResponse.new(Chunks.read_entry(reader))
-      in .contents_request?      then read_contents_request(reader)
-      in .contents_response?     then ContentsResponse.new(Chunks.read_contents(reader))
-      in .signatures_request?    then read_signatures_request(reader)
-      in .signatures_response?   then SignaturesResponse.new(Binary.read_signatures(reader))
-      in .write_request?         then read_write_request(reader)
-      in .write_response?        then WriteResponse.new(Chunks.read_outcomes(reader))
-      in .tree_update?           then read_tree_update(reader)
-      in .tree_delta?            then read_tree_delta(reader)
-      in .configure?             then read_configure(reader)
-      in .scan_progress?         then ScanProgress.new(reader.i64, reader.i64)
-      in .tree_announce?         then TreeAnnounce.new(reader.u32)
-      in .availability_request?  then AvailabilityRequest.new(Binary.read_digests(reader))
-      in .availability_response? then AvailabilityResponse.new(Binary.read_digests(reader))
+      in .failure?            then Failure.new(reader.required_string)
+      in .scan_request?       then ScanRequest.new(reader.i64)
+      in .scan_response?      then ScanResponse.new(Chunks.read_entry(reader))
+      in .contents_request?   then read_contents_request(reader)
+      in .contents_response?  then ContentsResponse.new(Chunks.read_contents(reader))
+      in .checksums_request?  then ChecksumsRequest.new(Binary.read_bases(reader))
+      in .checksums_response? then ChecksumsResponse.new(Binary.read_checksums_map(reader))
+      in .write_request?      then read_write_request(reader)
+      in .write_response?     then WriteResponse.new(Chunks.read_outcomes(reader))
+      in .tree_update?        then read_tree_update(reader)
+      in .tree_changes?       then read_tree_changes(reader)
+      in .configure?          then read_configure(reader)
+      in .scan_progress?      then ScanProgress.new(reader.i64, reader.i64)
+      in .tree_announce?      then TreeAnnounce.new(reader.u32)
+      in .reusable_request?   then ReusableRequest.new(Binary.read_digests(reader))
+      in .reusable_response?  then ReusableResponse.new(Binary.read_digests(reader))
       end
     end
 
@@ -103,15 +103,7 @@ module Pylon::Wire
       budget = reader.u64
       digests = Binary.read_digests(reader)
 
-      ContentsRequest.new(digests, budget, Binary.read_signatures(reader))
-    end
-
-    private def read_signatures_request(reader : Reader) : SignaturesRequest
-      count = reader.count
-      pairs = Array(SignaturesRequest::Pair).new(Wire.capacity_hint(count))
-      reader.repeat(count) { pairs << SignaturesRequest::Pair.new(reader.digest, reader.digest) }
-
-      SignaturesRequest.new(pairs)
+      ContentsRequest.new(digests, budget, Binary.read_checksums_map(reader))
     end
 
     private def read_write_request(reader : Reader) : WriteRequest
@@ -129,11 +121,11 @@ module Pylon::Wire
       TreeUpdate.new(sequence, Chunks.read_entry(reader), live: live)
     end
 
-    private def read_tree_delta(reader : Reader) : TreeDelta
+    private def read_tree_changes(reader : Reader) : TreeChanges
       sequence = reader.u32
       live = reader.bool
 
-      TreeDelta.new(sequence, Chunks.read_changes(reader), live: live)
+      TreeChanges.new(sequence, Chunks.read_changes(reader), live: live)
     end
 
     private def read_configure(reader : Reader) : Configure
@@ -150,9 +142,9 @@ module Pylon::Wire
 
       state = reader.string?
       watch = reader.bool
-      known = reader.bytes?
-      if known && known.size != DIGEST_BYTES
-        reader.fail("the known tree fingerprint has the wrong length")
+      tree_fingerprint = reader.bytes?
+      if tree_fingerprint && tree_fingerprint.size != DIGEST_BYTES
+        reader.fail("the tree fingerprint has the wrong length")
       end
 
       Configure.new(
@@ -162,7 +154,7 @@ module Pylon::Wire
         brand: Brand.new(brand),
         state: state,
         watch: watch,
-        known: known,
+        tree_fingerprint: tree_fingerprint,
       )
     end
   end

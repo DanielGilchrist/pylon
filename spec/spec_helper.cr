@@ -1,6 +1,7 @@
 require "spec"
 require "./support/allocations"
 require "./support/entries"
+require "../src/pylon/discard"
 
 include Pylon::Core
 
@@ -19,8 +20,28 @@ def build_session(
   base : Entry? = nil,
   dry_run : Bool = false,
   push_first : Bool = false,
-  on_progress : Proc(Pylon::Session::Progress, Nil)? = nil,
-) : Pylon::Session::Session(A, B) forall A, B
+) : Pylon::Session::Session(A, B, Pylon::Discard) forall A, B
+  build_session(
+    local,
+    remote,
+    narrator: Pylon::Discard.new,
+    preferences: preferences,
+    base: base,
+    dry_run: dry_run,
+    push_first: push_first,
+  )
+end
+
+def build_session(
+  local : A,
+  remote : B,
+  *,
+  narrator : N,
+  preferences : Preferences = Fixtures::NONE,
+  base : Entry? = nil,
+  dry_run : Bool = false,
+  push_first : Bool = false,
+) : Pylon::Session::Session(A, B, N) forall A, B, N
   Pylon::Session::Session.new(
     local,
     remote,
@@ -28,7 +49,7 @@ def build_session(
     base: base,
     dry_run: dry_run,
     push_first: push_first,
-    on_progress: on_progress,
+    narrator: narrator,
   )
 end
 
@@ -48,7 +69,7 @@ record ReconcileCase,
   base_changes : Changes = Changes.new,
   local_changes : Changes = Changes.new,
   remote_changes : Changes = Changes.new,
-  conflicts : Array(Conflict) = Array(Conflict).new,
+  conflicts : Array(String) = Array(String).new,
   troubles : Array(Trouble) = Array(Trouble).new
 
 def assert_changes(actual : Changes, expected : Changes, label : String) : Nil
@@ -74,7 +95,7 @@ def assert_reconciliation(reconciliation : Reconciliation, expected : ReconcileC
   assert_changes(reconciliation.local_changes, expected.local_changes, "local")
   assert_changes(reconciliation.remote_changes, expected.remote_changes, "remote")
 
-  reconciliation.conflicts.map(&.root).sort!.should eq(expected.conflicts.map(&.root).sort!)
-  reconciliation.troubles.sort_by! { |trouble| {trouble.path, trouble.side.value} }
-    .should eq(expected.troubles.sort_by { |trouble| {trouble.path, trouble.side.value} })
+  reconciliation.conflicts.sort!.should eq(expected.conflicts.sort!)
+  reconciliation.troubles.sort_by! { |trouble| {trouble.path, trouble.replica.value} }
+    .should eq(expected.troubles.sort_by { |trouble| {trouble.path, trouble.replica.value} })
 end

@@ -9,6 +9,7 @@ require "../session/remote_endpoint"
 require "../session/runner"
 require "../session/session"
 require "../session/ssh"
+require "../watch/dirty_paths"
 require "../watch/watcher"
 require "../wire/message"
 require "./brand_converter"
@@ -81,14 +82,14 @@ struct Pylon::CLI
       reporter = Reporter.new(STDOUT, verbose?, dry_run?, brand: brand)
       target = Target.parse(remote)
 
-      if target.is_a?(Target::Invalid)
-        fail_with(reporter, target.message)
+      if target.is_a?(Problem)
+        fail_with(reporter, target.reason)
       end
 
       preferences = Core::Preferences.build(prefer_local, prefer_remote)
 
-      if preferences.is_a?(Core::Preferences::Invalid)
-        fail_with(reporter, preferences.message)
+      if preferences.is_a?(Problem)
+        fail_with(reporter, preferences.reason)
       end
 
       ignores = Scan::Ignores.new(ignore)
@@ -111,19 +112,18 @@ struct Pylon::CLI
       begin
         left = Session::LocalEndpoint.new(local, ignores, compression: compression)
         left.cache = restored.local_cache
-        left.store = open_store(reporter)
-        left.on_stream = ->(bytes : UInt64) : Nil { reporter.streamed(bytes) }
+        left.kept = open_store(reporter)
 
-        reporter.observe(left.tally)
+        reporter.observe(left.scanned, left.sent)
         reporter.starting(local, remote) unless dry_run?
 
-        signals = Channel(Nil).new(16)
+        dirty_paths = Watch::DirtyPaths.new(Channel(Nil).new(16))
         remote_endpoint = Session::RemoteEndpoint.new(
           transport.reader,
           transport.writer,
-          configuration(target.path, restored.exchanged),
-          signals,
-          resume: restored.exchanged,
+          configuration(target.path, restored.shared_tree),
+          dirty_paths.signals,
+          resume: restored.shared_tree,
         )
 
         reporter.observe(remote_endpoint.inbound)
@@ -135,35 +135,24 @@ struct Pylon::CLI
           base: restored.base,
           dry_run: dry_run?,
           push_first: true,
-          on_progress: ->(update : Session::Progress) : Nil { reporter.progress(update) },
+          narrator: reporter,
         )
 
-        checkpoints = state.try do |path|
-          build = -> : Session::Checkpoint do
-            Session::Checkpoint.new(session.base, left.cache, remote_endpoint.tree)
-          end
+        checkpoints = state.try { |path| Session::Checkpoint::Schedule.new(path) }
 
-          Session::Checkpoint::Schedule.new(
-            path,
-            build,
-            on_problem: ->(problem : String) : Nil { reporter.warn(problem) },
-          )
-        end
-
-        drive(session, reporter, checkpoints, remote_endpoint, left, target, signals)
+        drive(session, reporter, checkpoints, remote_endpoint, target, dirty_paths)
       ensure
         transport.close
       end
     end
 
     private def drive(
-      session : Session::Session(Session::LocalEndpoint, Session::RemoteEndpoint),
+      session : Session::Session(Session::LocalEndpoint, Session::RemoteEndpoint, Reporter),
       reporter : Reporter,
       checkpoints : Session::Checkpoint::Schedule?,
       remote_endpoint : Session::RemoteEndpoint,
-      local_endpoint : Session::LocalEndpoint,
       target : Target,
-      signals : Channel(Nil),
+      dirty_paths : Watch::DirtyPaths,
     ) : Nil
       unless watch?
         cycle_started = Time.instant
@@ -171,25 +160,19 @@ struct Pylon::CLI
         report_fault(reporter, result, target) if result.is_a?(Session::Fault)
 
         reporter.report(result, Time.instant - cycle_started)
-        checkpoints.try(&.save)
+        checkpoint(checkpoints, session, remote_endpoint, reporter) do |schedule, saved|
+          schedule.save(saved)
+        end
+
         return
       end
 
-      subscriber = Watch::Watcher.open(local, ignore, signals, brand)
+      subscriber = Watch::Watcher.open(local, ignore, dirty_paths, brand)
 
-      if subscriber.is_a?(Watch::Unavailable)
+      if subscriber.is_a?(Problem)
         fail_with(reporter, "watching is unavailable for #{local}: #{subscriber.reason}")
       end
-
-      local_endpoint.accelerate!
-
-      runner = Session::Runner.new(
-        session,
-        signals,
-        before: -> : Nil { local_endpoint.mark_dirty(subscriber.drain) },
-        gauge: -> : Int32 { local_endpoint.register(subscriber.drain) },
-      )
-
+      runner = Session::Runner.new(session, dirty_paths)
       Process.on_terminate { runner.stop }
 
       started = Time.instant
@@ -199,18 +182,37 @@ struct Pylon::CLI
         if first
           first = false
           reporter.report(report, nil)
-          reporter.ready(Time.instant - started, local_endpoint.cache.size)
+          reporter.ready(Time.instant - started, session.local.cache.size)
         else
           reporter.report(report, elapsed)
         end
 
-        checkpoints.try(&.save_if_due)
+        checkpoint(checkpoints, session, remote_endpoint, reporter) do |schedule, saved|
+          schedule.save_if_due(saved)
+        end
       end
 
       report_fault(reporter, fault, target) if fault
 
-      checkpoints.try(&.save)
+      checkpoint(checkpoints, session, remote_endpoint, reporter) do |schedule, saved|
+        schedule.save(saved)
+      end
+
       subscriber.close
+    end
+
+    private def checkpoint(
+      checkpoints : Session::Checkpoint::Schedule?,
+      session : Session::Session(Session::LocalEndpoint, Session::RemoteEndpoint, Reporter),
+      remote_endpoint : Session::RemoteEndpoint,
+      reporter : Reporter,
+      & : Session::Checkpoint::Schedule, Session::Checkpoint -> Problem?
+    ) : Nil
+      return if checkpoints.nil?
+
+      saved = Session::Checkpoint.new(session.base, session.local.cache, remote_endpoint.tree)
+      problem = yield checkpoints, saved
+      reporter.warn(problem.reason) if problem
     end
 
     private def report_fault(
@@ -235,7 +237,7 @@ struct Pylon::CLI
 
       case (opened = Session::ContentStore.open("#{path}.content", local))
       in Session::ContentStore then opened
-      in Session::ContentStore::Unavailable
+      in Problem
         reporter.warn("content will not be kept for reuse or patching: #{opened.reason}")
         nil
       end
@@ -247,9 +249,9 @@ struct Pylon::CLI
 
       case (loaded = Session::Checkpoint.load(path))
       in Session::Checkpoint then loaded
-      in Session::Checkpoint::Absent
+      in Missing
         Session::Checkpoint.new
-      in Session::Checkpoint::Damaged
+      in Problem
         reporter.warn(
           "ignoring the sync state at #{path} (#{loaded.reason}), scanning from scratch",
         )
@@ -264,7 +266,7 @@ struct Pylon::CLI
 
     private def configuration(
       remote_root : String,
-      exchanged : Core::Entry?,
+      shared_tree : Core::Entry?,
     ) : Wire::Message::Configure
       Wire::Message::Configure.new(
         root: remote_root,
@@ -273,7 +275,7 @@ struct Pylon::CLI
         brand: brand,
         state: remote_state,
         watch: watch?,
-        known: (Core::Digests.fingerprint(exchanged) if exchanged),
+        tree_fingerprint: (Core::Digests.fingerprint(shared_tree) if shared_tree),
       )
     end
   end

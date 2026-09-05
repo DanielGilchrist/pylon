@@ -20,7 +20,7 @@ private def scan(
     ignores,
     baseline: nil,
     recheck: Set(String).new,
-    tally: Tally.new,
+    scanned: Progress.new,
     keeper: Pylon::Discard.new,
     parallelism: 1,
   ).scan
@@ -65,7 +65,7 @@ describe Pylon::Scan::Scanner do
       Ignores::NONE,
       baseline: nil,
       recheck: Set(String).new,
-      tally: Tally.new,
+      scanned: Progress.new,
       keeper: Pylon::Discard.new,
       parallelism: 1,
     ).scan
@@ -85,7 +85,7 @@ describe Pylon::Scan::Scanner do
       Ignores::NONE,
       baseline: nil,
       recheck: Set(String).new,
-      tally: Tally.new,
+      scanned: Progress.new,
       keeper: Pylon::Discard.new,
       parallelism: 1,
     ).scan
@@ -105,7 +105,7 @@ describe Pylon::Scan::Scanner do
       Ignores::NONE,
       baseline: nil,
       recheck: Set(String).new,
-      tally: Tally.new,
+      scanned: Progress.new,
       keeper: Pylon::Discard.new,
       parallelism: 1,
     ).scan
@@ -130,7 +130,7 @@ describe Pylon::Scan::Scanner do
       Ignores::NONE,
       baseline: nil,
       recheck: Set(String).new,
-      tally: Tally.new,
+      scanned: Progress.new,
       keeper: Pylon::Discard.new,
       parallelism: 1,
     ).scan
@@ -153,7 +153,7 @@ describe Pylon::Scan::Scanner do
       Ignores::NONE,
       baseline: nil,
       recheck: Set(String).new,
-      tally: Tally.new,
+      scanned: Progress.new,
       keeper: Pylon::Discard.new,
       parallelism: 1,
     ).scan
@@ -173,7 +173,7 @@ describe Pylon::Scan::Scanner do
       Ignores::NONE,
       baseline: nil,
       recheck: Set(String).new,
-      tally: Tally.new,
+      scanned: Progress.new,
       keeper: Pylon::Discard.new,
       parallelism: 1,
     ).scan
@@ -194,7 +194,7 @@ describe Pylon::Scan::Scanner do
       Ignores::NONE,
       baseline: nil,
       recheck: Set(String).new,
-      tally: Tally.new,
+      scanned: Progress.new,
       keeper: Pylon::Discard.new,
       parallelism: 1,
     ).scan
@@ -219,7 +219,7 @@ describe Pylon::Scan::Scanner do
       Ignores::NONE,
       baseline: nil,
       recheck: Set(String).new,
-      tally: Tally.new,
+      scanned: Progress.new,
       keeper: Pylon::Discard.new,
       parallelism: 1,
     ).scan
@@ -314,7 +314,7 @@ describe Pylon::Scan::Ignores do
   end
 end
 
-describe "accelerated scanning" do
+describe "scanning a watched tree" do
   it "does no filesystem work at all when nothing is dirty" do
     filesystem = sample
     first = scan(filesystem)
@@ -327,7 +327,7 @@ describe "accelerated scanning" do
       Ignores::NONE,
       baseline: first.root,
       recheck: Set(String).new,
-      tally: Tally.new,
+      scanned: Progress.new,
       keeper: Pylon::Discard.new,
       parallelism: 1,
     ).scan
@@ -345,7 +345,7 @@ describe "accelerated scanning" do
     second = Scanner.new(
       changed, first.cache, NOW, Ignores::NONE,
       parallelism: 1,
-      tally: Tally.new, keeper: Pylon::Discard.new,
+      scanned: Progress.new, keeper: Pylon::Discard.new,
       baseline: first.root,
       recheck: Set{"app/models/pay.rb"},
     ).scan
@@ -371,7 +371,7 @@ describe "accelerated scanning" do
     second = Scanner.new(
       changed, first.cache, NOW, Ignores::NONE,
       parallelism: 1,
-      tally: Tally.new, keeper: Pylon::Discard.new,
+      scanned: Progress.new, keeper: Pylon::Discard.new,
       baseline: first.root,
       recheck: Set{"README.md"},
     ).scan
@@ -394,7 +394,7 @@ describe "accelerated scanning" do
     second = Scanner.new(
       added, first.cache, NOW, Ignores::NONE,
       parallelism: 1,
-      tally: Tally.new, keeper: Pylon::Discard.new,
+      scanned: Progress.new, keeper: Pylon::Discard.new,
       baseline: first.root,
       recheck: Set{"app/models/new.rb"},
     ).scan
@@ -419,7 +419,7 @@ describe "accelerated scanning" do
     second = Scanner.new(
       remaining, first.cache, NOW, Ignores::NONE,
       parallelism: 1,
-      tally: Tally.new, keeper: Pylon::Discard.new,
+      scanned: Progress.new, keeper: Pylon::Discard.new,
       baseline: first.root,
       recheck: Set{"app/models/pay.rb"},
     ).scan
@@ -442,7 +442,7 @@ describe "the scanner handing hashed content to a keeper" do
       Ignores::NONE,
       baseline: nil,
       recheck: Set(String).new,
-      tally: Tally.new,
+      scanned: Progress.new,
       keeper: keeper,
       parallelism: 1,
     ).scan
@@ -459,7 +459,7 @@ describe "the scanner handing hashed content to a keeper" do
       Ignores::NONE,
       baseline: nil,
       recheck: Set(String).new,
-      tally: Tally.new,
+      scanned: Progress.new,
       keeper: keeper,
       parallelism: 1,
     ).scan

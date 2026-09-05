@@ -3,7 +3,7 @@ require "../../../src/pylon/core/changes"
 
 private NOTHING_LATE = Set(Bytes).new
 
-describe "Pylon::Core::Changes#deletes_last" do
+describe "Pylon::Core::Changes#ordered_for_writing" do
   it "moves deletions behind every other change without disturbing their order" do
     changes = Changes[
       Change.new("gone.rb", Fixtures.f1, nil),
@@ -12,7 +12,7 @@ describe "Pylon::Core::Changes#deletes_last" do
       Change.new("swapped.rb", Fixtures.f1, Fixtures.f2),
     ]
 
-    changes.deletes_last(NOTHING_LATE).map(&.path).should eq(
+    changes.ordered_for_writing(NOTHING_LATE).map(&.path).should eq(
       ["kept.rb", "swapped.rb", "gone.rb", "dir"],
     )
   end
@@ -24,7 +24,7 @@ describe "Pylon::Core::Changes#deletes_last" do
       Change.new("kept.rb", nil, Fixtures.f1),
     ]
 
-    ordered = changes.deletes_last(Set{Fixtures::D2})
+    ordered = changes.ordered_for_writing(Set{Fixtures::D2})
 
     ordered.map(&.path).should eq(["kept.rb", "late.rb", "gone.rb"])
   end
@@ -36,7 +36,8 @@ describe "Pylon::Core::Changes#deletes_last" do
       Change.new("gone.rb", Fixtures.f1, nil),
     ]
 
-    changes.deletes_last(NOTHING_LATE).map(&.path).should eq(["Readme.md", "README.md", "gone.rb"])
+    ordered = changes.ordered_for_writing(NOTHING_LATE).map(&.path)
+    ordered.should eq(["Readme.md", "README.md", "gone.rb"])
   end
 
   it "leaves a list without deletions untouched" do
@@ -45,6 +46,6 @@ describe "Pylon::Core::Changes#deletes_last" do
       Change.new("b.rb", Fixtures.f1, Fixtures.f2),
     ]
 
-    changes.deletes_last(NOTHING_LATE).should eq(changes)
+    changes.ordered_for_writing(NOTHING_LATE).should eq(changes)
   end
 end

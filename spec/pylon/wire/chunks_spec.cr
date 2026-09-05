@@ -98,12 +98,12 @@ describe Pylon::Wire::Chunks do
   end
 end
 
-describe "prefixed payloads in the contents framing" do
+describe "dictionary payloads in the contents framing" do
   it "round trips the base digest and the frame without recompressing it" do
     frame = Random.new(41).random_bytes(70_000)
     base = Bytes.new(Pylon::Wire::DIGEST_BYTES, 7_u8)
     digest = Bytes.new(Pylon::Wire::DIGEST_BYTES, 9_u8)
-    contents = Pylon::Wire::Contents{digest => Pylon::Wire::Prefixed.new(base, frame)}
+    contents = Pylon::Wire::Contents{digest => Pylon::Wire::Dictionary.new(base, frame)}
 
     io = IO::Memory.new
     Pylon::Wire::Chunks.write_contents(io, contents)
@@ -111,8 +111,8 @@ describe "prefixed payloads in the contents framing" do
     decoded = Pylon::Wire::Chunks.read_contents(Pylon::Wire::Reader.new(io))
 
     payload = decoded[digest]?
-    payload.should be_a(Pylon::Wire::Prefixed)
-    next unless payload.is_a?(Pylon::Wire::Prefixed)
+    payload.should be_a(Pylon::Wire::Dictionary)
+    next unless payload.is_a?(Pylon::Wire::Dictionary)
 
     payload.base.should eq(base)
     payload.frame.should eq(frame)

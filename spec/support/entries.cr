@@ -23,8 +23,8 @@ module Fixtures
   ) : Preferences
     case (preferences = Preferences.build(local, remote))
     in Preferences then preferences
-    in Preferences::Invalid
-      raise "the fixture preferences are not a valid glob: #{preferences.message}"
+    in Pylon::Problem
+      raise "the fixture preferences are not a valid glob: #{preferences.reason}"
     end
   end
 
@@ -64,14 +64,6 @@ module Fixtures
     Pylon::Core::Directory.new({"file" => f1})
   end
 
-  def self.d2 : Entry
-    Pylon::Core::Directory.new({"file" => f2})
-  end
-
-  def self.du : Entry
-    Pylon::Core::Directory.new({"file" => untracked})
-  end
-
   def self.dir(contents : Hash(String, Entry)) : Entry
     Pylon::Core::Directory.new(contents)
   end
@@ -86,12 +78,6 @@ module Fixtures
 
   def self.file!(entry : Pylon::Core::Entry?) : Pylon::Core::File
     raise "expected a file, got #{entry.inspect}" unless entry.is_a?(Pylon::Core::File)
-
-    entry
-  end
-
-  def self.link!(entry : Pylon::Core::Entry?) : Pylon::Core::SymbolicLink
-    raise "expected a symlink, got #{entry.inspect}" unless entry.is_a?(Pylon::Core::SymbolicLink)
 
     entry
   end

@@ -46,7 +46,7 @@ module Pylon::Write
       now_ns : Int64,
     ) : Verdict
       return Verdict::UnknownState if cached.nil?
-      return Verdict::Inconclusive if cached.provisional?
+      return Verdict::Inconclusive if cached.freshly_written?
       if observed.freshly_modified?(now_ns, Scan::Metadata::GRANULARITY_NS)
         return Verdict::Inconclusive
       end

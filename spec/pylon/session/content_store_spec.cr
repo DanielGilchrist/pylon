@@ -12,7 +12,7 @@ private def in_store(& : String, ContentStore, String ->) : Nil
   Dir.mkdir_p(tree)
 
   opened = ContentStore.open(directory, tree)
-  raise "the store could not be opened: #{opened.reason}" if opened.is_a?(ContentStore::Unavailable)
+  raise "the store could not be opened: #{opened.reason}" if opened.is_a?(Problem)
 
   begin
     yield tree, opened, directory
@@ -34,7 +34,7 @@ describe Pylon::Session::ContentStore do
       File.delete(File.join(tree, "a.rb"))
 
       store.holds?(digest).should be_true
-      store.available([digest, Bytes.new(32, 9_u8)]).should eq([digest])
+      store.held([digest, Bytes.new(32, 9_u8)]).should eq([digest])
       String.new(store.content(digest) || Bytes.empty).should eq("version one")
     end
   end
@@ -80,12 +80,12 @@ describe Pylon::Session::ContentStore do
       end
 
       reopened = ContentStore.open(directory, tree)
-      raise "the store could not be reopened" if reopened.is_a?(ContentStore::Unavailable)
+      raise "the store could not be reopened" if reopened.is_a?(Problem)
       current = kept.to_set
 
       reopened.prune { |digest| current.includes?(digest) }
 
-      reopened.available(kept).should eq(kept)
+      reopened.held(kept).should eq(kept)
       Dir.children(directory).size.should eq(ContentStore::ORPHAN_LIMIT + kept.size)
     end
   end
@@ -97,7 +97,7 @@ describe Pylon::Session::ContentStore do
 
       store.prune { |digest| digest == digests[0] }
 
-      store.available(digests).should eq(digests)
+      store.held(digests).should eq(digests)
       Dir.children(directory).size.should eq(4)
     end
   end
@@ -108,7 +108,7 @@ describe Pylon::Session::ContentStore do
       store.keep("a.rb", digest)
 
       reopened = ContentStore.open(directory, tree)
-      raise "the store could not be reopened" if reopened.is_a?(ContentStore::Unavailable)
+      raise "the store could not be reopened" if reopened.is_a?(Problem)
 
       reopened.holds?(digest).should be_true
     end

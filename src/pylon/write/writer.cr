@@ -9,9 +9,8 @@ require "../scan/ignores"
 require "../scan/snapshot"
 require "./grouping"
 require "./guard"
-require "./indexed_outcomes"
 require "./outcome"
-require "./problem"
+require "../problem"
 
 module Pylon::Write
   struct Writer(F, S)
@@ -47,53 +46,35 @@ module Pylon::Write
     private def write_changes(changes : Core::Changes) : Array(Outcome)
       grouping = Grouping.partition(changes) { |change| independent?(change) }
 
-      if @parallelism <= 1 || grouping.independent.size < PARALLEL_THRESHOLD
+      if @parallelism <= 1 || grouping.parallel.size < PARALLEL_THRESHOLD
         return changes.map { |change| write_one(change) }
       end
 
-      sequential = write_group(changes, grouping.ordered)
-      concurrent = write_concurrently(changes, grouping.independent)
-      removed = write_group(changes, grouping.removals)
-
-      assemble(
-        changes.size,
-        IndexedOutcomes.new(grouping.ordered, sequential),
-        IndexedOutcomes.new(grouping.independent, concurrent),
-        IndexedOutcomes.new(grouping.removals, removed),
-      )
+      slots = Array(Outcome?).new(changes.size, nil)
+      write_group(changes, grouping.sequential, slots)
+      write_concurrently(changes, grouping.parallel, slots)
+      write_group(changes, grouping.deletions, slots)
+      slots.compact
     end
 
     private def relocate(relocation : Core::Relocation, into : Array(Outcome)) : Nil
       verdict = guard_intact(relocation.from, relocation.entry)
       verdict = guard_absent(relocation.to) if verdict.proceed?
 
-      case verdict
-      in .modification_detected?
-        skip_relocation(relocation, ModificationDetected.new, into)
+      if (skip = verdict.skip)
+        into << Outcome.new(relocation.from, relocation.entry, skip)
+        into << Outcome.new(relocation.to, nil, skip)
         return
-      in .unknown_state?, .inconclusive?
-        skip_relocation(relocation, UnknownState.new, into)
-        return
-      in .proceed?
       end
 
       if @filesystem.rename(relocation.from, relocation.to)
         arrival = Core::Changes[Core::Change.new(relocation.to, nil, relocation.entry)]
-        into.concat(write_changes(Core::Changes.expand(arrival)))
+        into.concat(write_changes(Core::Changes.flatten(arrival)))
         into << write_one(Core::Change.new(relocation.from, relocation.entry, nil))
         return
       end
 
       into << Outcome.new(relocation.from, nil) << Outcome.new(relocation.to, relocation.entry)
-    end
-
-    private def skip_relocation(
-      relocation : Core::Relocation,
-      skipped : Skipped,
-      into : Array(Outcome),
-    ) : Nil
-      into << Outcome.new(relocation.from, relocation.entry, skipped)
-      into << Outcome.new(relocation.to, nil, skipped)
     end
 
     private def guard_absent(path : String) : Verdict
@@ -152,45 +133,28 @@ module Pylon::Write
       new = change.new
       return false unless new.is_a?(Core::File)
 
-      !clear_first?(change.old, new)
+      !replaces_entirely?(change.old, new)
     end
 
-    private def write_group(changes : Core::Changes, indices : Array(Int32)) : Array(Outcome)
-      outcomes = Array(Outcome).new(indices.size)
-      indices.each { |index| outcomes << write_one(changes[index]) }
-      outcomes
+    private def write_group(
+      changes : Core::Changes,
+      indices : Array(Int32),
+      slots : Array(Outcome?),
+    ) : Nil
+      indices.each { |index| slots[index] = write_one(changes[index]) }
     end
 
     private def write_concurrently(
       changes : Core::Changes,
       independent : Array(Int32),
-    ) : Array(Outcome)
+      slots : Array(Outcome?),
+    ) : Nil
       stripe = (independent.size + @parallelism - 1) // @parallelism
       groups = independent.each_slice(stripe).to_a
-      slices = Array(Array(Outcome)).new(groups.size) { Array(Outcome).new }
 
       Fibers.parallel(:write, groups.size) do |worker|
-        groups[worker].each { |index| slices[worker] << write_one(changes[index]) }
+        write_group(changes, groups[worker], slots)
       end
-
-      collected = Array(Outcome).new(independent.size)
-      slices.each { |slice| collected.concat(slice) }
-      collected
-    end
-
-    private def assemble(total : Int32, *groups : IndexedOutcomes) : Array(Outcome)
-      outcomes = Array(Outcome).new(total)
-
-      total.times do |index|
-        groups.each do |group|
-          if (claimed = group.claim?(index))
-            outcomes << claimed
-            break
-          end
-        end
-      end
-
-      outcomes
     end
 
     private def write_one(change : Core::Change) : Outcome
@@ -203,50 +167,38 @@ module Pylon::Write
       )
       verdict = verify_content(change.path, old) if verdict.inconclusive? && old.is_a?(Core::File)
 
-      case verdict
-      in .modification_detected?
-        return Outcome.new(change.path, change.old, ModificationDetected.new)
-      in .unknown_state?, .inconclusive?
-        return Outcome.new(change.path, change.old, UnknownState.new)
-      in .proceed?
+      if (skip = verdict.skip)
+        return Outcome.new(change.path, change.old, skip)
       end
 
       if (swapped = swap_permissions(change))
         return swapped
       end
 
-      if clear_first?(change.old, change.new)
+      if replaces_entirely?(change.old, change.new)
         old = change.old
 
-        if old.is_a?(Core::Directory)
-          case guard_removal(change.path, old)
-          in .modification_detected?
-            return Outcome.new(change.path, change.old, ModificationDetected.new)
-          in .unknown_state?, .inconclusive?
-            return Outcome.new(change.path, change.old, UnknownState.new)
-          in .proceed?
-          end
+        if old.is_a?(Core::Directory) && (skip = guard_removal(change.path, old).skip)
+          return Outcome.new(change.path, change.old, skip)
         end
 
         if (blocked = @filesystem.remove(change.path))
-          return Outcome.new(change.path, change.old, WriteFailed.new(blocked.reason))
+          return Outcome.new(change.path, change.old, blocked)
         end
       end
 
       created = create(change.path, change.new)
 
-      if created.is_a?(Problem)
-        return Outcome.new(change.path, change.old, WriteFailed.new(created.reason))
-      end
+      return Outcome.new(change.path, change.old, created) if created.is_a?(Problem)
 
       if incomplete?(change.new, created)
-        return Outcome.new(change.path, created, StagedContentMissing.new)
+        return Outcome.new(change.path, created, Skip::StagedContentMissing)
       end
 
       Outcome.new(change.path, created)
     end
 
-    private def clear_first?(old : Core::Entry?, new : Core::Entry?) : Bool
+    private def replaces_entirely?(old : Core::Entry?, new : Core::Entry?) : Bool
       return false if old.nil?
       return true if new.nil?
 
@@ -317,7 +269,7 @@ module Pylon::Write
       return if old.executable? == new.executable?
 
       if (blocked = @filesystem.set_executable(change.path, new.executable?))
-        return Outcome.new(change.path, old, WriteFailed.new(blocked.reason))
+        return Outcome.new(change.path, old, blocked)
       end
 
       Outcome.new(change.path, new)

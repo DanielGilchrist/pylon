@@ -106,17 +106,17 @@ describe Pylon::Core::Relocation do
   it "refuses to move the sync root, a path onto itself, or a path into itself" do
     file = Fixtures.file!(Fixtures.f1)
 
-    Relocation.parse("", "x", file).should be_a(Malformed)
-    Relocation.parse("x", "", file).should be_a(Malformed)
-    Relocation.parse("x", "x", file).should be_a(Malformed)
-    Relocation.parse("x", "x/y", file).should be_a(Malformed)
-    Relocation.parse("x/y", "x", file).should be_a(Malformed)
+    Relocation.parse("", "x", file).should be_a(Pylon::Problem)
+    Relocation.parse("x", "", file).should be_a(Pylon::Problem)
+    Relocation.parse("x", "x", file).should be_a(Pylon::Problem)
+    Relocation.parse("x", "x/y", file).should be_a(Pylon::Problem)
+    Relocation.parse("x/y", "x", file).should be_a(Pylon::Problem)
     Relocation.parse("x", "xy", file).should be_a(Relocation)
   end
 
   it "refuses to move an entry that is not syncable" do
-    Relocation.parse("a", "b", Fixtures.untracked).should be_a(Malformed)
-    Relocation.parse("a", "b", Fixtures.problematic).should be_a(Malformed)
-    Relocation.parse("a", "b", nil).should be_a(Malformed)
+    Relocation.parse("a", "b", Fixtures.untracked).should be_a(Pylon::Problem)
+    Relocation.parse("a", "b", Fixtures.problematic).should be_a(Pylon::Problem)
+    Relocation.parse("a", "b", nil).should be_a(Pylon::Problem)
   end
 end

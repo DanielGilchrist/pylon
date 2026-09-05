@@ -64,26 +64,26 @@ end
 
 describe Pylon::Scan::CacheEntry do
   it "reuses a digest when nothing observable changed" do
-    entry = CacheEntry.new(metadata, DIGEST, provisional: false)
+    entry = CacheEntry.new(metadata, DIGEST, freshly_written: false)
 
     entry.reuse(metadata, NOW, GRANULARITY).should eq(DIGEST)
   end
 
   it "refuses to reuse a digest for a file inside the granularity window" do
     racy = metadata(mtime_ns: NOW)
-    entry = CacheEntry.new(racy, DIGEST, provisional: false)
+    entry = CacheEntry.new(racy, DIGEST, freshly_written: false)
 
     entry.reuse(racy, NOW, GRANULARITY).should be_nil
   end
 
   it "refuses to reuse a digest that was recorded inside the granularity window" do
-    entry = CacheEntry.new(metadata, DIGEST, provisional: true)
+    entry = CacheEntry.new(metadata, DIGEST, freshly_written: true)
 
     entry.reuse(metadata, NOW, GRANULARITY).should be_nil
   end
 
   it "refuses to reuse a digest when an editor rewrote the file via rename" do
-    entry = CacheEntry.new(metadata, DIGEST, provisional: false)
+    entry = CacheEntry.new(metadata, DIGEST, freshly_written: false)
 
     entry.reuse(metadata(inode: 43_u64), NOW, GRANULARITY).should be_nil
   end

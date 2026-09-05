@@ -4,27 +4,22 @@ module Pylon::Session
   class Checkpoint::Schedule
     DEFAULT_INTERVAL = 5.seconds
 
-    def initialize(
-      @path : String,
-      @build : Proc(Checkpoint),
-      @on_problem : Proc(String, Nil)?,
-      @interval : Time::Span = DEFAULT_INTERVAL,
-    ) : Nil
+    def initialize(@path : String, @interval : Time::Span = DEFAULT_INTERVAL) : Nil
       @last = Time.instant - @interval
       @complained = false
     end
 
-    def save_if_due : Nil
+    def save_if_due(checkpoint : Checkpoint) : Problem?
       return if Time.instant - @last < @interval
 
-      save
+      save(checkpoint)
     end
 
-    def save : Nil
-      damaged = @build.call.save(@path)
+    def save(checkpoint : Checkpoint) : Problem?
+      failed = checkpoint.save(@path)
       @last = Time.instant
 
-      if damaged.nil?
+      if failed.nil?
         @complained = false
         return
       end
@@ -32,7 +27,7 @@ module Pylon::Session
       return if @complained
 
       @complained = true
-      @on_problem.try(&.call("the sync state at #{@path} was not saved (#{damaged.reason})"))
+      Problem.new("the sync state at #{@path} was not saved (#{failed.reason})")
     end
   end
 end

@@ -5,7 +5,7 @@ require "../write/writer"
 module Pylon::Session
   struct Report
     def initialize(
-      @conflicts : Array(Core::Conflict),
+      @conflicts : Array(String),
       @local_outcomes : Array(Write::Outcome),
       @remote_outcomes : Array(Write::Outcome),
       @troubles : Array(Core::Trouble),
@@ -15,7 +15,7 @@ module Pylon::Session
     ) : Nil
     end
 
-    getter conflicts : Array(Core::Conflict)
+    getter conflicts : Array(String)
     getter local_outcomes : Array(Write::Outcome)
     getter remote_outcomes : Array(Write::Outcome)
     getter halt : Core::Safety::Reason?

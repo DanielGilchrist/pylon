@@ -15,17 +15,8 @@ private def in_sandbox(& : String ->) : Nil
   end
 end
 
-private def schedule(
-  path : String,
-  interval : Time::Span,
-  problems : Array(String),
-) : Checkpoint::Schedule
-  Checkpoint::Schedule.new(
-    path,
-    -> : Checkpoint { Checkpoint.new },
-    interval: interval,
-    on_problem: ->(problem : String) : Nil { problems << problem },
-  )
+private def schedule(path : String, interval : Time::Span) : Checkpoint::Schedule
+  Checkpoint::Schedule.new(path, interval)
 end
 
 describe Pylon::Session::Checkpoint::Schedule do
@@ -33,7 +24,7 @@ describe Pylon::Session::Checkpoint::Schedule do
     in_sandbox do |root|
       path = File.join(root, "state")
 
-      schedule(path, 1.hour, Array(String).new).save_if_due
+      schedule(path, 1.hour).save_if_due(Checkpoint.new)
 
       File.exists?(path).should be_true
     end
@@ -42,12 +33,12 @@ describe Pylon::Session::Checkpoint::Schedule do
   it "does not save again within the interval" do
     in_sandbox do |root|
       path = File.join(root, "state")
-      due = schedule(path, 1.hour, Array(String).new)
+      due = schedule(path, 1.hour)
 
-      due.save_if_due
+      due.save_if_due(Checkpoint.new)
       first_write = File.info(path).modification_time
 
-      due.save_if_due
+      due.save_if_due(Checkpoint.new)
       File.info(path).modification_time.should eq(first_write)
     end
   end
@@ -55,11 +46,11 @@ describe Pylon::Session::Checkpoint::Schedule do
   it "saves again once the interval has passed" do
     in_sandbox do |root|
       path = File.join(root, "state")
-      due = schedule(path, 0.seconds, Array(String).new)
+      due = schedule(path, 0.seconds)
 
-      due.save_if_due
+      due.save_if_due(Checkpoint.new)
       File.write(path, "clobbered")
-      due.save_if_due
+      due.save_if_due(Checkpoint.new)
 
       File.read(path).should_not eq("clobbered")
     end
@@ -70,14 +61,14 @@ describe Pylon::Session::Checkpoint::Schedule do
       blocked = File.join(root, "occupied")
       File.write(blocked, "a file where the state directory should be")
 
-      problems = Array(String).new
-      due = schedule(File.join(blocked, "state"), 0.seconds, problems)
+      due = schedule(File.join(blocked, "state"), 0.seconds)
 
-      due.save
-      due.save
+      first = due.save(Checkpoint.new)
+      second = due.save(Checkpoint.new)
 
-      problems.size.should eq(1)
-      problems.first.should contain("was not saved")
+      first.should be_a(Pylon::Problem)
+      first.reason.should contain("was not saved") if first.is_a?(Pylon::Problem)
+      second.should be_nil
     end
   end
 
@@ -86,17 +77,14 @@ describe Pylon::Session::Checkpoint::Schedule do
       blocked = File.join(root, "occupied")
       File.write(blocked, "in the way")
 
-      problems = Array(String).new
-      due = schedule(File.join(blocked, "state"), 0.seconds, problems)
+      due = schedule(File.join(blocked, "state"), 0.seconds)
 
-      due.save
+      due.save(Checkpoint.new).should be_a(Pylon::Problem)
       File.delete(blocked)
-      due.save
+      due.save(Checkpoint.new).should be_nil
       FileUtils.rm_rf(blocked)
       File.write(blocked, "in the way again")
-      due.save
-
-      problems.size.should eq(2)
+      due.save(Checkpoint.new).should be_a(Pylon::Problem)
     end
   end
 end

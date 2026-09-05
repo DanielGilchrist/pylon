@@ -2,7 +2,7 @@ require "../../spec_helper"
 require "../../../src/pylon/cli/reporter"
 
 private def report_of(
-  conflicts = Array(Conflict).new,
+  conflicts = Array(String).new,
   local = Array(Pylon::Write::Outcome).new,
   remote = Array(Pylon::Write::Outcome).new,
   halt = nil,
@@ -36,7 +36,7 @@ end
 
 private def skipped(
   path : String,
-  reason : Pylon::Write::Skipped = Pylon::Write::ModificationDetected.new,
+  reason : Pylon::Write::Skipped = Pylon::Write::Skip::ModificationDetected,
 ) : Pylon::Write::Outcome
   Pylon::Write::Outcome.new(path, nil, reason)
 end
@@ -50,7 +50,7 @@ private def report_with_moves(
   moves : Array(Pylon::Core::Relocation),
 ) : Pylon::Session::Report
   Pylon::Session::Report.new(
-    Array(Conflict).new,
+    Array(String).new,
     Array(Pylon::Write::Outcome).new,
     remote,
     Array(Trouble).new,
@@ -61,10 +61,10 @@ end
 private def reporter_waiting_on_the_remote(inbound : Pylon::Session::Inbound) : Pylon::CLI::Reporter
   Colorize.enabled = false
   reporter = Pylon::CLI::Reporter.new(IO::Memory.new, false, false, brand: Pylon::Brand::DEFAULT)
-  tally = Pylon::Scan::Tally.new
-  100.times { tally.saw_file }
-  tally.finish
-  reporter.observe(tally)
+  progress = Pylon::Progress.new
+  100.times { progress.add_file }
+  progress.finish
+  reporter.observe(progress, Pylon::Progress.new)
   reporter.observe(inbound)
   reporter
 end
@@ -91,9 +91,9 @@ describe "the startup status line" do
 
   it "shows how much of the announced tree has arrived" do
     inbound = Pylon::Session::Inbound.new
-    inbound.meter.add(700)
+    inbound.arrived(700)
     inbound.announced(2_u32 * 1024 * 1024)
-    inbound.meter.add(512 * 1024)
+    inbound.arrived(512 * 1024)
 
     reporter_waiting_on_the_remote(inbound).scan_status.should start_with(
       "receiving the remote tree · 512 KiB of 2.0 MiB",
@@ -103,7 +103,7 @@ describe "the startup status line" do
   it "never reports more of the tree than was announced" do
     inbound = Pylon::Session::Inbound.new
     inbound.announced(1024_u32)
-    inbound.meter.add(5000)
+    inbound.arrived(5000)
 
     reporter_waiting_on_the_remote(inbound).scan_status.should start_with(
       "receiving the remote tree · 1 KiB of 1 KiB",
@@ -172,7 +172,7 @@ describe Pylon::CLI::Reporter do
 
   it "explains a conflict rather than just counting it" do
     output = rendered(
-      report_of(conflicts: [Conflict.new("db/structure.sql", Changes.new, Changes.new)]),
+      report_of(conflicts: ["db/structure.sql"]),
     )
 
     output.should contain("conflict")
@@ -182,7 +182,7 @@ describe Pylon::CLI::Reporter do
 
   it "groups a flood of conflicts by directory" do
     conflicts = Array.new(30) do |index|
-      Conflict.new("config/locales/translation.#{index}.yml", Changes.new, Changes.new)
+      "config/locales/translation.#{index}.yml"
     end
 
     output = rendered(report_of(conflicts: conflicts))
@@ -197,7 +197,7 @@ describe Pylon::CLI::Reporter do
     Colorize.enabled = false
     io = IO::Memory.new
     reporter = Pylon::CLI::Reporter.new(io, false, false, brand: Pylon::Brand::DEFAULT)
-    conflict = report_of(conflicts: [Conflict.new("db/structure.sql", Changes.new, Changes.new)])
+    conflict = report_of(conflicts: ["db/structure.sql"])
 
     reporter.report(conflict, nil)
     first = io.to_s

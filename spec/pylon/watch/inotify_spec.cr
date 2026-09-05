@@ -10,7 +10,7 @@ private def collect_until(watcher : Inotify, & : Set(String) -> Bool) : Set(Stri
   seen = Set(String).new
 
   10.times do
-    case (dirty = watcher.drain)
+    case (dirty = watcher.dirty_paths.consume)
     in Everything
       fail("expected per-path events, saw a fresh-instance flush")
     in Touched
@@ -20,7 +20,7 @@ private def collect_until(watcher : Inotify, & : Set(String) -> Bool) : Set(Stri
     return seen if yield seen
 
     select
-    when watcher.signals.receive
+    when watcher.dirty_paths.signals.receive
     when timeout(2.seconds)
       return seen
     end
@@ -34,7 +34,8 @@ describe Pylon::Watch::Inotify do
     root = File.tempname("pylon-inotify")
     Dir.mkdir_p(File.join(root, "log"))
 
-    watcher = Inotify.open(root, ["log"], Channel(Nil).new(1), brand: Pylon::Brand::DEFAULT)
+    dirty_paths = DirtyPaths.new(Channel(Nil).new(1))
+    watcher = Inotify.open(root, ["log"], dirty_paths, brand: Pylon::Brand::DEFAULT)
     watcher.should be_a(Inotify)
     next unless watcher.is_a?(Inotify)
 
@@ -70,7 +71,7 @@ describe Pylon::Watch::Inotify do
     watcher = Inotify.open(
       root,
       Array(String).new,
-      Channel(Nil).new(1),
+      DirtyPaths.new(Channel(Nil).new(1)),
       brand: Pylon::Brand::DEFAULT,
     )
     watcher.should be_a(Inotify)
@@ -101,7 +102,7 @@ describe Pylon::Watch::Inotify do
     watcher = Inotify.open(
       root,
       Array(String).new,
-      Channel(Nil).new(1),
+      DirtyPaths.new(Channel(Nil).new(1)),
       brand: Pylon::Brand::DEFAULT,
     )
     watcher.should be_a(Inotify)
@@ -127,7 +128,7 @@ describe Pylon::Watch::Inotify do
     watcher = Inotify.open(
       root,
       Array(String).new,
-      Channel(Nil).new(1),
+      DirtyPaths.new(Channel(Nil).new(1)),
       brand: Pylon::Brand::DEFAULT,
     )
     watcher.should be_a(Inotify)

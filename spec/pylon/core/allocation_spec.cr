@@ -15,7 +15,7 @@ private def wide_tree(files : Int32) : Entry
 end
 
 private def changes_for(tree : Entry) : Changes
-  Changes.expand([Change.new("", nil, tree)])
+  Changes.flatten([Change.new("", nil, tree)])
 end
 
 describe "allocation budgets" do
