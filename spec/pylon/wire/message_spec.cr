@@ -1,5 +1,4 @@
 require "../../spec_helper"
-require "../../../src/pylon/wire/message"
 
 private alias Any = Pylon::Wire::Message::Any
 private alias Brand = Pylon::Brand

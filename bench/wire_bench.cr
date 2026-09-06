@@ -1,11 +1,5 @@
+require "../src/pylon/prelude"
 require "digest/sha256"
-require "../src/pylon/compress/dictionary"
-require "../src/pylon/compress/zstd"
-require "../src/pylon/core"
-require "../src/pylon/wire/chunks"
-require "../src/pylon/wire/splice"
-require "../src/pylon/wire/dictionary"
-require "../src/pylon/write/outcome"
 
 include Pylon
 

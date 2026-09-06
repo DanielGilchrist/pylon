@@ -1,6 +1,3 @@
-require "./fault"
-require "./remote_endpoint"
-
 module Pylon::Session
   struct Awaiting(M, T)
     def initialize(@endpoint : RemoteEndpoint, @replies : Channel(M), @fault : Fault?) : Nil

@@ -1,8 +1,3 @@
-require "../core/entry"
-require "../scan/cache_entry"
-require "../scan/observed"
-require "./verdict"
-
 module Pylon::Write
   module Guard
     extend self

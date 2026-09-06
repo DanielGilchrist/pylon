@@ -1,6 +1,3 @@
-require "../compress"
-require "./codec"
-
 module Pylon::Compress
   struct Identity
     include Codec

@@ -1,6 +1,3 @@
-require "./compress/lib_zstd"
-require "./problem"
-
 module Pylon::Compress
   extend self
 

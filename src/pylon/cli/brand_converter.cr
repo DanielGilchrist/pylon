@@ -1,5 +1,4 @@
 require "kebab"
-require "../brand"
 
 struct Pylon::CLI
   module BrandConverter

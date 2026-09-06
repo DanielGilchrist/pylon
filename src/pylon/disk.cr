@@ -1,12 +1,4 @@
 require "digest/sha256"
-require "./filesystem"
-require "./wire/chunks"
-require "./wire/binary"
-require "./wire/content_kind"
-require "./scan/ignores"
-require "./scan/metadata"
-require "./scan/observed"
-require "./problem"
 
 module Pylon
   struct Disk

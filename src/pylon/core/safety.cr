@@ -1,6 +1,3 @@
-require "./change"
-require "./entry"
-
 module Pylon::Core
   module Safety
     extend self

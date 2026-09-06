@@ -1,5 +1,3 @@
-require "../problem"
-
 struct Pylon::CLI
   struct Target
     def self.parse(specification : String) : Target | Problem

@@ -1,9 +1,7 @@
+require "../../spec_helper"
+
 require "file_utils"
 require "socket"
-require "../../spec_helper"
-require "../../../src/pylon/session/local_endpoint"
-require "../../../src/pylon/session/remote_endpoint"
-require "../../../src/pylon/session/session"
 require "../../support/remote_end"
 
 describe "a remote that is not there" do

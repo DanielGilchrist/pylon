@@ -1,5 +1,4 @@
 require "../../spec_helper"
-require "../../../src/pylon/wire/chunks"
 
 private CHUNK_BYTES  = Pylon::Wire::Chunks::CHUNK_BYTES
 private alias Chunks = Pylon::Wire::Chunks

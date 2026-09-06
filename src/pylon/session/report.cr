@@ -1,7 +1,3 @@
-require "../core/relocation"
-require "../core/safety"
-require "../write/writer"
-
 module Pylon::Session
   struct Report
     def initialize(

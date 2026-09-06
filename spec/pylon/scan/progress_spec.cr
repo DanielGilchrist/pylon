@@ -1,7 +1,6 @@
 require "../../spec_helper"
+
 require "../../support/memory_filesystem"
-require "../../../src/pylon/discard"
-require "../../../src/pylon/scan/scanner"
 
 private alias Progress = Pylon::Progress
 

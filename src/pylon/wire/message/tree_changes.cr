@@ -1,7 +1,3 @@
-require "../binary"
-require "../chunks"
-require "./writable"
-
 module Pylon::Wire::Message
   struct TreeChanges
     include Writable

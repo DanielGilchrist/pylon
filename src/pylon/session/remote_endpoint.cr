@@ -1,13 +1,3 @@
-require "../core/applier"
-require "../fibers"
-require "../wire/message"
-require "./fault"
-require "./inbound"
-require "./metered_reader"
-require "./session"
-require "./settled"
-require "./awaiting"
-
 module Pylon::Session
   class RemoteEndpoint
     @fault : Fault? = nil

@@ -1,6 +1,3 @@
-require "../binary"
-require "./writable"
-
 module Pylon::Wire::Message
   struct ChecksumsRequest
     include Writable

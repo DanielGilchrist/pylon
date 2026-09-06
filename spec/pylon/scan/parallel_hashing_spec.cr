@@ -1,9 +1,7 @@
+require "../../spec_helper"
+
 require "digest/sha256"
 require "file_utils"
-require "../../spec_helper"
-require "../../../src/pylon/discard"
-require "../../../src/pylon/scan/scanner"
-require "../../../src/pylon/disk"
 
 private FILES = 400
 

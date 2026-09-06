@@ -1,5 +1,3 @@
-require "./tag"
-
 module Pylon::Wire::Message
   module Writable
     abstract def tag : Tag

@@ -1,6 +1,4 @@
 require "digest/sha256"
-require "../../src/pylon/core"
-require "../../src/pylon/scan/metadata"
 
 private alias Directory = Pylon::Core::Directory
 private alias Entry = Pylon::Core::Entry

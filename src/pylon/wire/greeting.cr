@@ -1,8 +1,3 @@
-require "./greeting/incompatible"
-require "./greeting/foreign"
-require "../wire"
-require "../problem"
-
 module Pylon::Wire
   module Greeting
     extend self

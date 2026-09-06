@@ -1,6 +1,6 @@
-require "file_utils"
 require "../spec_helper"
-require "../../src/pylon/disk"
+
+require "file_utils"
 
 private alias Disk = Pylon::Disk
 private alias Metadata = Pylon::Scan::Metadata

@@ -1,4 +1,4 @@
-require "./pylon/cli"
+require "./pylon/prelude"
 
 begin
   exit(1) unless Pylon::CLI.run(ARGV)

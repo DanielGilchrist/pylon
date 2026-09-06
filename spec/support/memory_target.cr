@@ -1,8 +1,5 @@
 require "digest/sha256"
 require "sync"
-require "../../src/pylon/scan/metadata"
-require "../../src/pylon/scan/observed"
-require "../../src/pylon/problem"
 
 private alias Metadata = Pylon::Scan::Metadata
 private alias Missing = Pylon::Missing

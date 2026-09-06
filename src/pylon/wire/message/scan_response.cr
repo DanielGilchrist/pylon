@@ -1,6 +1,3 @@
-require "../chunks"
-require "./writable"
-
 module Pylon::Wire::Message
   struct ScanResponse
     include Writable

@@ -1,6 +1,3 @@
-require "../fibers"
-require "../problem"
-
 module Pylon::Session
   # stdlibs `Process` and its APIs report failures by throwing exceptions. We want to
   # avoid exceptions as they can leave the application in undeseriable states but also

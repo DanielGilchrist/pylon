@@ -1,6 +1,4 @@
 require "../../spec_helper"
-require "../../../src/pylon/compress/identity"
-require "../../../src/pylon/compress/zstd"
 
 private alias Identity = Pylon::Compress::Identity
 private alias Problem = Pylon::Problem

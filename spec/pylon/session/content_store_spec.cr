@@ -1,8 +1,7 @@
+require "../../spec_helper"
+
 require "digest/sha256"
 require "file_utils"
-require "../../spec_helper"
-require "../../../src/pylon/session/content_store"
-require "../../../src/pylon/session/locations"
 
 private alias ContentStore = Pylon::Session::ContentStore
 private alias Locations = Pylon::Session::Locations

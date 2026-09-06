@@ -1,9 +1,3 @@
-require "../brand"
-require "../platform"
-require "../problem"
-require "../watch"
-require "./dirty_paths"
-
 module Pylon::Watch
   module Watcher
     extend self

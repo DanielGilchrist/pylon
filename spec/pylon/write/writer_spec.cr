@@ -1,6 +1,6 @@
 require "../../spec_helper"
+
 require "../../support/memory_target"
-require "../../../src/pylon/write/writer"
 
 private alias Cache = Pylon::Scan::Cache
 private alias Change = Pylon::Core::Change

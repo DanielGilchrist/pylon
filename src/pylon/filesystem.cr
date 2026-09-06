@@ -1,9 +1,4 @@
 require "file_utils"
-require "./problem"
-require "./missing"
-require "./filesystem/pattern"
-require "./filesystem/lib_clone"
-require "./platform"
 
 module Pylon
   # stdlibs filesystem APIs (`File`, `Dir`, `FileUtils`) report failures (a vanished path,

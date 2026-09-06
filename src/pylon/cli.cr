@@ -1,6 +1,4 @@
 require "kebab"
-require "./cli/remote"
-require "./cli/sync"
 
 @[Kebab::Command(
   name: "pylon",

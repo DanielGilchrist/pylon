@@ -1,8 +1,7 @@
 require "../../spec_helper"
+
 require "../../support/memory_filesystem"
 require "../../support/memory_keeper"
-require "../../../src/pylon/discard"
-require "../../../src/pylon/scan/scanner"
 
 private alias Cache = Pylon::Scan::Cache
 private alias Discard = Pylon::Discard

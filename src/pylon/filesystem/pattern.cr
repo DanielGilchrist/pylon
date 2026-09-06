@@ -1,5 +1,3 @@
-require "../problem"
-
 module Pylon
   module Filesystem
     struct Pattern

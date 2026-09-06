@@ -1,8 +1,6 @@
-require "file_utils"
 require "../../spec_helper"
-require "../../../src/pylon/session/local_endpoint"
-require "../../../src/pylon/session/remote_endpoint"
-require "../../../src/pylon/session/session"
+
+require "file_utils"
 require "../../support/remote_end"
 
 private alias Fault = Pylon::Session::Fault

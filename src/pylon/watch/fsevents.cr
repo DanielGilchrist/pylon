@@ -1,13 +1,4 @@
-require "../platform"
-
 Pylon::Platform.skip_file_unless :macos
-
-require "../fibers"
-require "../filesystem"
-require "../problem"
-require "../scan/ignores"
-require "./dirty_paths"
-require "./lib_fsevents"
 
 module Pylon::Watch
   class FSEvents

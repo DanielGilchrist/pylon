@@ -1,9 +1,6 @@
 require "../../spec_helper"
+
 require "../../support/unrecoverable"
-require "../../../src/pylon/write/writer"
-require "../../../src/pylon/session/staging"
-require "../../../src/pylon/wire/spliced"
-require "../../../src/pylon/disk"
 
 private alias Change = Pylon::Core::Change
 private alias Changes = Pylon::Core::Changes

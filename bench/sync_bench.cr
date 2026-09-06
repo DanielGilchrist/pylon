@@ -1,10 +1,5 @@
+require "../src/pylon/prelude"
 require "file_utils"
-require "../src/pylon/discard"
-require "../src/pylon/session/content_store"
-require "../src/pylon/session/local_endpoint"
-require "../src/pylon/session/remote_endpoint"
-require "../src/pylon/session/process_transport"
-require "../src/pylon/session/session"
 
 include Pylon
 

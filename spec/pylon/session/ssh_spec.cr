@@ -1,6 +1,4 @@
 require "../../spec_helper"
-require "../../../src/pylon/session/process_transport"
-require "../../../src/pylon/session/ssh"
 
 private alias Problem = Pylon::Problem
 private alias ProcessTransport = Pylon::Session::ProcessTransport

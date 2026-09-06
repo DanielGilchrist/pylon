@@ -1,5 +1,3 @@
-require "../problem"
-
 module Pylon::Core
   struct Name
     def self.parse(raw : String) : Name | Problem

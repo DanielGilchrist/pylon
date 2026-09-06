@@ -1,7 +1,4 @@
 require "digest/sha256"
-require "../wire"
-require "./checksums"
-require "./splice/encoder"
 
 module Pylon::Wire
   module Splice

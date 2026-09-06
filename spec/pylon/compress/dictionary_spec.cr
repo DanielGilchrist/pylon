@@ -1,6 +1,4 @@
 require "../../spec_helper"
-require "../../../src/pylon/compress/dictionary"
-require "../../../src/pylon/compress/zstd"
 
 private alias Dictionary = Pylon::Compress::Dictionary
 private alias Problem = Pylon::Problem

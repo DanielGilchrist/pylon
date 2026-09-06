@@ -1,6 +1,3 @@
-require "../compress"
-require "./lib_zstd"
-
 module Pylon::Compress
   class Dictionary
     LEVEL                =  9

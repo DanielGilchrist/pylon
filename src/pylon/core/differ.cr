@@ -1,8 +1,3 @@
-require "./change"
-require "./changes"
-require "./entry"
-require "./paths"
-
 module Pylon::Core
   module Differ
     extend self

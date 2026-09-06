@@ -1,10 +1,8 @@
-require "../../../src/pylon/platform"
+require "../../spec_helper"
 
 Pylon::Platform.skip_file_unless :linux
 
 require "file_utils"
-require "../../spec_helper"
-require "../../../src/pylon/watch/inotify"
 
 private DEFAULT = Pylon::Brand::DEFAULT
 private alias DirtyPaths = Pylon::Watch::DirtyPaths

@@ -1,5 +1,3 @@
-require "../checkpoint"
-
 module Pylon::Session
   class Checkpoint::Schedule
     DEFAULT_INTERVAL = 5.seconds

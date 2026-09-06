@@ -1,13 +1,3 @@
-require "../core"
-require "../fibers"
-require "./fault"
-require "./transfer_progress"
-require "./report"
-require "../core/digests"
-require "../write/writer"
-require "./settled"
-require "./awaiting"
-
 module Pylon::Session
   class Session(A, B, N)
     TRANSFER_BUDGET    = 32_u64 * 1024 * 1024

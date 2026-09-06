@@ -1,5 +1,4 @@
 require "../../spec_helper"
-require "../../../src/pylon/cli/reporter"
 
 private DEFAULT = Pylon::Brand::DEFAULT
 private alias Inbound = Pylon::Session::Inbound

@@ -1,5 +1,3 @@
-require "./metadata"
-
 module Pylon::Scan
   alias Observed = ObservedFile | ObservedDirectory | ObservedLink | ObservedUntracked
 

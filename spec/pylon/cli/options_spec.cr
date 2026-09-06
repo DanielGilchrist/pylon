@@ -1,6 +1,4 @@
 require "../../spec_helper"
-require "../../../src/pylon/cli/sync"
-require "../../../src/pylon/cli/remote"
 
 private DEFAULT_COMPRESSION = Pylon::CLI::Sync::DEFAULT_COMPRESSION
 private alias Remote = Pylon::CLI::Remote

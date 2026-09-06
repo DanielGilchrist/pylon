@@ -1,8 +1,3 @@
-require "../content_source"
-require "../binary"
-require "../chunks"
-require "./writable"
-
 module Pylon::Wire::Message
   struct WriteRequest
     include Writable

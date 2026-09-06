@@ -1,6 +1,3 @@
-require "./spliced"
-require "./binary"
-
 module Pylon::Wire
   abstract struct ContentSource
     struct Materialised < ContentSource

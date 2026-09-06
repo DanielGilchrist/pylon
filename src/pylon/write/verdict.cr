@@ -1,5 +1,3 @@
-require "./outcome"
-
 module Pylon::Write
   enum Verdict
     Proceed

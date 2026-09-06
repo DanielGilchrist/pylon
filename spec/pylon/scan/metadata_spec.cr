@@ -1,5 +1,4 @@
 require "../../spec_helper"
-require "../../../src/pylon/scan/cache_entry"
 
 private alias CacheEntry = Pylon::Scan::CacheEntry
 private alias Metadata = Pylon::Scan::Metadata

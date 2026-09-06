@@ -1,9 +1,4 @@
 require "colorize"
-require "../brand"
-require "../progress"
-require "../session/inbound"
-require "../session/session"
-require "./spinner"
 
 struct Pylon::CLI
   class Reporter

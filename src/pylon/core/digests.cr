@@ -1,8 +1,4 @@
 require "digest/sha256"
-require "./change"
-require "./entry"
-require "./changes"
-require "./digests/collector"
 
 module Pylon::Core
   module Digests

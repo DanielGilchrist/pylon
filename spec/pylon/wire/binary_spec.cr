@@ -1,5 +1,4 @@
 require "../../spec_helper"
-require "../../../src/pylon/wire/binary"
 
 private alias Binary = Pylon::Wire::Binary
 private alias Change = Pylon::Core::Change

@@ -1,6 +1,4 @@
 require "kebab"
-require "../problem"
-require "../session/server"
 
 struct Pylon::CLI
   @[Kebab::Command(

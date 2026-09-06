@@ -1,5 +1,3 @@
-require "../core/changes"
-
 module Pylon::Write
   struct Grouping
     def self.partition(changes : Core::Changes, & : Core::Change -> Bool) : Grouping

@@ -1,17 +1,3 @@
-require "../core/change"
-require "../core/relocation"
-require "../fibers"
-require "../core/paths"
-require "../core/entry"
-require "../missing"
-require "../platform"
-require "../scan/ignores"
-require "../scan/snapshot"
-require "./grouping"
-require "./guard"
-require "./outcome"
-require "../problem"
-
 module Pylon::Write
   struct Writer(F, S)
     # APFS contends on staged writes past ~4 workers, 2 was the measured as being the most optimal.

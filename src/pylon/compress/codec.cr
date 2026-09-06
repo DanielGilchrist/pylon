@@ -1,5 +1,3 @@
-require "../compress"
-
 module Pylon::Compress
   module Codec
     abstract def compress(source : Bytes, into : Bytes) : Bytes | Problem

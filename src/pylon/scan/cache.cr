@@ -1,5 +1,3 @@
-require "./cache_entry"
-
 module Pylon::Scan
   class Cache
     def initialize(initial_capacity : Int32 = 0) : Nil

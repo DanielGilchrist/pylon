@@ -1,5 +1,3 @@
-require "./paths"
-
 module Pylon::Core
   module Reconciler
     extend self

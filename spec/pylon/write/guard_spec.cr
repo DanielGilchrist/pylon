@@ -1,5 +1,4 @@
 require "../../spec_helper"
-require "../../../src/pylon/write/guard"
 
 private alias CacheEntry = Pylon::Scan::CacheEntry
 private alias Directory = Pylon::Core::Directory

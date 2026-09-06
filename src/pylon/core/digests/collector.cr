@@ -1,7 +1,3 @@
-require "../change"
-require "../changes"
-require "../entry"
-
 module Pylon::Core
   module Digests
     struct Collector

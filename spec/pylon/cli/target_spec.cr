@@ -1,5 +1,4 @@
 require "../../spec_helper"
-require "../../../src/pylon/cli/target"
 
 private alias Problem = Pylon::Problem
 private alias Target = Pylon::CLI::Target

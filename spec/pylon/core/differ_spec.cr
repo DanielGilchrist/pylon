@@ -1,5 +1,4 @@
 require "../../spec_helper"
-require "../../../src/pylon/core/differ"
 
 private alias Differ = Pylon::Core::Differ
 private alias Directory = Pylon::Core::Directory

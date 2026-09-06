@@ -1,5 +1,3 @@
-require "./splice"
-
 module Pylon::Wire
   struct Dictionary
     SMALLEST_FILE = 1024_u64

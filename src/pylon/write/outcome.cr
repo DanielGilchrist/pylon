@@ -1,7 +1,3 @@
-require "../core/change"
-require "../core/entry"
-require "../problem"
-
 module Pylon::Write
   alias Skipped = Skip | Problem
 

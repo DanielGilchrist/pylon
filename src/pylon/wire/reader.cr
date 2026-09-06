@@ -1,7 +1,3 @@
-require "../core/relative_path"
-require "../wire"
-require "../problem"
-
 module Pylon::Wire
   # Reads the stream until complete or first failure. When a failure occurs reading essentially
   # becomes a no-op and doesn't touch the stream again.

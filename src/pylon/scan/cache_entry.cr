@@ -1,5 +1,3 @@
-require "./metadata"
-
 module Pylon::Scan
   struct CacheEntry
     def initialize(@metadata : Metadata, @digest : Bytes, @freshly_written : Bool) : Nil

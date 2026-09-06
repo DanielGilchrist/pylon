@@ -1,5 +1,3 @@
-require "../platform"
-
 Pylon::Platform.skip_file_unless :linux
 
 lib LibInotify

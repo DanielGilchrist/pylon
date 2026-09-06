@@ -1,6 +1,3 @@
-require "../wire/content_source"
-require "./local_endpoint"
-
 module Pylon::Session
   struct Delivery < Wire::ContentSource
     def initialize(

@@ -1,5 +1,3 @@
-require "../../src/pylon/session/server"
-
 private alias Configure = Pylon::Wire::Message::Configure
 private alias Server = Pylon::Session::Server
 

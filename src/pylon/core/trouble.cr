@@ -1,5 +1,3 @@
-require "../replica"
-
 module Pylon::Core
   struct Trouble
     def initialize(@path : String, @replica : Replica, @reason : String) : Nil

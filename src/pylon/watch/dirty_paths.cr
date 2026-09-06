@@ -1,8 +1,4 @@
 require "sync"
-require "../core/paths"
-require "../filesystem"
-require "../scan/ignores"
-require "./dirty"
 
 module Pylon::Watch
   class DirtyPaths

@@ -1,10 +1,4 @@
-require "../src/pylon/core"
-require "../src/pylon/core/digests"
-require "../src/pylon/discard"
-require "../src/pylon/disk"
-require "../src/pylon/scan/scanner"
-require "../src/pylon/session/checkpoint"
-require "../src/pylon/wire/message"
+require "../src/pylon/prelude"
 
 include Pylon
 

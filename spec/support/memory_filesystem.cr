@@ -1,7 +1,4 @@
 require "digest/sha256"
-require "../../src/pylon/scan/metadata"
-require "../../src/pylon/problem"
-require "../../src/pylon/filesystem"
 
 private alias Metadata = Pylon::Scan::Metadata
 private alias Problem = Pylon::Problem

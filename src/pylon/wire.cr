@@ -1,6 +1,3 @@
-require "./wire/spliced"
-require "./wire/dictionary"
-
 module Pylon::Wire
   PROTOCOL = 10_u32
   IDENTITY = "PYLON"

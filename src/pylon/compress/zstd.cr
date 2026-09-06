@@ -1,7 +1,3 @@
-require "../compress"
-require "./codec"
-require "./lib_zstd"
-
 module Pylon::Compress
   struct Zstd
     include Codec

@@ -1,10 +1,4 @@
 require "digest/sha256"
-require "../compress/identity"
-require "../compress/zstd"
-require "./binary"
-require "./content_kind"
-require "./spliced"
-require "./dictionary"
 
 module Pylon::Wire
   module Chunks

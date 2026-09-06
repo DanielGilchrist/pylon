@@ -1,7 +1,3 @@
-require "./changes"
-require "./entry"
-require "../problem"
-
 module Pylon::Core
   struct Relocation
     record Extraction, changes : Changes, relocations : Array(Relocation)

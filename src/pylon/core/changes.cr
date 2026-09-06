@@ -1,6 +1,3 @@
-require "./change"
-require "./paths"
-
 module Pylon::Core
   struct Changes
     include Indexable(Change)

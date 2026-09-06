@@ -1,5 +1,4 @@
 require "../../spec_helper"
-require "../../../src/pylon/core/change"
 
 private alias Applier = Pylon::Core::Applier
 private alias Change = Pylon::Core::Change

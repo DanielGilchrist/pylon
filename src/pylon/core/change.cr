@@ -1,6 +1,3 @@
-require "./entry"
-require "./paths"
-
 module Pylon::Core
   struct Change
     def initialize(@path : String, @old : Entry?, @new : Entry?) : Nil

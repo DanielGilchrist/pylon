@@ -1,5 +1,3 @@
-require "./inbound"
-
 module Pylon::Session
   class MeteredReader < IO
     def initialize(@inner : IO, @inbound : Inbound) : Nil

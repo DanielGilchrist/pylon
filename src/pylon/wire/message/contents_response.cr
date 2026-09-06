@@ -1,7 +1,3 @@
-require "../content_source"
-require "../binary"
-require "./writable"
-
 module Pylon::Wire::Message
   struct ContentsResponse
     include Writable

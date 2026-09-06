@@ -1,5 +1,4 @@
 require "../../spec_helper"
-require "../../../src/pylon/core/name"
 
 private alias Name = Pylon::Core::Name
 private alias Problem = Pylon::Problem

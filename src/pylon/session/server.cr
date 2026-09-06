@@ -1,16 +1,4 @@
 require "sync"
-require "../brand"
-require "../fibers"
-require "../problem"
-require "../scan/ignores"
-require "../watch/watcher"
-require "../core/applier"
-require "../core/differ"
-require "../core/digests"
-require "../wire/message"
-require "./local_endpoint"
-require "./content_store"
-require "./checkpoint/schedule"
 
 module Pylon::Session
   class Server

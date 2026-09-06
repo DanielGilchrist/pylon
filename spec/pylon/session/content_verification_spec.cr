@@ -1,6 +1,6 @@
-require "file_utils"
 require "../../spec_helper"
-require "../../../src/pylon/session/local_endpoint"
+
+require "file_utils"
 
 private alias Bases = Pylon::Wire::Bases
 private alias Chunks = Pylon::Wire::Chunks

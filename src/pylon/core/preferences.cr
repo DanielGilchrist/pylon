@@ -1,7 +1,3 @@
-require "../filesystem/pattern"
-require "../problem"
-require "../replica"
-
 module Pylon::Core
   struct Preferences
     FALLBACK = "."

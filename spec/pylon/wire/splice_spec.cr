@@ -1,5 +1,4 @@
 require "../../spec_helper"
-require "../../../src/pylon/wire/splice"
 
 private alias Checksums = Pylon::Wire::Checksums
 private FORMAT = Pylon::Wire::FORMAT

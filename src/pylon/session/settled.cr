@@ -1,5 +1,3 @@
-require "./fault"
-
 module Pylon::Session
   struct Settled(T)
     def initialize(@value : T) : Nil

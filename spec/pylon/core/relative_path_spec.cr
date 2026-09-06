@@ -1,5 +1,4 @@
 require "../../spec_helper"
-require "../../../src/pylon/core/relative_path"
 
 private alias Problem = Pylon::Problem
 private alias RelativePath = Pylon::Core::RelativePath

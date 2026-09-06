@@ -1,6 +1,6 @@
-require "file_utils"
 require "../../../spec_helper"
-require "../../../../src/pylon/session/checkpoint/schedule"
+
+require "file_utils"
 
 private alias Checkpoint = Pylon::Session::Checkpoint
 private alias Problem = Pylon::Problem

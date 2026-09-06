@@ -1,5 +1,3 @@
-require "../../wire"
-
 module Pylon::Wire
   module Splice
     struct Encoder

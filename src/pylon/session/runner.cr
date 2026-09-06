@@ -1,6 +1,3 @@
-require "../watch/dirty_paths"
-require "./session"
-
 module Pylon::Session
   class Runner(A, B, N)
     DEFAULT_DEBOUNCE     = 10.milliseconds

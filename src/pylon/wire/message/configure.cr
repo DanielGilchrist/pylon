@@ -1,7 +1,3 @@
-require "../../brand"
-require "../binary"
-require "./writable"
-
 module Pylon::Wire::Message
   struct Configure
     include Writable

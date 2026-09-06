@@ -1,6 +1,3 @@
-require "../platform"
-require "../problem"
-
 module Pylon::Scan
   struct Metadata
     NANOSECONDS_PER_SECOND = 1_000_000_000_i64

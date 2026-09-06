@@ -1,7 +1,3 @@
-require "./paths"
-require "./name"
-require "../problem"
-
 module Pylon::Core
   struct RelativePath
     ROOT                = new("")

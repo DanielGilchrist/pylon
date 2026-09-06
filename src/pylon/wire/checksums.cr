@@ -1,6 +1,4 @@
 require "digest/sha256"
-require "../wire"
-require "./checksums/block"
 
 module Pylon::Wire
   struct Checksums

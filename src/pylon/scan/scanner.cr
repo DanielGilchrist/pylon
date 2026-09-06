@@ -1,13 +1,4 @@
 require "digest/sha256"
-require "../fibers"
-require "../filesystem"
-require "../wire"
-require "../core/entry"
-require "../core/paths"
-require "./cache_entry"
-require "../progress"
-require "./ignores"
-require "./snapshot"
 
 module Pylon::Scan
   struct Scanner(F, K)

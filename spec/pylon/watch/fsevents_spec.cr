@@ -1,10 +1,8 @@
-require "../../../src/pylon/platform"
+require "../../spec_helper"
 
 Pylon::Platform.skip_file_unless :macos
 
 require "file_utils"
-require "../../spec_helper"
-require "../../../src/pylon/watch/fsevents"
 
 private alias DirtyPaths = Pylon::Watch::DirtyPaths
 private alias Everything = Pylon::Watch::Everything

@@ -1,10 +1,4 @@
 require "sync"
-require "../core/digests"
-require "../filesystem"
-require "../missing"
-require "../problem"
-require "../wire"
-require "./locations"
 
 module Pylon::Session
   class ContentStore

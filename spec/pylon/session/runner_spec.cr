@@ -1,8 +1,6 @@
-require "file_utils"
 require "../../spec_helper"
-require "../../../src/pylon/session/local_endpoint"
-require "../../../src/pylon/session/runner"
-require "../../../src/pylon/watch/dirty_paths"
+
+require "file_utils"
 
 private alias DirtyPaths = Pylon::Watch::DirtyPaths
 private alias LocalEndpoint = Pylon::Session::LocalEndpoint

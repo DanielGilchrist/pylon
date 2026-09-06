@@ -1,21 +1,4 @@
 require "digest/sha256"
-require "../compress/identity"
-require "../compress/dictionary"
-require "../core/applier"
-require "../core/digests"
-require "../scan/scanner"
-require "../wire/dictionary"
-require "../watch/dirty"
-require "../disk"
-require "../write/writer"
-require "../wire/message"
-require "./staging"
-require "./content_store"
-require "./locations"
-require "../discard"
-require "./settled"
-require "./delivery"
-require "../progress"
 
 module Pylon::Session
   class LocalEndpoint

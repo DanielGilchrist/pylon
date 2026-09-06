@@ -1,15 +1,10 @@
-require "../../../src/pylon/platform"
+require "../../spec_helper"
 
 Pylon::Platform.skip_file_unless :macos
 
 require "digest/sha256"
 require "file_utils"
 require "socket"
-require "../../spec_helper"
-require "../../../src/pylon/session/server"
-require "../../../src/pylon/session/remote_endpoint"
-require "../../../src/pylon/session/session"
-require "../../../src/pylon/session/content_store"
 require "../../support/remote_end"
 
 private alias ContentStore = Pylon::Session::ContentStore

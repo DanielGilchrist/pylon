@@ -1,6 +1,3 @@
-require "../core/entry"
-require "./cache"
-
 module Pylon::Scan
   struct Snapshot
     def initialize(

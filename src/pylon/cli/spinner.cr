@@ -1,7 +1,5 @@
 require "colorize"
 
-require "../fibers"
-
 struct Pylon::CLI
   class Spinner
     FRAMES   = {"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}

@@ -1,8 +1,3 @@
-require "../compress/dictionary"
-require "../core/digests"
-require "../wire/message"
-require "../wire/splice"
-
 module Pylon::Session
   struct Staging(R)
     def initialize(@contents : Wire::Contents, @resolver : R) : Nil

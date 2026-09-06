@@ -1,20 +1,4 @@
 require "kebab"
-require "../brand"
-require "../scan/ignores"
-require "../session/local_endpoint"
-require "../session/checkpoint/schedule"
-require "../session/content_store"
-require "../session/process_transport"
-require "../session/remote_endpoint"
-require "../session/runner"
-require "../session/session"
-require "../session/ssh"
-require "../watch/dirty_paths"
-require "../watch/watcher"
-require "../wire/message"
-require "./brand_converter"
-require "./reporter"
-require "./target"
 
 struct Pylon::CLI
   @[Kebab::Command(summary: "Sync a local directory with one on a remote host")]

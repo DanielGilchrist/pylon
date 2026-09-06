@@ -1,10 +1,3 @@
-require "../core/change"
-require "./checksums"
-require "./reader"
-require "../core/entry"
-require "../scan/cache_entry"
-require "../write/writer"
-
 module Pylon::Wire
   module Binary
     extend self

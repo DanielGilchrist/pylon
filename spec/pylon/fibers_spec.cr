@@ -1,5 +1,4 @@
 require "../spec_helper"
-require "../../src/pylon/fibers"
 
 private alias Fibers = Pylon::Fibers
 

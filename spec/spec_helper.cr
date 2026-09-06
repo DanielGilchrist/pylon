@@ -1,9 +1,7 @@
 require "spec"
+require "../src/pylon/prelude"
 require "./support/allocations"
 require "./support/entries"
-require "../src/pylon/discard"
-require "../src/pylon/session/local_endpoint"
-require "../src/pylon/session/session"
 
 private alias Changes = Pylon::Core::Changes
 private alias Discard = Pylon::Discard

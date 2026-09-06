@@ -1,14 +1,4 @@
-require "../platform"
-
 Pylon::Platform.skip_file_unless :linux
-
-require "../brand"
-require "../core/paths"
-require "../fibers"
-require "../problem"
-require "../scan/ignores"
-require "./dirty_paths"
-require "./lib_inotify"
 
 module Pylon::Watch
   class Inotify
