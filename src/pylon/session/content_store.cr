@@ -17,11 +17,11 @@ module Pylon::Session
         )
       end
 
-      held = Set(Bytes).new
+      kept = Kept.new
 
       listed = Filesystem.each_child(directory) do |name|
         digest = name.hexbytes?
-        held << digest if digest && digest.size == Wire::DIGEST_BYTES
+        kept.add(digest) if digest && digest.size == Wire::DIGEST_BYTES
       end
 
       case listed
@@ -29,7 +29,7 @@ module Pylon::Session
         Problem.new("the directory #{directory} vanished while it was being opened")
       in Problem
         Problem.new("the directory #{directory} could not be listed: #{listed.reason}")
-      in Nil then new(directory, root, held)
+      in Nil then new(directory, root, kept)
       end
     end
 
@@ -47,62 +47,41 @@ module Pylon::Session
       blocked
     end
 
-    private def initialize(@directory : String, @root : String, @held : Set(Bytes)) : Nil
-      @order = Deque(Bytes).new(@held.size)
-      @held.each { |digest| @order.push(digest) }
+    private def initialize(@directory : String, @root : String, @kept : Kept) : Nil
       @lock = Sync::Mutex.new
     end
 
     def keep(relative_path : String, digest : Bytes) : Nil
-      return if @lock.synchronize { @held.includes?(digest) }
+      return if @lock.synchronize { @kept.includes?(digest) }
       return if Filesystem.snapshot(File.join(@root, relative_path), path_for(digest))
 
-      @lock.synchronize do
-        next unless @held.add?(digest)
-
-        @order.push(digest)
-      end
+      @lock.synchronize { @kept.add(digest) }
     end
 
     def holds?(digest : Bytes) : Bool
-      @lock.synchronize { @held.includes?(digest) }
+      @lock.synchronize { @kept.includes?(digest) }
     end
 
     def held(digests : Array(Bytes)) : Array(Bytes)
-      @lock.synchronize { digests.select { |digest| @held.includes?(digest) } }
+      @lock.synchronize { digests.select { |digest| @kept.includes?(digest) } }
     end
 
     def content(digest : Bytes) : Bytes?
       return unless holds?(digest)
 
       found = verified_content(digest)
-      discard(digest) if found.nil?
+      @lock.synchronize { discard([digest]) } if found.nil?
       found
     end
 
     def prune(live : Locations) : Nil
-      @lock.synchronize do
-        return if @held.size - live.size <= ORPHAN_LIMIT
-
-        orphans = @order.count { |digest| @held.includes?(digest) && !live.has?(digest) }
-
-        while orphans > ORPHAN_LIMIT && (oldest = @order.shift?)
-          next unless @held.includes?(oldest)
-
-          if live.has?(oldest)
-            @order.push(oldest)
-          else
-            @held.delete(oldest)
-            Filesystem.delete(path_for(oldest))
-            orphans -= 1
-          end
-        end
-      end
+      @lock.synchronize { discard(@kept.surplus(live, bound: ORPHAN_LIMIT)) }
     end
 
-    private def discard(digest : Bytes) : Nil
-      Filesystem.delete(path_for(digest))
-      @lock.synchronize { @held.delete(digest) }
+    # Callers hold the lock.
+    private def discard(digests : Array(Bytes)) : Nil
+      digests.each { |digest| Filesystem.delete(path_for(digest)) }
+      @kept.delete_all(digests)
     end
 
     private def path_for(digest : Bytes) : String

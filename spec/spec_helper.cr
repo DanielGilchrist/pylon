@@ -1,6 +1,8 @@
 require "spec"
 require "../src/pylon/prelude"
 require "./support/allocations"
+require "./support/privileges"
+require "./support/waiting"
 require "./support/sandbox"
 require "./support/entries"
 
@@ -117,4 +119,9 @@ def assert_descriptor_change(expected : Int32, & : ->) : Nil
   before = Dir.children("/dev/fd").size
   yield
   (Dir.children("/dev/fd").size - before).should eq(expected)
+end
+
+def assert_not_root : Nil
+  running_as_root?.should be_false,
+    "Can't run specs as root as it bypasses permissions which breaks this spec"
 end

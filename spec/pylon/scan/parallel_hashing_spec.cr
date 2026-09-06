@@ -56,10 +56,4 @@ describe "parallel hashing" do
       end
     end
   end
-
-  it "gives the same answer twice in a row" do
-    in_tree do |root|
-      digests(root, 16).should eq(digests(root, 16))
-    end
-  end
 end

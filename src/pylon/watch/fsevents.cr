@@ -44,6 +44,7 @@ module Pylon::Watch
     end
 
     @started : Start? | Unresolved = Unresolved.new
+    @run_loop : LibFSEvents::CFRef? = nil
 
     def initialize(@root : String, @ignores : Scan::Ignores, @dirty_paths : DirtyPaths) : Nil
       @prefix = "#{@root}/"
@@ -66,6 +67,9 @@ module Pylon::Watch
       return if @stopping
 
       @stopping = true
+      if (run_loop = @run_loop)
+        LibFSEvents.run_loop_stop(run_loop)
+      end
       @done.receive?
     end
 
@@ -94,9 +98,11 @@ module Pylon::Watch
         return
       end
 
+      run_loop = LibFSEvents.run_loop_current
+
       LibFSEvents.stream_schedule(
         stream,
-        LibFSEvents.run_loop_current,
+        run_loop,
         LibFSEvents.kCFRunLoopDefaultMode,
       )
 
@@ -108,6 +114,7 @@ module Pylon::Watch
         return
       end
 
+      @run_loop = run_loop
       @ready.send(Start::Running)
 
       until @stopping

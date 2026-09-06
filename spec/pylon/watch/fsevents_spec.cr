@@ -6,18 +6,27 @@ private alias DirtyPaths = Pylon::Watch::DirtyPaths
 private alias Everything = Pylon::Watch::Everything
 private alias FSEvents = Pylon::Watch::FSEvents
 private alias Touched = Pylon::Watch::Touched
-private alias Dirty = Pylon::Watch::Dirty
 
-private def consume_within(watcher : FSEvents, seconds : Float64, & : Dirty -> Bool) : Bool
-  deadline = Time.instant + seconds.seconds
-
-  while Time.instant < deadline
-    return true if yield watcher.dirty_paths.consume
-
-    sleep(50.milliseconds)
+# `consume` empties the watcher, so an example that asks several questions of one run has to keep
+# what it has already been told.
+private class Seen
+  def initialize(@watcher : FSEvents) : Nil
+    @paths = Set(String).new
+    @flushed = false
   end
 
-  false
+  getter paths : Set(String)
+
+  def flushed? : Bool
+    @flushed
+  end
+
+  def refresh : Nil
+    case (dirty = @watcher.dirty_paths.consume)
+    in Everything then @flushed = true
+    in Touched    then @paths.concat(dirty.paths)
+    end
+  end
 end
 
 describe FSEvents do
@@ -31,34 +40,32 @@ describe FSEvents do
       next unless watcher.is_a?(FSEvents)
 
       begin
-        sleep(200.milliseconds)
-        root.write("code.rb", "puts 1")
+        seen = Seen.new(watcher)
 
-        seen = consume_within(watcher, 5.0) do |dirty|
-          dirty.is_a?(Everything) || (dirty.is_a?(Touched) && dirty.paths.includes?("code.rb"))
+        root.write("code.rb", "puts 1")
+        await(watcher.dirty_paths.signals, for: "a signal from the watcher") do
+          seen.refresh
+          seen.flushed? || seen.paths.includes?("code.rb")
         end
-        seen.should be_true
 
         root.directory("nested/deeper")
         root.write("nested/deeper/inner.rb", "puts 2")
-
-        seen = consume_within(watcher, 5.0) do |dirty|
-          next true if dirty.is_a?(Everything)
-
-          dirty.is_a?(Touched) && dirty.paths.any?(&.starts_with?("nested"))
+        await(watcher.dirty_paths.signals, for: "a signal from the watcher") do
+          seen.refresh
+          seen.flushed? || seen.paths.any?(&.starts_with?("nested"))
         end
-        seen.should be_true
 
+        # The stream reports in the order the writes happened, so once the later write has landed
+        # the ignored one would have landed too if it were ever going to.
         root.write("log/noise.log", "ignored")
-        sleep(400.milliseconds)
-
-        leftover = watcher.dirty_paths.consume
-        case leftover
-        in Everything
-          fail("expected per-path events, saw a fresh-instance flush")
-        in Touched
-          leftover.paths.none?(&.starts_with?("log")).should be_true
+        root.write("after_the_noise.rb", "puts 3")
+        await(watcher.dirty_paths.signals, for: "a signal from the watcher") do
+          seen.refresh
+          seen.flushed? || seen.paths.includes?("after_the_noise.rb")
         end
+
+        seen.flushed?.should be_false, "expected per-path events, saw a fresh-instance flush"
+        seen.paths.none?(&.starts_with?("log")).should be_true
       ensure
         watcher.close
       end
@@ -78,15 +85,14 @@ describe FSEvents do
       next unless watcher.is_a?(FSEvents)
 
       begin
-        sleep(200.milliseconds)
+        seen = Seen.new(watcher)
+
         File.rename(staging.path("incoming"), root.path("incoming"))
 
-        seen = consume_within(watcher, 5.0) do |dirty|
-          dirty.is_a?(Everything) ||
-            (dirty.is_a?(Touched) && dirty.paths.includes?("incoming/sub/inner.rb"))
+        await(watcher.dirty_paths.signals, for: "a signal from the watcher") do
+          seen.refresh
+          seen.flushed? || seen.paths.includes?("incoming/sub/inner.rb")
         end
-
-        seen.should be_true
       ensure
         watcher.close
       end

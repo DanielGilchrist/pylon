@@ -10,6 +10,10 @@ private def burst(dirty_paths : DirtyPaths) : Nil
   dirty_paths.signals.send(nil)
 end
 
+private def cycles : Channel(Report)
+  Channel(Report).new(16)
+end
+
 private def in_pair(
   & : Sandbox, Sandbox, Pylon::Session::Session(LocalEndpoint, LocalEndpoint, Pylon::Discard) ->
 ) : Nil
@@ -32,20 +36,19 @@ describe Runner do
         debounce: 1.millisecond,
         poll: 10.milliseconds,
       )
-      reports = Array(Report).new
+      reports = cycles
 
       spawn do
         runner.run do |report, _elapsed|
-          reports << report
+          reports.send(report)
           runner.stop
         end
       end
 
-      Fiber.yield
-      sleep 50.milliseconds
+      await(reports, for: "the first cycle")
 
       remote.read("first.rb").should eq("x")
-      reports.size.should eq(1)
+      never_arrives(reports, for: "a second cycle", within: 30.milliseconds)
     end
   end
 
@@ -58,22 +61,19 @@ describe Runner do
         debounce: 1.millisecond,
         poll: 1.second,
       )
-      reports = Array(Report).new
+      reports = cycles
 
-      spawn { runner.run { |report, _elapsed| reports << report } }
+      spawn { runner.run { |report, _elapsed| reports.send(report) } }
 
-      Fiber.yield
-      sleep 30.milliseconds
-      reports.size.should eq(1)
+      await(reports, for: "the first cycle")
 
       local.write("later.rb", "y")
       dirty_paths.add("later.rb")
       dirty_paths.signals.send(nil)
-      sleep 60.milliseconds
+      await(reports, for: "the cycle the signal asked for")
 
       runner.stop
       remote.read("later.rb").should eq("y")
-      reports.size.should be >= 2
     end
   end
 
@@ -85,15 +85,14 @@ describe Runner do
         debounce: 1.millisecond,
         poll: 10.milliseconds,
       )
-      reports = Array(Report).new
+      reports = cycles
 
-      spawn { runner.run { |report, _elapsed| reports << report } }
+      spawn { runner.run { |report, _elapsed| reports.send(report) } }
 
-      Fiber.yield
-      sleep 80.milliseconds
+      await(reports, for: "the first cycle")
+      never_arrives(reports, for: "a second cycle", within: 80.milliseconds)
+
       runner.stop
-
-      reports.size.should eq(1)
     end
   end
 
@@ -107,23 +106,22 @@ describe Runner do
         poll: 1.second,
         burst_quiet: 20.milliseconds,
       )
-      reports = Array(Report).new
+      reports = cycles
 
-      spawn { runner.run { |report, _elapsed| reports << report } }
+      spawn { runner.run { |report, _elapsed| reports.send(report) } }
 
-      Fiber.yield
-      sleep 20.milliseconds
+      await(reports, for: "the first cycle")
 
       10.times do |index|
         local.write("burst_#{index}.rb", "b")
         burst(dirty_paths)
       end
 
-      sleep 150.milliseconds
+      coalesced = await(reports, for: "the cycle for the burst")
+      never_arrives(reports, for: "a second cycle for the same burst", within: 80.milliseconds)
       runner.stop
 
-      reports.size.should eq(2)
-      reports.last.remote_outcomes.count(&.applied?).should eq(10)
+      coalesced.remote_outcomes.count(&.applied?).should eq(10)
     end
   end
 
@@ -137,12 +135,11 @@ describe Runner do
         poll: 1.second,
         burst_quiet: 120.milliseconds,
       )
-      reports = Array(Report).new
+      reports = cycles
 
-      spawn { runner.run { |report, _elapsed| reports << report } }
+      spawn { runner.run { |report, _elapsed| reports.send(report) } }
 
-      Fiber.yield
-      sleep 20.milliseconds
+      await(reports, for: "the first cycle")
 
       5.times do |index|
         local.write("spread_#{index}.rb", "s")
@@ -151,11 +148,11 @@ describe Runner do
         sleep 25.milliseconds
       end
 
-      sleep 250.milliseconds
+      coalesced = await(reports, for: "the cycle for the spread out signals")
+      never_arrives(reports, for: "a cycle before the signals stopped", within: 80.milliseconds)
       runner.stop
 
-      reports.size.should eq(2)
-      reports.last.remote_outcomes.count(&.applied?).should eq(5)
+      coalesced.remote_outcomes.count(&.applied?).should eq(5)
     end
   end
 
@@ -170,12 +167,11 @@ describe Runner do
         burst_quiet: 60.milliseconds,
         settle_limit: 100.milliseconds,
       )
-      reports = Array(Report).new
+      reports = cycles
 
-      spawn { runner.run { |report, _elapsed| reports << report } }
+      spawn { runner.run { |report, _elapsed| reports.send(report) } }
 
-      Fiber.yield
-      sleep 20.milliseconds
+      await(reports, for: "the first cycle")
 
       local.write("endless.rb", "e")
       dirty_paths.add("endless.rb")
@@ -192,12 +188,11 @@ describe Runner do
         end
       end
 
-      sleep 400.milliseconds
+      forced = await(reports, for: "the cycle the settle limit forced")
       streaming = false
       runner.stop
 
-      reports.size.should be >= 2
-      reports[1].remote_outcomes.count(&.applied?).should eq(1)
+      forced.remote_outcomes.count(&.applied?).should eq(1)
     end
   end
 end

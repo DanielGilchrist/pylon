@@ -343,4 +343,94 @@ Pylon explicitly makes use of execution contexts introduced in Crystal 1.21:
 
 - Specs substitute in-memory fakes for `Disk`. Nothing in `core/` touches I/O, so it is property-testable (`spec/pylon/core/properties_spec.cr` runs seeded random reconciliations).
 - A bug fix ships with a regression spec verified to fail against the bug.
-- `bench/` rots silently. Compile-check it after any rename.
+- Light mutation testing should be used to ensure appropriate coverage for important cases.
+- `bench/` doesn't have automated testing. Compile-check it after any rename.
+
+### Never use `sleep` to wait on async work.
+
+`sleep` slows down the test suite unnecessarily and is often flakey. Use `await`, `never_arrives` and `await_path` helpers instead.
+
+```crystal
+# Bad: 400ms every run and could still flake
+sleep 400.milliseconds
+reports.size.should eq(2)
+
+# Good: wakes the instant the work lands
+reports = Channel(Report).new(16)
+spawn { runner.run { |report, _elapsed| reports.send(report) } }
+
+coalesced = await(reports, for: "the cycle for the burst")
+never_arrives(reports, for: "a second cycle", within: 80.milliseconds)
+```
+
+**Note:** Be careful with these APIs as well, the `within` arg for `never_arrives` in particular could introduce flakeys if not careful and should only be used when absolutely necessary.
+
+### A slow spec is usually telling you the app is slow
+
+Wall clock a spec spends waiting on the app is likely time the user spends waiting too. Before reaching for a spec-side workaround, check whether the app is what is slow. Measure rather than guess: `crystal spec --junit_output <dir>` gives per-example timings, and `sample <pid>` over a spec binary run in a loop shows where the time is actually being spent.
+
+### Test-scale constants belong in a testable object, not in a parameter
+
+A spec that has to build 20,000 files to emulate a production scenario is a design smell, not a spec problem. Specs shouldn't need to reach the scale to properly test a scenario.
+
+```crystal
+# Bad: specs are forced to reach the scale to assert correct behaviour
+def prune(live : Locations) : Nil
+  return if @held.size - live.size <= ORPHAN_LIMIT
+
+  orphans = @order.count { |digest| @held.includes?(digest) && !live.has?(digest) }
+
+  while orphans > ORPHAN_LIMIT && (oldest = @order.shift?)
+    # ... sloooooooooow
+  end
+end
+
+(ORPHAN_LIMIT + 5).times { |index| directory.write(Digest::SHA256.hexdigest(index.to_s), "") }
+reopened.prune(live)
+directory.children.size.should eq(ORPHAN_LIMIT + kept.size)
+```
+
+This could be solved with a limit parameter but we shouldn't do this. A spec would then be the only caller that ever passes one and would be proving a configuration that doesn't accurately reflect what the app does/needs.
+
+```crystal
+# Bad: a bound nothing in the app ever sets
+def self.open(directory : String, root : String, orphan_limit : Int32 = ORPHAN_LIMIT)
+```
+
+The problem here is that `prune` has multiple responsibilities. It must understand when to prune and to actually do so. The only way to modify the when is for the test to actually hit the limit (which in this case is very large). We can instead encapsulate `@held` and `@order` into a new type that takes a bound when asking about a potential surplus of entries.
+
+```crystal
+# Good: src/pylon/session/content_store/kept.cr
+class ContentStore::Kept
+  # ... includes?, delete and delete_all keep the set and the order in step
+
+  def add(digest : Bytes) : Nil
+    @order.push(digest) if @digests.add?(digest)
+  end
+
+  # The oldest digests the tree no longer points at, enough of them to come back to the bound.
+  def surplus(live : Locations, *, bound : Int32) : Array(Bytes)
+    orphaned = @order.reject { |digest| live.has?(digest) }
+    orphaned.first(Math.max(orphaned.size - bound, 0))
+  end
+end
+```
+
+```crystal
+def prune(live : Locations) : Nil
+  @lock.synchronize do
+    surplus = @kept.surplus(live, bound: ORPHAN_LIMIT)
+    surplus.each { |digest| Filesystem.delete(path_for(digest)) }
+    @kept.delete_all(surplus)
+  end
+end
+```
+
+Then we can easily assert on the new method on a much smaller scale:
+
+```crystal
+# three digests instead of twenty thousand files
+kept(STALE, WANTED, FRESH).surplus(live(WANTED), bound: 1).should eq([STALE])
+```
+
+This is one specific example, but the point is that code should be easy to test, but that doesn't mean that the design should be compromised to fit the needs of specs.

@@ -75,6 +75,8 @@ describe Disk do
   end
 
   it "reports why a directory could not be removed instead of pretending it was" do
+    assert_not_root
+
     in_sandbox do |root, target|
       stuck = root.directory("stuck")
       stuck.write("kept.txt", "still here")

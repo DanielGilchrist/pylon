@@ -46,29 +46,21 @@ private def in_watched_pair(
   end
 end
 
-private def await_push(pushes : ::Channel(Nil)) : Nil
-  select
-  when pushes.receive
-  when timeout(5.seconds)
-    fail("the server never pushed a tree update")
-  end
-end
-
 describe "the shared tree baseline" do
   it "stays correct across the client's own writes" do
     in_watched_pair do |local, remote, session, pushes|
       20.times { |index| local.write("f#{index}.rb", "body #{index}") }
       cycle!(session, tick)
-      await_push(pushes)
+      await(pushes, for: "a tree push from the server")
 
       local.write("mine.rb", "written by the client")
       cycle!(session, tick)
-      await_push(pushes)
+      await(pushes, for: "a tree push from the server")
 
       remote.write("theirs.rb", "written on the box")
 
       5.times do
-        await_push(pushes)
+        await(pushes, for: "a tree push from the server")
         cycle!(session, tick).halted?.should be_false
         break if local.exists?("theirs.rb")
       end
@@ -91,7 +83,7 @@ describe "the shared tree baseline" do
       local.write("db/structure.sql", "-- schema")
 
       cycle!(session, tick)
-      await_push(pushes)
+      await(pushes, for: "a tree push from the server")
 
       3.times do
         report = cycle!(session, tick)

@@ -55,16 +55,18 @@ describe "a session over the wire protocol" do
     end
   end
 
+  # Two of these fit a batch with a fifth of the budget to spare and three overrun it by three
+  # fifths, so which of them travel together does not turn on a byte either way.
   it "pulls content that does not fit one transfer budget in several batches" do
     in_remote_pair do |local, remote, session, endpoint|
-      third = (Pylon::Session::Session::TRANSFER_BUDGET // 3 + 1).to_i32
+      blob = (Pylon::Session::Session::TRANSFER_BUDGET // 5 * 2).to_i32
       3.times do |index|
-        remote.write("blob#{index}.bin", Bytes.new(third, (index + 1).to_u8))
+        remote.write("blob#{index}.bin", Bytes.new(blob, (index + 1).to_u8))
       end
 
       cycle!(session, tick)
 
-      3.times { |index| File.size(local.path("blob#{index}.bin")).should eq(third) }
+      3.times { |index| File.size(local.path("blob#{index}.bin")).should eq(blob) }
       endpoint.exchanges.should eq(2)
       cycle!(session, tick).quiet?.should be_true
     end

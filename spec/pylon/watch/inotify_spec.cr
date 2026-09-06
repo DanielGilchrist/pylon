@@ -9,7 +9,7 @@ private alias Inotify = Pylon::Watch::Inotify
 private def collect_until(watcher : Inotify, & : Set(String) -> Bool) : Set(String)
   seen = Set(String).new
 
-  10.times do
+  await(watcher.dirty_paths.signals, for: "a signal from the watcher") do
     case (dirty = watcher.dirty_paths.consume)
     in Pylon::Watch::Everything
       fail("expected per-path events, saw a fresh-instance flush")
@@ -17,13 +17,7 @@ private def collect_until(watcher : Inotify, & : Set(String) -> Bool) : Set(Stri
       dirty.paths.each { |path| seen << path }
     end
 
-    return seen if yield seen
-
-    select
-    when watcher.dirty_paths.signals.receive
-    when timeout(2.seconds)
-      return seen
-    end
+    yield seen
   end
 
   seen

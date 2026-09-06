@@ -6,10 +6,6 @@ module Pylon::Session
       @by_digest = Hash(Bytes, Located).new
     end
 
-    def size : Int32
-      @by_digest.size
-    end
-
     def has?(digest : Bytes) : Bool
       @by_digest.has_key?(digest)
     end

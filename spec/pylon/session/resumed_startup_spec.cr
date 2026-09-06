@@ -69,16 +69,6 @@ private def tick : Int64
   Time.utc.to_unix_ns.to_i64 + Random.rand(1_000_000_i64)
 end
 
-private def wait_for_state(path : String) : Nil
-  50.times do
-    return if File.exists?(path)
-
-    sleep(20.milliseconds)
-  end
-
-  raise "the server never saved its state at #{path}"
-end
-
 describe "resuming from a persisted remote tree" do
   it "receives only what changed since the tree both sides persisted" do
     with_roots do |ends|
@@ -89,7 +79,7 @@ describe "resuming from a persisted remote tree" do
         cycle!(session, tick)
         shared_tree = endpoint.tree
       end
-      wait_for_state(ends.state)
+      await_path(ends.state)
 
       ends.remote.write("file_300.rb", "late arrival")
 
@@ -109,7 +99,7 @@ describe "resuming from a persisted remote tree" do
       connect(ends, nil) do |session, _, _|
         cycle!(session, tick)
       end
-      wait_for_state(ends.state)
+      await_path(ends.state)
 
       stale = Pylon::Core::Directory.new({"other.rb" => Fixtures.f1})
 

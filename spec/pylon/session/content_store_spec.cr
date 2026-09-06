@@ -4,7 +4,6 @@ require "digest/sha256"
 
 private alias ContentStore = Pylon::Session::ContentStore
 private alias Locations = Pylon::Session::Locations
-private ORPHAN_LIMIT = Pylon::Session::ContentStore::ORPHAN_LIMIT
 private alias Problem = Pylon::Problem
 
 private def in_store(& : Sandbox, ContentStore, Sandbox ->) : Nil
@@ -66,26 +65,6 @@ describe ContentStore do
 
       store.holds?(Bytes.new(32, 1_u8)).should be_false
       directory.children.should be_empty
-    end
-  end
-
-  it "prunes orphans past the bound and keeps what the tree still holds" do
-    in_store do |tree, _, directory|
-      kept = Array.new(3) { |index| place(tree, "kept#{index}", "kept #{index}") }
-      kept.each { |digest| directory.write(digest.hexstring, "") }
-      (ORPHAN_LIMIT + 5).times do |index|
-        directory.write(Digest::SHA256.hexdigest(index.to_s), "")
-      end
-
-      reopened = ContentStore.open(directory.root, tree.root)
-      raise "the store could not be reopened" if reopened.is_a?(Problem)
-      live = Locations.new
-      kept.each_with_index { |digest, index| live.remember(digest, "kept#{index}", 0_u64) }
-
-      reopened.prune(live)
-
-      reopened.held(kept).should eq(kept)
-      directory.children.size.should eq(ORPHAN_LIMIT + kept.size)
     end
   end
 

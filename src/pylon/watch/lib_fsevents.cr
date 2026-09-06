@@ -54,6 +54,7 @@ lib LibFSEvents
     seconds : Float64,
     return_after_source : UInt8,
   ) : Int32
+  fun run_loop_stop = CFRunLoopStop(run_loop : CFRef)
 
   fun stream_create = FSEventStreamCreate(
     allocator : Void*,
