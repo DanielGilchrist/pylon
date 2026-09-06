@@ -1,4 +1,6 @@
-{% skip_file unless flag?(:darwin) %}
+require "../platform"
+
+Pylon::Platform.skip_file_unless :macos
 
 lib LibClone
   NOFOLLOW = 0x0001_u32

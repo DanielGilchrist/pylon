@@ -1,33 +1,43 @@
 module Pylon
   module Platform
-    PLATFORMS = {"macos", "linux"}
+    FLAGS = {macos: :darwin, linux: :linux}
+
+    macro skip_file_unless(platform)
+      {% unless platform.is_a?(SymbolLiteral) %}
+        {% raise "Platform.skip_file_unless takes a symbol, got #{platform}" %}
+      {% end %}
+      {% unless FLAGS.keys.includes?(platform.id) %}
+        {% raise "Platform.skip_file_unless expects one of #{FLAGS.keys.join(", ").id}, " \
+                 "got #{platform}" %}
+      {% end %}
+      {% skip_file unless flag?(FLAGS[platform]) %}
+    end
 
     macro select(&block)
       {% statements = block.body.is_a?(Expressions) ? block.body.expressions : [block.body] %}
-      {% branches = {} of String => ASTNode %}
+      {% names = FLAGS.keys.map(&.id) %}
+      {% branches = {} of MacroId => ASTNode %}
       {% for statement in statements %}
         {% branch = statement.is_a?(Call) && statement.block && statement.args.empty? %}
-        {% unless branch && PLATFORMS.includes?(statement.name.stringify) %}
-          {% raise "Platform.select takes exactly one `macos do ... end` and one `linux do ... " \
-                   "end`, found #{statement}" %}
+        {% unless branch && names.includes?(statement.name) %}
+          {% raise "Platform.select takes one block per platform (#{names.join(", ").id}), " \
+                   "found #{statement}" %}
         {% end %}
-        {% if branches.keys.includes?(statement.name.stringify) %}
+        {% if branches.keys.includes?(statement.name) %}
           {% raise "Platform.select names #{statement.name} twice" %}
         {% end %}
-        {% branches[statement.name.stringify] = statement.block.body %}
+        {% branches[statement.name] = statement.block.body %}
       {% end %}
-      {% for platform in PLATFORMS %}
-        {% unless branches.keys.includes?(platform) %}
-          {% raise "Platform.select is missing the #{platform.id} branch" %}
+      {% for name in names %}
+        {% unless branches.keys.includes?(name) %}
+          {% raise "Platform.select is missing the #{name} branch" %}
         {% end %}
       {% end %}
-      {% if flag?(:darwin) %}
-        {{ branches["macos"] }}
-      {% elsif flag?(:linux) %}
-        {{ branches["linux"] }}
-      {% else %}
-        {% raise "pylon runs on macOS and Linux only, and this build targets neither" %}
+      {% current = names.find { |name| flag?(FLAGS[name]) } %}
+      {% unless current %}
+        {% raise "pylon runs on #{names.join(" and ").id} only, and this build targets neither" %}
       {% end %}
+      {{ branches[current] }}
     end
   end
 end

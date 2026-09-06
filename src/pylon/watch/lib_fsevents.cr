@@ -1,4 +1,6 @@
-{% skip_file unless flag?(:darwin) %}
+require "../platform"
+
+Pylon::Platform.skip_file_unless :macos
 
 @[Link(framework: "CoreFoundation")]
 @[Link(framework: "CoreServices")]

@@ -1,4 +1,6 @@
-{% skip_file unless flag?(:darwin) %}
+require "../../../src/pylon/platform"
+
+Pylon::Platform.skip_file_unless :macos
 
 require "digest/sha256"
 require "file_utils"

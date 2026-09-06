@@ -1,4 +1,6 @@
-{% skip_file unless flag?(:linux) %}
+require "../platform"
+
+Pylon::Platform.skip_file_unless :linux
 
 lib LibInotify
   IN_MODIFY      = 0x00000002_u32

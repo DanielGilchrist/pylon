@@ -1,4 +1,6 @@
-{% skip_file unless flag?(:linux) %}
+require "../../../src/pylon/platform"
+
+Pylon::Platform.skip_file_unless :linux
 
 require "file_utils"
 require "../../spec_helper"
