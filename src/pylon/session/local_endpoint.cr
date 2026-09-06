@@ -11,6 +11,7 @@ require "../write/writer"
 require "../wire/message"
 require "./staging"
 require "./content_store"
+require "./locations"
 require "../discard"
 require "./settled"
 require "./delivery"
@@ -20,13 +21,13 @@ module Pylon::Session
   class LocalEndpoint
     record Wanted, digest : Bytes, path : String, size : UInt64
 
-    @baseline : Core::Entry?
+    @previous_tree : Core::Entry?
     @recheck : Set(String)
 
     def initialize(@root : String, @ignores : Scan::Ignores, @compression : Int32) : Nil
       @cache = Scan::Cache.new
-      @by_digest = Hash(Bytes, Located).new
-      @baseline = nil
+      @locations = Locations.new
+      @previous_tree = nil
       @recheck = Set(String).new
       @watched = false
       @disk = Disk.new(@root)
@@ -39,7 +40,7 @@ module Pylon::Session
     getter scanned = Progress.new
 
     def invalidate : Nil
-      @baseline = nil
+      @previous_tree = nil
       @recheck.clear
     end
 
@@ -61,7 +62,7 @@ module Pylon::Session
 
       snapshot = Scan::Scanner.new(
         @disk, @cache, now_ns, @ignores,
-        baseline: @baseline,
+        previous_tree: @previous_tree,
         recheck: @recheck,
         scanned: @scanned,
         keeper: @kept || Discard.new,
@@ -69,12 +70,14 @@ module Pylon::Session
 
       @scanned.finish
 
-      unless @cache.same?(snapshot.cache)
-        @cache = snapshot.cache
-        @by_digest = index(snapshot.cache)
-        @kept.try(&.prune { |digest| @by_digest.has_key?(digest) })
+      @cache = snapshot.cache
+      snapshot.removed.each { |path, entry| @locations.forget(entry.digest, path) }
+      snapshot.updated.each do |path|
+        entry = @cache[path]
+        @locations.remember(entry.digest, path, entry.metadata.size)
       end
-      @baseline = snapshot.root if @watched
+      prune_kept if snapshot.changed?
+      @previous_tree = snapshot.root if @watched
       @recheck = Set(String).new
       snapshot.root
     end
@@ -91,7 +94,7 @@ module Pylon::Session
       found = Wire::Checksums::Map.new
 
       bases.each do |wanted, base|
-        located = @by_digest[base]?
+        located = @locations.locate(base)
         next if located.nil?
         next unless Wire::Splice.worthwhile?(located.size)
 
@@ -117,10 +120,10 @@ module Pylon::Session
 
     def reusable(digests : Array(Bytes)) : Array(Bytes)
       kept = @kept
-      indexed = digests.select { |digest| @by_digest.has_key?(digest) }
+      indexed = digests.select { |digest| @locations.has?(digest) }
       return indexed if kept.nil?
 
-      indexed.concat(kept.held(digests.reject { |digest| @by_digest.has_key?(digest) }))
+      indexed.concat(kept.held(digests.reject { |digest| @locations.has?(digest) }))
     end
 
     def request_content(
@@ -168,7 +171,7 @@ module Pylon::Session
     end
 
     def content(digest : Bytes) : Bytes?
-      located = @by_digest[digest]?
+      located = @locations.locate(digest)
       return kept_content(digest) if located.nil?
 
       verified_read(located.path, digest) || kept_content(digest)
@@ -331,7 +334,7 @@ module Pylon::Session
       spent = 0_u64
 
       digests.each do |digest|
-        located = @by_digest[digest]?
+        located = @locations.locate(digest)
         next if located.nil?
 
         break if !wanted.empty? && spent + located.size > budget
@@ -343,10 +346,11 @@ module Pylon::Session
       wanted
     end
 
-    private def index(cache : Scan::Cache) : Hash(Bytes, Located)
-      by_digest = Hash(Bytes, Located).new(initial_capacity: cache.size)
-      cache.each { |path, entry| by_digest[entry.digest] = Located.new(path, entry.metadata.size) }
-      by_digest
+    private def prune_kept : Nil
+      kept = @kept
+      return if kept.nil?
+
+      kept.prune(@locations)
     end
 
     private def verified_read(path : String, digest : Bytes) : Bytes?
@@ -357,7 +361,5 @@ module Pylon::Session
         content if Core::Digests.matches?(content, digest)
       end
     end
-
-    private record Located, path : String, size : UInt64
   end
 end

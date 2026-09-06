@@ -4,6 +4,7 @@ require "../filesystem"
 require "../missing"
 require "../problem"
 require "../wire"
+require "./locations"
 
 module Pylon::Session
   class ContentStore
@@ -85,16 +86,16 @@ module Pylon::Session
       found
     end
 
-    def prune(& : Bytes -> Bool) : Nil
+    def prune(live : Locations) : Nil
       @lock.synchronize do
-        return if @held.size <= ORPHAN_LIMIT
+        return if @held.size - live.size <= ORPHAN_LIMIT
 
-        orphans = @order.count { |digest| @held.includes?(digest) && !yield(digest) }
+        orphans = @order.count { |digest| @held.includes?(digest) && !live.has?(digest) }
 
         while orphans > ORPHAN_LIMIT && (oldest = @order.shift?)
           next unless @held.includes?(oldest)
 
-          if yield(oldest)
+          if live.has?(oldest)
             @order.push(oldest)
           else
             @held.delete(oldest)

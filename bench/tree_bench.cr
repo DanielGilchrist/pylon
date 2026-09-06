@@ -28,15 +28,16 @@ def scan(
   cache : Scan::Cache,
   now : Int64,
   ignores : Scan::Ignores,
-  baseline : Core::Entry?,
+  previous_tree : Core::Entry?,
+  recheck : Set(String) = Set(String).new,
 ) : Scan::Snapshot
   Scan::Scanner.new(
     disk,
     cache,
     now,
     ignores,
-    baseline: baseline,
-    recheck: Set(String).new,
+    previous_tree: previous_tree,
+    recheck: recheck,
     scanned: Progress.new,
     keeper: Discard.new,
   ).scan
@@ -44,11 +45,16 @@ end
 
 puts "scan #{root}:"
 cold = measure("cold, hashing all") { scan(disk, Scan::Cache.new, now, ignores, nil) }
-bytes = cold.cache.sum(0_i64) { |_, entry| entry.metadata.size.to_i64 }
+bytes = 0_i64
+cold.cache.each { |_, entry| bytes += entry.metadata.size.to_i64 }
 puts "  #{cold.cache.size} files, #{(bytes / 1_048_576.0).round(1)} MiB"
 later = now + 60_000_000_000_i64
 warm = measure("warm, metadata only") { scan(disk, cold.cache, later, ignores, nil) }
 measure("watched, nothing dirty") { scan(disk, warm.cache, later, ignores, warm.root) }
+one_file = warm.cache.paths.sort!.first
+measure("watched, one dirty file") do
+  scan(disk, warm.cache, later, ignores, warm.root, Set{one_file})
+end
 
 puts "tree on the wire:"
 packed = IO::Memory.new

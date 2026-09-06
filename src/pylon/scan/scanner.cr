@@ -21,7 +21,9 @@ module Pylon::Scan
                              Core::Untracked |
                              Core::Problematic
 
-    @next_cache : Cache
+    @removed : Hash(String, CacheEntry)
+    @updated : Array(String)
+    @forgetting : Array(Forgetting)
     @dirty : Set(String)
 
     def initialize(
@@ -29,28 +31,33 @@ module Pylon::Scan
       @cache : Cache,
       @now_ns : Int64,
       @ignores : Ignores,
-      @baseline : Core::Entry?,
+      @previous_tree : Core::Entry?,
       @recheck : Set(String),
       @scanned : Progress,
       @keeper : K,
       @parallelism : Int32 = DEFAULT_PARALLELISM,
     ) : Nil
-      @next_cache = Cache.new
+      @removed = Hash(String, CacheEntry).new
+      @updated = Array(String).new
+      @forgetting = Array(Forgetting).new
       @dirty = with_ancestors(@recheck)
     end
 
     def scan : Snapshot
-      baseline = @baseline
+      previous_tree = @previous_tree
 
-      return Snapshot.new(baseline, @cache) if baseline && @recheck.empty?
+      if previous_tree && @recheck.empty?
+        return Snapshot.new(previous_tree, @cache, @removed, @updated)
+      end
 
       findings = Findings.new
-      survey(findings, "", baseline)
+      survey(findings, "", previous_tree)
 
       digests = findings.cached_digests
       hash_pending(findings, digests)
+      forget_vanished(findings)
 
-      Snapshot.new(build(findings, digests, ""), @next_cache)
+      Snapshot.new(build(findings, digests, ""), @cache, @removed, @updated)
     end
 
     private def with_ancestors(recheck : Set(String)) : Set(String)
@@ -71,13 +78,12 @@ module Pylon::Scan
     end
 
     private def trusted?(path : String) : Bool
-      !@baseline.nil? && !@dirty.includes?(path)
+      !@previous_tree.nil? && !@dirty.includes?(path)
     end
 
-    private def survey(findings : Findings, path : String, baseline : Core::Entry?) : Nil
-      if baseline && trusted?(path)
-        findings.trusted[path] = baseline
-        carry_cache(path, baseline)
+    private def survey(findings : Findings, path : String, previous : Core::Entry?) : Nil
+      if previous && trusted?(path)
+        findings.trusted[path] = previous
         return
       end
 
@@ -88,32 +94,43 @@ module Pylon::Scan
 
       case (observed = @filesystem.metadata(path))
       in Nil
+        @forgetting << Forgetting.new(path, previous)
         return
       in Problem
         findings.nodes[path] = Core::Problematic.new(observed.reason)
+        @forgetting << Forgetting.new(path, previous)
         return
       in Metadata
       end
 
+      @forgetting << Forgetting.new(path, nil)
+
       case observed.kind
       in .directory?
         findings.nodes[path] = SurveyedDirectory.new
-        names = Array(String).new
-        baseline_contents = baseline.contents if baseline.is_a?(Core::Directory)
+        names = Set(String).new
+        previous_contents = previous.contents if previous.is_a?(Core::Directory)
 
         listed = @filesystem.each_child(path) do |name|
           child = Core::Paths.join(path, name)
-          survey(findings, child, baseline_contents.try(&.[name]?))
+          survey(findings, child, previous_contents.try(&.[name]?))
           names << name if findings.nodes.has_key?(child) || findings.trusted.has_key?(child)
         end
 
         case listed
         in Nil
           findings.children[path] = names
+          previous_contents.try &.each do |name, child|
+            next if names.includes?(name)
+
+            @forgetting << Forgetting.new(Core::Paths.join(path, name), child)
+          end
         in Missing
           findings.nodes.delete(path)
+          @forgetting << Forgetting.new(path, previous)
         in Problem
           findings.nodes[path] = Core::Problematic.new(listed.reason)
+          @forgetting << Forgetting.new(path, previous)
         end
       in .file?
         if observed.size > Wire::MAX_CONTENT_BYTES
@@ -145,22 +162,33 @@ module Pylon::Scan
         return cached.reuse(observed, @now_ns, Metadata::GRANULARITY_NS)
       end
 
-      relocated = findings.by_inode(@cache)[observed.inode]?
+      relocated = @cache.relocated(observed.inode)
       return if relocated.nil?
 
       relocated.reuse(observed, @now_ns, Metadata::GRANULARITY_NS)
     end
 
-    private def carry_cache(path : String, entry : Core::Entry) : Nil
-      case entry
-      in Core::File
-        if (cached = @cache[path]?)
-          @next_cache[path] = cached
-        end
-      in Core::Directory
-        entry.contents.each { |name, child| carry_cache(Core::Paths.join(path, name), child) }
-      in Core::SymbolicLink, Core::Untracked, Core::Problematic
-        nil
+    private def forget(path : String) : Nil
+      entry = @cache.forget(path)
+      @removed[path] = entry if entry
+    end
+
+    private def forget_vanished(findings : Findings) : Nil
+      if @previous_tree
+        @forgetting.each { |forgetting| forget_subtree(forgetting.path, forgetting.previous) }
+      else
+        stale = Array(String).new
+        @cache.each { |path, _| stale << path unless findings.nodes[path]?.is_a?(SurveyedFile) }
+        stale.each { |path| forget(path) }
+      end
+    end
+
+    private def forget_subtree(path : String, previous : Core::Entry?) : Nil
+      forget(path)
+      return unless previous.is_a?(Core::Directory)
+
+      previous.contents.each do |name, child|
+        forget_subtree(Core::Paths.join(path, name), child)
       end
     end
 
@@ -236,13 +264,17 @@ module Pylon::Scan
         in Nil
           raise "the scan surveyed #{path.inspect} as a file but computed no digest for it"
         in Problem
+          forget(path)
           Core::Problematic.new(digest.reason)
         in Bytes
-          @next_cache[path] = CacheEntry.new(
+          entry = CacheEntry.new(
             node.metadata,
             digest,
             freshly_written: node.metadata.freshly_modified?(@now_ns, Metadata::GRANULARITY_NS),
           )
+          previous = @cache.store(path, entry)
+          @removed[path] = previous if previous && previous.digest != digest
+          @updated << path
 
           Core::File.new(digest, executable: node.metadata.executable?)
         end
@@ -259,28 +291,17 @@ module Pylon::Scan
     end
 
     private record PendingFile, path : String, size : Int64
+    private record Forgetting, path : String, previous : Core::Entry?
 
     private record SurveyedDirectory
     private record SurveyedFile, metadata : Metadata
 
     private class Findings
-      @by_inode : Hash(UInt64, CacheEntry)? = nil
-
       getter nodes = Hash(String, Surveyed).new
-      getter children = Hash(String, Array(String)).new
+      getter children = Hash(String, Set(String)).new
       getter to_hash = Array(PendingFile).new
       getter cached_digests = Hash(String, Bytes | Problem).new
       getter trusted = Hash(String, Core::Entry).new
-
-      def by_inode(cache : Cache) : Hash(UInt64, CacheEntry)
-        @by_inode ||= index_inodes(cache)
-      end
-
-      private def index_inodes(cache : Cache) : Hash(UInt64, CacheEntry)
-        indexed = Hash(UInt64, CacheEntry).new(initial_capacity: cache.size)
-        cache.each_value { |entry| indexed[entry.metadata.inode] = entry }
-        indexed
-      end
     end
   end
 end

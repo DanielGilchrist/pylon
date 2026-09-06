@@ -273,7 +273,7 @@ module Pylon::Wire
         )
 
         digest = reader.digest
-        cache[path] = Scan::CacheEntry.new(metadata, digest, freshly_written: reader.bool)
+        cache.store(path, Scan::CacheEntry.new(metadata, digest, freshly_written: reader.bool))
       end
 
       cache

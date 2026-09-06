@@ -5,8 +5,6 @@ require "../../../src/pylon/discard"
 require "../../../src/pylon/scan/scanner"
 require "../../../src/pylon/disk"
 
-include Pylon::Scan
-
 private FILES = 400
 
 private def in_tree(& : String ->) : Nil
@@ -26,18 +24,20 @@ private def in_tree(& : String ->) : Nil
 end
 
 private def digests(root : String, parallelism : Int32) : Hash(String, String)
-  snapshot = Scanner.new(
+  snapshot = Pylon::Scan::Scanner.new(
     Pylon::Disk.new(root),
-    Cache.new,
+    Pylon::Scan::Cache.new,
     Time.utc.to_unix_ns.to_i64,
-    Ignores::NONE,
-    baseline: nil,
+    Pylon::Scan::Ignores::NONE,
+    previous_tree: nil,
     recheck: Set(String).new,
-    scanned: Progress.new, keeper: Pylon::Discard.new,
+    scanned: Pylon::Progress.new, keeper: Pylon::Discard.new,
     parallelism: parallelism,
   ).scan
 
-  snapshot.cache.transform_values(&.digest.hexstring)
+  hexed = Hash(String, String).new
+  snapshot.cache.each { |path, entry| hexed[path] = entry.digest.hexstring }
+  hexed
 end
 
 describe "parallel hashing" do

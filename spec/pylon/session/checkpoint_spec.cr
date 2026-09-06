@@ -2,7 +2,10 @@ require "file_utils"
 require "../../spec_helper"
 require "../../../src/pylon/session/checkpoint"
 
-include Pylon::Session
+private alias Cache = Pylon::Scan::Cache
+private alias Checkpoint = Pylon::Session::Checkpoint
+private alias Directory = Pylon::Core::Directory
+private alias Problem = Pylon::Problem
 
 private def in_sandbox(& : String ->) : Nil
   root = File.join(Dir.tempdir, "pylon-store-#{Random::Secure.hex(8)}")
@@ -15,23 +18,23 @@ private def in_sandbox(& : String ->) : Nil
   end
 end
 
-private def sample_cache : Pylon::Scan::Cache
-  cache = Pylon::Scan::Cache.new
+private def sample_cache : Cache
+  cache = Cache.new
 
-  cache["app/user.rb"] = Pylon::Scan::CacheEntry.new(
+  cache.store("app/user.rb", Pylon::Scan::CacheEntry.new(
     Pylon::Scan::Metadata.new(mode: 33188_u32, size: 42_u64, mtime_ns: 1_700_i64, inode: 9_u64),
     Digest::SHA256.digest("digest-a"),
     freshly_written: false,
-  )
+  ))
 
   cache
 end
 
-describe Pylon::Session::Checkpoint do
+describe Checkpoint do
   it "round trips an base and both caches" do
     in_sandbox do |path|
-      base = Pylon::Core::Directory.new(
-        {"app" => Pylon::Core::Directory.new({"user.rb" => Fixtures.f1})},
+      base = Directory.new(
+        {"app" => Directory.new({"user.rb" => Fixtures.f1})},
       )
 
       Checkpoint.new(base, sample_cache, nil).save(path).should be_nil
@@ -74,7 +77,7 @@ describe Pylon::Session::Checkpoint do
       File.write(path, "not a pylon state file at all")
 
       loaded = Checkpoint.load(path)
-      loaded.should be_a(Pylon::Problem)
+      loaded.should be_a(Problem)
       next unless loaded.is_a?(Problem)
 
       loaded.reason.should eq("not a sync state file")
@@ -83,12 +86,12 @@ describe Pylon::Session::Checkpoint do
 
   it "reports a truncated store as damaged rather than half a state" do
     in_sandbox do |path|
-      Checkpoint.new(Pylon::Core::Directory.new({"a" => Fixtures.f1}), sample_cache, nil).save(path)
+      Checkpoint.new(Directory.new({"a" => Fixtures.f1}), sample_cache, nil).save(path)
       bytes = File.read(path).to_slice.dup
 
       File.write(path, bytes[0, bytes.size // 2])
 
-      Checkpoint.load(path).should be_a(Pylon::Problem)
+      Checkpoint.load(path).should be_a(Problem)
     end
   end
 
@@ -96,11 +99,11 @@ describe Pylon::Session::Checkpoint do
     in_sandbox do |path|
       Checkpoint.new.save(path)
       bytes = File.read(path).to_slice.dup
-      bytes[Checkpoint::MAGIC.bytesize] = 99_u8
+      bytes[Pylon::Session::Checkpoint::MAGIC.bytesize] = 99_u8
       File.write(path, bytes)
 
       loaded = Checkpoint.load(path)
-      loaded.should be_a(Pylon::Problem)
+      loaded.should be_a(Problem)
       next unless loaded.is_a?(Problem)
 
       loaded.reason.should eq("written by a different version")

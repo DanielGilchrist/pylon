@@ -2,8 +2,12 @@ require "digest/sha256"
 require "file_utils"
 require "../../spec_helper"
 require "../../../src/pylon/session/content_store"
+require "../../../src/pylon/session/locations"
 
-include Pylon::Session
+private alias ContentStore = Pylon::Session::ContentStore
+private alias Locations = Pylon::Session::Locations
+private ORPHAN_LIMIT = Pylon::Session::ContentStore::ORPHAN_LIMIT
+private alias Problem = Pylon::Problem
 
 private def in_store(& : String, ContentStore, String ->) : Nil
   base = File.join(Dir.tempdir, "pylon-store-#{Random::Secure.hex(8)}")
@@ -26,7 +30,7 @@ private def place(tree : String, name : String, content : String) : Bytes
   Digest::SHA256.digest(content).to_slice
 end
 
-describe Pylon::Session::ContentStore do
+describe ContentStore do
   it "recovers a kept file after it was deleted" do
     in_store do |tree, store, _|
       digest = place(tree, "a.rb", "version one")
@@ -75,18 +79,19 @@ describe Pylon::Session::ContentStore do
     in_store do |tree, _, directory|
       kept = Array.new(3) { |index| place(tree, "kept#{index}", "kept #{index}") }
       kept.each { |digest| File.write(File.join(directory, digest.hexstring), "") }
-      (ContentStore::ORPHAN_LIMIT + 5).times do |index|
+      (ORPHAN_LIMIT + 5).times do |index|
         File.write(File.join(directory, Digest::SHA256.hexdigest(index.to_s)), "")
       end
 
       reopened = ContentStore.open(directory, tree)
       raise "the store could not be reopened" if reopened.is_a?(Problem)
-      current = kept.to_set
+      live = Locations.new
+      kept.each_with_index { |digest, index| live.remember(digest, "kept#{index}", 0_u64) }
 
-      reopened.prune { |digest| current.includes?(digest) }
+      reopened.prune(live)
 
       reopened.held(kept).should eq(kept)
-      Dir.children(directory).size.should eq(ContentStore::ORPHAN_LIMIT + kept.size)
+      Dir.children(directory).size.should eq(ORPHAN_LIMIT + kept.size)
     end
   end
 
@@ -95,7 +100,9 @@ describe Pylon::Session::ContentStore do
       digests = Array.new(4) { |index| place(tree, "f#{index}", "body #{index}") }
       digests.each_with_index { |digest, index| store.keep("f#{index}", digest) }
 
-      store.prune { |digest| digest == digests[0] }
+      live = Locations.new
+      live.remember(digests[0], "f0", 0_u64)
+      store.prune(live)
 
       store.held(digests).should eq(digests)
       Dir.children(directory).size.should eq(4)

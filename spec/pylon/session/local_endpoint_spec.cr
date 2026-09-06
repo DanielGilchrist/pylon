@@ -2,7 +2,14 @@ require "file_utils"
 require "../../spec_helper"
 require "../../../src/pylon/session/local_endpoint"
 
-include Pylon::Session
+private alias Bases = Pylon::Wire::Bases
+private alias Change = Pylon::Core::Change
+private alias Changes = Pylon::Core::Changes
+private alias Contents = Pylon::Wire::Contents
+private alias LocalEndpoint = Pylon::Session::LocalEndpoint
+private alias Map = Pylon::Wire::Checksums::Map
+private alias Materialised = Pylon::Wire::ContentSource::Materialised
+private alias Touched = Pylon::Watch::Touched
 
 private def in_endpoint(
   files : Hash(String, String),
@@ -49,14 +56,14 @@ describe "resolving a patch base" do
   end
 end
 
-describe Pylon::Session::LocalEndpoint do
+describe LocalEndpoint do
   it "stops adding content once a batch reaches the transfer budget" do
     in_endpoint({"a.rb" => "x" * 10, "b.rb" => "y" * 10, "c.rb" => "z" * 10}) do |endpoint, digests|
       offered = endpoint.content_source(
         [digests["a.rb"], digests["b.rb"], digests["c.rb"]],
         15_u64,
-        Pylon::Wire::Checksums::Map.new,
-        Pylon::Wire::Bases.new,
+        Map.new,
+        Bases.new,
       )
 
       offered.digests.should eq(Set{digests["a.rb"]})
@@ -68,8 +75,8 @@ describe Pylon::Session::LocalEndpoint do
       offered = endpoint.content_source(
         [digests["big.rb"]],
         1_u64,
-        Pylon::Wire::Checksums::Map.new,
-        Pylon::Wire::Bases.new,
+        Map.new,
+        Bases.new,
       )
 
       offered.digests.should eq(Set{digests["big.rb"]})
@@ -81,8 +88,8 @@ describe Pylon::Session::LocalEndpoint do
       offered = endpoint.content_source(
         [digests["a.rb"], digests["b.rb"]],
         20_u64,
-        Pylon::Wire::Checksums::Map.new,
-        Pylon::Wire::Bases.new,
+        Map.new,
+        Bases.new,
       )
 
       offered.digests.should eq(Set{digests["a.rb"], digests["b.rb"]})
@@ -96,8 +103,8 @@ describe Pylon::Session::LocalEndpoint do
       offered = endpoint.content_source(
         [unknown, digests["a.rb"]],
         1_000_u64,
-        Pylon::Wire::Checksums::Map.new,
-        Pylon::Wire::Bases.new,
+        Map.new,
+        Bases.new,
       )
 
       offered.digests.should eq(Set{digests["a.rb"]})
@@ -106,7 +113,7 @@ describe Pylon::Session::LocalEndpoint do
 
   it "writes a file from its own disk when the content arrived without bytes" do
     in_endpoint({"a.rb" => "shared body"}) do |endpoint, digests|
-      changes = Pylon::Core::Changes[Change.new(
+      changes = Changes[Change.new(
         "copy.rb",
         nil,
         Pylon::Core::File.new(digests["a.rb"], executable: false),
@@ -114,7 +121,7 @@ describe Pylon::Session::LocalEndpoint do
 
       outcomes = endpoint.write(
         changes,
-        Pylon::Wire::ContentSource::Materialised.new(Pylon::Wire::Contents.new),
+        Materialised.new(Contents.new),
       )
 
       outcomes.size.should eq(1)
@@ -129,7 +136,7 @@ describe Pylon::Session::LocalEndpoint do
     in_endpoint({"a.rb" => body}) do |endpoint, digests|
       wanted = Digest::SHA256.digest("the edited version").to_slice
 
-      found = endpoint.checksums(Pylon::Wire::Bases{wanted => digests["a.rb"]})
+      found = endpoint.checksums(Bases{wanted => digests["a.rb"]})
 
       found[wanted]?.try(&.base).should eq(digests["a.rb"])
     end
@@ -139,7 +146,7 @@ describe Pylon::Session::LocalEndpoint do
     in_endpoint({"a.rb" => "tiny"}) do |endpoint, digests|
       wanted = Digest::SHA256.digest("the edited version").to_slice
 
-      found = endpoint.checksums(Pylon::Wire::Bases{wanted => digests["a.rb"]})
+      found = endpoint.checksums(Bases{wanted => digests["a.rb"]})
 
       found.should be_empty
     end
@@ -148,7 +155,7 @@ describe Pylon::Session::LocalEndpoint do
   it "refuses recovered content whose bytes no longer match the digest" do
     in_endpoint({"a.rb" => "original"}) do |endpoint, digests|
       File.write(File.join(endpoint.root, "a.rb"), "mutated")
-      changes = Pylon::Core::Changes[Change.new(
+      changes = Changes[Change.new(
         "copy.rb",
         nil,
         Pylon::Core::File.new(digests["a.rb"], executable: false),
@@ -156,7 +163,7 @@ describe Pylon::Session::LocalEndpoint do
 
       outcomes = endpoint.write(
         changes,
-        Pylon::Wire::ContentSource::Materialised.new(Pylon::Wire::Contents.new),
+        Materialised.new(Contents.new),
       )
 
       outcomes.size.should eq(1)
@@ -167,18 +174,18 @@ describe Pylon::Session::LocalEndpoint do
 end
 
 describe "watched scanning" do
-  it "keeps a baseline from the first scan after dirty paths are reported and rechecks only them" do
+  it "keeps the tree from the first scan after dirty paths are reported and rechecks only them" do
     in_endpoint({"a.rb" => "a", "b.rb" => "b", "c.rb" => "c"}) do |endpoint, _|
       endpoint.scanned.files.should eq(3)
 
       endpoint.scan(Time.utc.to_unix_ns.to_i64)
       endpoint.scanned.files.should eq(3)
 
-      endpoint.mark_dirty(Pylon::Watch::Touched.new(Array(String).new)).should eq(0)
+      endpoint.mark_dirty(Touched.new(Array(String).new)).should eq(0)
       endpoint.scan(Time.utc.to_unix_ns.to_i64)
       endpoint.scanned.files.should eq(3)
 
-      endpoint.mark_dirty(Pylon::Watch::Touched.new(["b.rb"])).should eq(1)
+      endpoint.mark_dirty(Touched.new(["b.rb"])).should eq(1)
       File.write(File.join(endpoint.root, "b.rb"), "changed")
       tree = endpoint.scan(Time.utc.to_unix_ns.to_i64)
       endpoint.scanned.files.should eq(1)
@@ -186,7 +193,7 @@ describe "watched scanning" do
       expected = Pylon::Core::File.new(Digest::SHA256.digest("changed").to_slice, executable: false)
       changed.should eq(expected)
 
-      endpoint.mark_dirty(Pylon::Watch::Touched.new(Array(String).new)).should eq(0)
+      endpoint.mark_dirty(Touched.new(Array(String).new)).should eq(0)
       endpoint.scan(Time.utc.to_unix_ns.to_i64)
       endpoint.scanned.files.should eq(0)
 

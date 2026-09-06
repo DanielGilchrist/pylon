@@ -4,24 +4,29 @@ require "../../support/memory_keeper"
 require "../../../src/pylon/discard"
 require "../../../src/pylon/scan/scanner"
 
-include Pylon::Scan
+private alias Cache = Pylon::Scan::Cache
+private alias Discard = Pylon::Discard
+private alias Ignores = Pylon::Scan::Ignores
+private NONE = Pylon::Scan::Ignores::NONE
+private alias Progress = Pylon::Progress
+private alias Scanner = Pylon::Scan::Scanner
 
 private NOW = 1_000_000_000_000_i64
 
 private def scan(
   filesystem : MemoryFilesystem,
   cache : Cache = Cache.new,
-  ignores : Ignores = Ignores::NONE,
-) : Snapshot
+  ignores : Ignores = NONE,
+) : Pylon::Scan::Snapshot
   Scanner.new(
     filesystem,
     cache,
     NOW,
     ignores,
-    baseline: nil,
+    previous_tree: nil,
     recheck: Set(String).new,
     scanned: Progress.new,
-    keeper: Pylon::Discard.new,
+    keeper: Discard.new,
     parallelism: 1,
   ).scan
 end
@@ -34,7 +39,7 @@ private def sample : MemoryFilesystem
   })
 end
 
-describe Pylon::Scan::Scanner do
+describe Scanner do
   it "builds a tree mirroring the filesystem" do
     root = scan(sample).root.should_not be_nil
     next if root.nil?
@@ -62,11 +67,11 @@ describe Pylon::Scan::Scanner do
       rescanned,
       warm,
       NOW,
-      Ignores::NONE,
-      baseline: nil,
+      NONE,
+      previous_tree: nil,
       recheck: Set(String).new,
       scanned: Progress.new,
-      keeper: Pylon::Discard.new,
+      keeper: Discard.new,
       parallelism: 1,
     ).scan
 
@@ -82,11 +87,11 @@ describe Pylon::Scan::Scanner do
       changed,
       warm,
       NOW,
-      Ignores::NONE,
-      baseline: nil,
+      NONE,
+      previous_tree: nil,
       recheck: Set(String).new,
       scanned: Progress.new,
-      keeper: Pylon::Discard.new,
+      keeper: Discard.new,
       parallelism: 1,
     ).scan
 
@@ -102,19 +107,19 @@ describe Pylon::Scan::Scanner do
       moved,
       warm,
       NOW,
-      Ignores::NONE,
-      baseline: nil,
+      NONE,
+      previous_tree: nil,
       recheck: Set(String).new,
       scanned: Progress.new,
-      keeper: Pylon::Discard.new,
+      keeper: Discard.new,
       parallelism: 1,
     ).scan
 
     moved.reads.should be_empty
     Fixtures.file!(Fixtures.dig!(snapshot.root, "app", "models", "person.rb")).digest
       .should eq(Digest::SHA256.digest("class User; end"))
-    snapshot.cache.has_key?("app/models/person.rb").should be_true
-    snapshot.cache.has_key?("app/models/user.rb").should be_false
+    snapshot.cache.includes?("app/models/person.rb").should be_true
+    snapshot.cache.includes?("app/models/user.rb").should be_false
   end
 
   it "rehashes a moved file whose content changed on the way" do
@@ -127,11 +132,11 @@ describe Pylon::Scan::Scanner do
       edited,
       warm,
       NOW,
-      Ignores::NONE,
-      baseline: nil,
+      NONE,
+      previous_tree: nil,
       recheck: Set(String).new,
       scanned: Progress.new,
-      keeper: Pylon::Discard.new,
+      keeper: Discard.new,
       parallelism: 1,
     ).scan
 
@@ -150,11 +155,11 @@ describe Pylon::Scan::Scanner do
       recycled,
       warm,
       NOW,
-      Ignores::NONE,
-      baseline: nil,
+      NONE,
+      previous_tree: nil,
       recheck: Set(String).new,
       scanned: Progress.new,
-      keeper: Pylon::Discard.new,
+      keeper: Discard.new,
       parallelism: 1,
     ).scan
 
@@ -170,11 +175,11 @@ describe Pylon::Scan::Scanner do
       racy,
       warm,
       NOW,
-      Ignores::NONE,
-      baseline: nil,
+      NONE,
+      previous_tree: nil,
       recheck: Set(String).new,
       scanned: Progress.new,
-      keeper: Pylon::Discard.new,
+      keeper: Discard.new,
       parallelism: 1,
     ).scan
 
@@ -186,16 +191,16 @@ describe Pylon::Scan::Scanner do
     warm = scan(filesystem).cache
 
     edited = filesystem.with("README.md", content: "howdy")
-    later = NOW + Metadata::GRANULARITY_NS * 10
+    later = NOW + Pylon::Scan::Metadata::GRANULARITY_NS * 10
     snapshot = Scanner.new(
       edited,
       warm,
       later,
-      Ignores::NONE,
-      baseline: nil,
+      NONE,
+      previous_tree: nil,
       recheck: Set(String).new,
       scanned: Progress.new,
-      keeper: Pylon::Discard.new,
+      keeper: Discard.new,
       parallelism: 1,
     ).scan
 
@@ -216,11 +221,11 @@ describe Pylon::Scan::Scanner do
       executable,
       warm,
       NOW,
-      Ignores::NONE,
-      baseline: nil,
+      NONE,
+      previous_tree: nil,
       recheck: Set(String).new,
       scanned: Progress.new,
-      keeper: Pylon::Discard.new,
+      keeper: Discard.new,
       parallelism: 1,
     ).scan
     root = snapshot.root.should_not be_nil
@@ -269,7 +274,7 @@ describe Pylon::Scan::Scanner do
   it "produces a tree the reconciler treats as settled against itself" do
     snapshot = scan(sample)
 
-    reconciliation = Reconciler.reconcile(
+    reconciliation = Pylon::Core::Reconciler.reconcile(
       snapshot.root,
       snapshot.root,
       snapshot.root,
@@ -283,7 +288,7 @@ describe Pylon::Scan::Scanner do
   end
 end
 
-describe Pylon::Scan::Ignores do
+describe Ignores do
   it "ignores a path and everything beneath it" do
     ignores = Ignores.new(["node_modules", "vendor/bundle"])
 
@@ -296,7 +301,7 @@ describe Pylon::Scan::Ignores do
   end
 
   it "ignores editor scratch files everywhere without any configured patterns" do
-    ignores = Ignores::NONE
+    ignores = NONE
 
     ignores.ignore?(".leave_balance.rb.swp").should be_true
     ignores.ignore?("app/models/.leave_balance.rb.swp").should be_true
@@ -324,11 +329,11 @@ describe "scanning a watched tree" do
       quiet,
       first.cache,
       NOW,
-      Ignores::NONE,
-      baseline: first.root,
+      NONE,
+      previous_tree: first.root,
       recheck: Set(String).new,
       scanned: Progress.new,
-      keeper: Pylon::Discard.new,
+      keeper: Discard.new,
       parallelism: 1,
     ).scan
 
@@ -343,10 +348,10 @@ describe "scanning a watched tree" do
 
     changed = filesystem.with("app/models/pay.rb", content: "class Pay2; end", inode: 77_u64)
     second = Scanner.new(
-      changed, first.cache, NOW, Ignores::NONE,
+      changed, first.cache, NOW, NONE,
       parallelism: 1,
-      scanned: Progress.new, keeper: Pylon::Discard.new,
-      baseline: first.root,
+      scanned: Progress.new, keeper: Discard.new,
+      previous_tree: first.root,
       recheck: Set{"app/models/pay.rb"},
     ).scan
 
@@ -363,21 +368,24 @@ describe "scanning a watched tree" do
     )
   end
 
-  it "carries cache entries forward for untouched subtrees" do
+  it "leaves cache entries of untouched subtrees alone" do
     filesystem = sample
     first = scan(filesystem)
+    untouched = first.cache["app/models/user.rb"]
 
     changed = filesystem.with("README.md", content: "new", inode: 88_u64)
     second = Scanner.new(
-      changed, first.cache, NOW, Ignores::NONE,
+      changed, first.cache, NOW, NONE,
       parallelism: 1,
-      scanned: Progress.new, keeper: Pylon::Discard.new,
-      baseline: first.root,
+      scanned: Progress.new, keeper: Discard.new,
+      previous_tree: first.root,
       recheck: Set{"README.md"},
     ).scan
 
-    second.cache.keys.sort!.should eq(["README.md", "app/models/pay.rb", "app/models/user.rb"])
-    second.cache["app/models/user.rb"].digest.should eq(first.cache["app/models/user.rb"].digest)
+    second.cache.paths.sort!.should eq(["README.md", "app/models/pay.rb", "app/models/user.rb"])
+    second.cache["app/models/user.rb"].should eq(untouched)
+    second.removed.keys.should eq(["README.md"])
+    second.updated.should eq(["README.md"])
   end
 
   it "notices a file that appeared inside a dirty directory" do
@@ -392,10 +400,10 @@ describe "scanning a watched tree" do
     })
 
     second = Scanner.new(
-      added, first.cache, NOW, Ignores::NONE,
+      added, first.cache, NOW, NONE,
       parallelism: 1,
-      scanned: Progress.new, keeper: Pylon::Discard.new,
-      baseline: first.root,
+      scanned: Progress.new, keeper: Discard.new,
+      previous_tree: first.root,
       recheck: Set{"app/models/new.rb"},
     ).scan
 
@@ -405,6 +413,42 @@ describe "scanning a watched tree" do
     Fixtures.directory!(Fixtures.dig!(root, "app", "models")).contents.keys.sort!.should eq(
       ["new.rb", "pay.rb", "user.rb"],
     )
+  end
+
+  it "reports which cache entries a watched scan dropped and rewrote" do
+    filesystem = sample
+    first = scan(filesystem)
+    old_readme = first.cache["README.md"]
+
+    changed = MemoryFilesystem.build({
+      "app/models/user.rb" => "class User; end",
+      "app/models/new.rb"  => "class New; end",
+      "README.md"          => "changed",
+    })
+
+    second = Scanner.new(
+      changed, first.cache, NOW, NONE,
+      parallelism: 1,
+      scanned: Progress.new, keeper: Discard.new,
+      previous_tree: first.root,
+      recheck: Set{"README.md", "app/models/pay.rb", "app/models/new.rb"},
+    ).scan
+
+    second.removed.keys.sort!.should eq(["README.md", "app/models/pay.rb"])
+    second.removed["README.md"].should eq(old_readme)
+    second.updated.sort!.should eq(["README.md", "app/models/new.rb"])
+    second.cache.paths.sort!.should eq(["README.md", "app/models/new.rb", "app/models/user.rb"])
+  end
+
+  it "reports every entry of a full scan as removed or rewritten" do
+    filesystem = sample
+    first = scan(filesystem)
+
+    remaining = MemoryFilesystem.build({"README.md" => "hello"})
+    second = scan(remaining, first.cache)
+
+    second.removed.keys.sort!.should eq(["app/models/pay.rb", "app/models/user.rb"])
+    second.updated.should eq(["README.md"])
   end
 
   it "notices a deletion inside a dirty directory" do
@@ -417,10 +461,10 @@ describe "scanning a watched tree" do
     })
 
     second = Scanner.new(
-      remaining, first.cache, NOW, Ignores::NONE,
+      remaining, first.cache, NOW, NONE,
       parallelism: 1,
-      scanned: Progress.new, keeper: Pylon::Discard.new,
-      baseline: first.root,
+      scanned: Progress.new, keeper: Discard.new,
+      previous_tree: first.root,
       recheck: Set{"app/models/pay.rb"},
     ).scan
 
@@ -439,8 +483,8 @@ describe "the scanner handing hashed content to a keeper" do
       filesystem,
       Cache.new,
       NOW,
-      Ignores::NONE,
-      baseline: nil,
+      NONE,
+      previous_tree: nil,
       recheck: Set(String).new,
       scanned: Progress.new,
       keeper: keeper,
@@ -456,8 +500,8 @@ describe "the scanner handing hashed content to a keeper" do
       filesystem,
       first.cache,
       NOW + 60_000_000_000_i64,
-      Ignores::NONE,
-      baseline: nil,
+      NONE,
+      previous_tree: nil,
       recheck: Set(String).new,
       scanned: Progress.new,
       keeper: keeper,
