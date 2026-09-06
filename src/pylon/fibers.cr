@@ -22,7 +22,16 @@ module Pylon
       ServerScan
     end
 
+    # An `Isolated` context never closes its event loop once its fiber finishes, so starting
+    # one per piece of work leaks descriptors on every run. Work that needs to own and block
+    # a thread includes this module and is passed to `Fibers.isolated` which keeps one context
+    # per `Name` for the life of the process.
+    module Blocking
+      abstract def run_blocking : Nil
+    end
+
     @@parallel_contexts = Hash(Name, Fiber::ExecutionContext::Parallel).new
+    @@isolated_contexts = Hash(Name, Channel(Blocking)).new
 
     def future(&block : -> T) : Channel(T | Exception) forall T
       results = Channel(T | Exception).new(1)
@@ -45,8 +54,8 @@ module Pylon
       spawn(name: name.to_s) { exit_on_exception(block) }
     end
 
-    def isolated(name : Name, &block : ->) : Fiber::ExecutionContext::Isolated
-      Fiber::ExecutionContext::Isolated.new(name.to_s) { exit_on_exception(block) }
+    def isolated(name : Name, work : Blocking) : Nil
+      isolated_context(name).send(work)
     end
 
     def parallel(name : Name, workers : Int32, &block : Int32 ->) : Nil
@@ -69,6 +78,24 @@ module Pylon
 
     private def parallel_context(name : Name) : Fiber::ExecutionContext::Parallel
       @@parallel_contexts[name] ||= Fiber::ExecutionContext::Parallel.new(name.to_s, WORKER_THREADS)
+    end
+
+    private def isolated_context(name : Name) : Channel(Blocking)
+      @@isolated_contexts[name] ||= begin
+        queue = Channel(Blocking).new
+        Fiber::ExecutionContext::Isolated.new(name.to_s) { serve_blocking(queue) }
+        queue
+      end
+    end
+
+    private def serve_blocking(queue : Channel(Blocking)) : Nil
+      while (work = queue.receive?)
+        outcome = contain { work.run_blocking }
+        next unless outcome.is_a?(Exception)
+
+        outcome.inspect_with_backtrace(STDERR)
+        exit 1
+      end
     end
 
     private def launch(

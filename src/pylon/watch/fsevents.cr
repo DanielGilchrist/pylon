@@ -2,6 +2,8 @@ Pylon::Platform.skip_file_unless :macos
 
 module Pylon::Watch
   class FSEvents
+    include Fibers::Blocking
+
     LATENCY_SECONDS   = 0.01
     STOP_POLL_SECONDS =  0.5
 
@@ -48,7 +50,7 @@ module Pylon::Watch
       @stopping = false
       @ready = Channel(Start).new
       @done = Channel(Nil).new
-      @context = Fibers.isolated(:fs_events) { watch }
+      Fibers.isolated(:fs_events, self)
     end
 
     getter dirty_paths : DirtyPaths
@@ -67,42 +69,7 @@ module Pylon::Watch
       @done.receive?
     end
 
-    protected def consume(count : LibC::SizeT, paths : UInt8**, flags : UInt32*) : Nil
-      count.times do |index|
-        flag = flags[index]
-
-        if flag & FRESH_FLAGS != 0
-          @dirty_paths.all_dirty!
-          next
-        end
-
-        record(String.new(paths[index]).rstrip('/'), flag)
-      end
-
-      @dirty_paths.signal
-    end
-
-    private def record(path : String, flag : UInt32) : Nil
-      relative = relativise(path)
-      return if relative.nil?
-      return if @ignores.ignore?(relative)
-
-      @dirty_paths.add(relative)
-
-      return unless flag & LibFSEvents::ITEM_IS_DIR != 0
-      return unless flag & (LibFSEvents::ITEM_CREATED | LibFSEvents::ITEM_RENAMED) != 0
-
-      @dirty_paths.add_tree(@root, relative, @ignores)
-    end
-
-    private def relativise(path : String) : String?
-      return "" if path == @root
-      return unless path.starts_with?(@prefix)
-
-      path[@prefix.size..]
-    end
-
-    private def watch : Nil
+    def run_blocking : Nil
       cf_root = LibFSEvents.string_create(nil, @root.check_no_null_byte, LibFSEvents::UTF8)
       roots = [cf_root]
       cf_paths = LibFSEvents.array_create(nil, roots.to_unsafe, 1, nil)
@@ -153,6 +120,41 @@ module Pylon::Watch
       release(cf_paths, cf_root)
     ensure
       @done.close
+    end
+
+    protected def consume(count : LibC::SizeT, paths : UInt8**, flags : UInt32*) : Nil
+      count.times do |index|
+        flag = flags[index]
+
+        if flag & FRESH_FLAGS != 0
+          @dirty_paths.all_dirty!
+          next
+        end
+
+        record(String.new(paths[index]).rstrip('/'), flag)
+      end
+
+      @dirty_paths.signal
+    end
+
+    private def record(path : String, flag : UInt32) : Nil
+      relative = relativise(path)
+      return if relative.nil?
+      return if @ignores.ignore?(relative)
+
+      @dirty_paths.add(relative)
+
+      return unless flag & LibFSEvents::ITEM_IS_DIR != 0
+      return unless flag & (LibFSEvents::ITEM_CREATED | LibFSEvents::ITEM_RENAMED) != 0
+
+      @dirty_paths.add_tree(@root, relative, @ignores)
+    end
+
+    private def relativise(path : String) : String?
+      return "" if path == @root
+      return unless path.starts_with?(@prefix)
+
+      path[@prefix.size..]
     end
 
     private def release(*references : LibFSEvents::CFRef) : Nil

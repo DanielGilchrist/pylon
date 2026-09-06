@@ -107,3 +107,9 @@ def assert_reconciliation(reconciliation : Reconciliation, expected : ReconcileC
   reconciliation.troubles.sort_by! { |trouble| {trouble.path, trouble.replica.value} }
     .should eq(expected.troubles.sort_by { |trouble| {trouble.path, trouble.replica.value} })
 end
+
+def assert_descriptor_change(expected : Int32, & : ->) : Nil
+  before = Dir.children("/dev/fd").size
+  yield
+  (Dir.children("/dev/fd").size - before).should eq(expected)
+end

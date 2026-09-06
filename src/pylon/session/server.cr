@@ -240,8 +240,7 @@ module Pylon::Session
     end
 
     private def scan_reporting(now_ns : Int64) : Core::Entry?
-      result = Channel(Core::Entry?).new(1)
-      Fibers.isolated(:server_scan) { result.send(@endpoint.scan(now_ns)) }
+      result = ScanThread.scan(@endpoint, now_ns)
       reporting = true
 
       loop do

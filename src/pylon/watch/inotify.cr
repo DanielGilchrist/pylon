@@ -2,6 +2,8 @@ Pylon::Platform.skip_file_unless :linux
 
 module Pylon::Watch
   class Inotify
+    include Fibers::Blocking
+
     WATCH_MASK = LibInotify::IN_MODIFY | LibInotify::IN_ATTRIB | LibInotify::IN_CLOSE_WRITE |
                  LibInotify::IN_MOVED_FROM | LibInotify::IN_MOVED_TO | LibInotify::IN_CREATE |
                  LibInotify::IN_DELETE | LibInotify::IN_DELETE_SELF | LibInotify::IN_MOVE_SELF |
@@ -55,7 +57,7 @@ module Pylon::Watch
 
       watch_tree("")
 
-      @context = Fibers.isolated(:inotify) { listen }
+      Fibers.isolated(:inotify, self)
     end
 
     getter dirty_paths : DirtyPaths
@@ -74,6 +76,20 @@ module Pylon::Watch
 
     def watching? : Bool
       @paths.has_value?("")
+    end
+
+    def run_blocking : Nil
+      buffer = Bytes.new(READ_BUFFER_BYTES)
+
+      while awaited?
+        read = LibC.read(@descriptor, buffer.to_unsafe.as(Void*), LibC::SizeT.new(buffer.size))
+        break if read <= 0
+
+        consume(buffer[0, read])
+        @dirty_paths.signal
+      end
+    ensure
+      @done.close
     end
 
     private def watch_tree(relative : String) : Nil
@@ -111,20 +127,6 @@ module Pylon::Watch
       end
 
       @paths[wd] = relative
-    end
-
-    private def listen : Nil
-      buffer = Bytes.new(READ_BUFFER_BYTES)
-
-      while awaited?
-        read = LibC.read(@descriptor, buffer.to_unsafe.as(Void*), LibC::SizeT.new(buffer.size))
-        break if read <= 0
-
-        consume(buffer[0, read])
-        @dirty_paths.signal
-      end
-    ensure
-      @done.close
     end
 
     private def awaited? : Bool
