@@ -4,16 +4,18 @@ require "file_utils"
 require "../../spec_helper"
 require "../../../src/pylon/watch/inotify"
 
-include Pylon::Watch
+private DEFAULT = Pylon::Brand::DEFAULT
+private alias DirtyPaths = Pylon::Watch::DirtyPaths
+private alias Inotify = Pylon::Watch::Inotify
 
 private def collect_until(watcher : Inotify, & : Set(String) -> Bool) : Set(String)
   seen = Set(String).new
 
   10.times do
     case (dirty = watcher.dirty_paths.consume)
-    in Everything
+    in Pylon::Watch::Everything
       fail("expected per-path events, saw a fresh-instance flush")
-    in Touched
+    in Pylon::Watch::Touched
       dirty.paths.each { |path| seen << path }
     end
 
@@ -29,13 +31,13 @@ private def collect_until(watcher : Inotify, & : Set(String) -> Bool) : Set(Stri
   seen
 end
 
-describe Pylon::Watch::Inotify do
+describe Inotify do
   it "reports touched paths, nested creations and respects ignores" do
     root = File.tempname("pylon-inotify")
     Dir.mkdir_p(File.join(root, "log"))
 
     dirty_paths = DirtyPaths.new(Channel(Nil).new(1))
-    watcher = Inotify.open(root, ["log"], dirty_paths, brand: Pylon::Brand::DEFAULT)
+    watcher = Inotify.open(root, ["log"], dirty_paths, brand: DEFAULT)
     watcher.should be_a(Inotify)
     next unless watcher.is_a?(Inotify)
 
@@ -72,7 +74,7 @@ describe Pylon::Watch::Inotify do
       root,
       Array(String).new,
       DirtyPaths.new(Channel(Nil).new(1)),
-      brand: Pylon::Brand::DEFAULT,
+      brand: DEFAULT,
     )
     watcher.should be_a(Inotify)
     next unless watcher.is_a?(Inotify)
@@ -103,7 +105,7 @@ describe Pylon::Watch::Inotify do
       root,
       Array(String).new,
       DirtyPaths.new(Channel(Nil).new(1)),
-      brand: Pylon::Brand::DEFAULT,
+      brand: DEFAULT,
     )
     watcher.should be_a(Inotify)
     next unless watcher.is_a?(Inotify)
@@ -129,7 +131,7 @@ describe Pylon::Watch::Inotify do
       root,
       Array(String).new,
       DirtyPaths.new(Channel(Nil).new(1)),
-      brand: Pylon::Brand::DEFAULT,
+      brand: DEFAULT,
     )
     watcher.should be_a(Inotify)
     next unless watcher.is_a?(Inotify)

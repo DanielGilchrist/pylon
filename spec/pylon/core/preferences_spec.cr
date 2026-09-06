@@ -1,16 +1,19 @@
 require "../../spec_helper"
 
+private alias Preferences = Pylon::Core::Preferences
+private alias Problem = Pylon::Problem
+
 private def build(
   local : Array(String) = Array(String).new,
   remote : Array(String) = Array(String).new,
 ) : Preferences
   case (preferences = Preferences.build(local, remote))
-  in Preferences    then preferences
-  in Pylon::Problem then fail(preferences.reason)
+  in Preferences then preferences
+  in Problem     then fail(preferences.reason)
   end
 end
 
-describe Pylon::Core::Preferences do
+describe Preferences do
   it "leaves everything a conflict when no rules are given" do
     build.winner("sorbet/rbi/a.rbi").should be_nil
   end
@@ -48,15 +51,15 @@ describe Pylon::Core::Preferences do
   end
 
   it "refuses a malformed glob as a value" do
-    Preferences.build(["[oops"], Array(String).new).should be_a(Pylon::Problem)
+    Preferences.build(["[oops"], Array(String).new).should be_a(Problem)
   end
 
   it "refuses a malformed glob when the bad segment is not the first" do
-    Preferences.build(["src/[abc"], Array(String).new).should be_a(Pylon::Problem)
+    Preferences.build(["src/[abc"], Array(String).new).should be_a(Problem)
   end
 
   it "refuses a malformed glob on the remote side too" do
-    Preferences.build(Array(String).new, ["[oops"]).should be_a(Pylon::Problem)
+    Preferences.build(Array(String).new, ["[oops"]).should be_a(Problem)
   end
 
   it "never raises while matching a rule it accepted" do

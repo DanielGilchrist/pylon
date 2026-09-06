@@ -3,6 +3,9 @@ require "../../src/pylon/scan/metadata"
 require "../../src/pylon/problem"
 require "../../src/pylon/filesystem"
 
+private alias Metadata = Pylon::Scan::Metadata
+private alias Problem = Pylon::Problem
+
 struct MemoryFilesystem
   record Node,
     kind : Pylon::Scan::Metadata::Kind,
@@ -58,10 +61,10 @@ struct MemoryFilesystem
     MemoryFilesystem.new(nodes)
   end
 
-  def metadata(relative_path : String) : Pylon::Scan::Metadata | Pylon::Problem | Nil
+  def metadata(relative_path : String) : Metadata | Problem | Nil
     node = @nodes[relative_path]?
     return if node.nil?
-    return Pylon::Problem.new("could not be examined (EACCES)") unless node.statable
+    return Problem.new("could not be examined (EACCES)") unless node.statable
 
     mode =
       case node.kind
@@ -72,7 +75,7 @@ struct MemoryFilesystem
       in Pylon::Scan::Metadata::Kind::Untracked    then LibC::S_IFIFO | 0o644
       end
 
-    Pylon::Scan::Metadata.new(
+    Metadata.new(
       mode: mode.to_u32,
       size: node.reported_size || node.content.bytesize.to_u64,
       mtime_ns: node.mtime_ns,
@@ -80,7 +83,7 @@ struct MemoryFilesystem
     )
   end
 
-  def each_child(relative_path : String, & : String ->) : Pylon::Missing | Pylon::Problem | Nil
+  def each_child(relative_path : String, & : String ->) : Pylon::Missing | Problem | Nil
     prefix = relative_path.empty? ? "" : "#{relative_path}/"
 
     @nodes.each_key do |path|
@@ -99,9 +102,9 @@ struct MemoryFilesystem
     relative_path : String,
     buffer : Bytes = Bytes.empty,
     hasher : Digest::SHA256 = Digest::SHA256.new,
-  ) : Bytes | Pylon::Problem
+  ) : Bytes | Problem
     node = @nodes[relative_path]
-    return Pylon::Problem.new("could not be read (EACCES)") unless node.readable
+    return Problem.new("could not be read (EACCES)") unless node.readable
 
     reads << relative_path
     Digest::SHA256.digest(node.content)

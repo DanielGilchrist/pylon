@@ -4,15 +4,18 @@ require "../../../src/pylon/session/local_endpoint"
 require "../../../src/pylon/session/runner"
 require "../../../src/pylon/watch/dirty_paths"
 
-include Pylon::Session
+private alias DirtyPaths = Pylon::Watch::DirtyPaths
+private alias LocalEndpoint = Pylon::Session::LocalEndpoint
+private alias Report = Pylon::Session::Report
+private alias Runner = Pylon::Session::Runner
 
-private def burst(dirty_paths : Pylon::Watch::DirtyPaths) : Nil
+private def burst(dirty_paths : DirtyPaths) : Nil
   Pylon::Session::Runner::BURST_PATHS.times { |index| dirty_paths.add("burst_#{index}.rb") }
   dirty_paths.signals.send(nil)
 end
 
 private def in_pair(
-  & : String, String, Session(LocalEndpoint, LocalEndpoint, Pylon::Discard) ->
+  & : String, String, Pylon::Session::Session(LocalEndpoint, LocalEndpoint, Pylon::Discard) ->
 ) : Nil
   base = File.join(Dir.tempdir, "pylon-runner-#{Random::Secure.hex(8)}")
   local = File.join(base, "local")
@@ -27,14 +30,14 @@ private def in_pair(
   end
 end
 
-describe Pylon::Session::Runner do
+describe Runner do
   it "cycles once immediately, before any change arrives" do
     in_pair do |local, remote, session|
       File.write(File.join(local, "first.rb"), "x")
 
       runner = Runner.new(
         session,
-        Pylon::Watch::DirtyPaths.new(Channel(Nil).new(1)),
+        DirtyPaths.new(Channel(Nil).new(1)),
         debounce: 1.millisecond,
         poll: 10.milliseconds,
       )
@@ -57,7 +60,7 @@ describe Pylon::Session::Runner do
 
   it "cycles again when a signal arrives" do
     in_pair do |local, remote, session|
-      dirty_paths = Pylon::Watch::DirtyPaths.new(Channel(Nil).new(1))
+      dirty_paths = DirtyPaths.new(Channel(Nil).new(1))
       runner = Runner.new(
         session,
         dirty_paths,
@@ -87,7 +90,7 @@ describe Pylon::Session::Runner do
     in_pair do |_, _, session|
       runner = Runner.new(
         session,
-        Pylon::Watch::DirtyPaths.new(Channel(Nil).new(1)),
+        DirtyPaths.new(Channel(Nil).new(1)),
         debounce: 1.millisecond,
         poll: 10.milliseconds,
       )
@@ -105,7 +108,7 @@ describe Pylon::Session::Runner do
 
   it "coalesces a burst of signals into a single cycle" do
     in_pair do |local, _, session|
-      dirty_paths = Pylon::Watch::DirtyPaths.new(Channel(Nil).new(16))
+      dirty_paths = DirtyPaths.new(Channel(Nil).new(16))
       runner = Runner.new(
         session,
         dirty_paths,
@@ -135,7 +138,7 @@ describe Pylon::Session::Runner do
 
   it "keeps waiting while signals arrive in gaps longer than the debounce" do
     in_pair do |local, _, session|
-      dirty_paths = Pylon::Watch::DirtyPaths.new(Channel(Nil).new(16))
+      dirty_paths = DirtyPaths.new(Channel(Nil).new(16))
       runner = Runner.new(
         session,
         dirty_paths,
@@ -167,7 +170,7 @@ describe Pylon::Session::Runner do
 
   it "cycles anyway when a burst never goes quiet" do
     in_pair do |local, _, session|
-      dirty_paths = Pylon::Watch::DirtyPaths.new(Channel(Nil).new(16))
+      dirty_paths = DirtyPaths.new(Channel(Nil).new(16))
       runner = Runner.new(
         session,
         dirty_paths,

@@ -7,7 +7,15 @@ require "../../../src/pylon/session/remote_endpoint"
 require "../../../src/pylon/session/session"
 require "../../support/remote_end"
 
-include Pylon::Session
+private alias Brand = Pylon::Brand
+private FORMAT   = Pylon::Wire::FORMAT
+private alias Greeting = Pylon::Wire::Greeting
+private IDENTITY = Pylon::Wire::IDENTITY
+private alias Message = Pylon::Wire::Message
+private alias Problem = Pylon::Problem
+private alias Server = Pylon::Session::Server
+private alias RemoteEndpoint = Pylon::Session::RemoteEndpoint
+private alias Incompatible = Pylon::Session::Incompatible
 
 private class BufferedIO < IO
   include IO::Buffered
@@ -34,7 +42,7 @@ end
 
 private def rejected_with(
   message : String,
-  brand : Pylon::Brand = Pylon::Brand::DEFAULT,
+  brand : Brand = Pylon::Brand::DEFAULT,
   & : UNIXSocket ->
 ) : Nil
   root = File.join(Dir.tempdir, "pylon-greeting-#{Random::Secure.hex(8)}")
@@ -63,8 +71,8 @@ end
 describe "the wire greeting" do
   it "rejects a remote built for a different protocol version" do
     rejected_with("version 0") do |socket|
-      socket.write(Pylon::Wire::IDENTITY.to_slice)
-      socket.write_bytes(0_u32, Pylon::Wire::FORMAT)
+      socket.write(IDENTITY.to_slice)
+      socket.write_bytes(0_u32, FORMAT)
       socket.flush
     end
   end
@@ -79,7 +87,7 @@ describe "the wire greeting" do
   it "names the program it expected by the name it was given" do
     rejected_with(
       "did not identify itself as Test Sync",
-      brand: Pylon::Brand.new("Test Sync"),
+      brand: Brand.new("Test Sync"),
     ) do |socket|
       socket.puts("bash: pylon: command not found")
       socket.flush
@@ -90,9 +98,9 @@ describe "the wire greeting" do
      "configured" do
     buffered = BufferedIO.new
 
-    Pylon::Wire::Greeting.write(buffered)
+    Greeting.write(buffered)
 
-    buffered.inner.to_s.should start_with(Pylon::Wire::IDENTITY)
+    buffered.inner.to_s.should start_with(IDENTITY)
   end
 
   it "refuses to start when the greeting cannot be sent" do
@@ -101,8 +109,8 @@ describe "the wire greeting" do
 
     accepted = Server.accept(IO::Memory.new, closed, IO::Memory.new)
 
-    accepted.should be_a(Pylon::Problem)
-    if accepted.is_a?(Pylon::Problem)
+    accepted.should be_a(Problem)
+    if accepted.is_a?(Problem)
       accepted.reason.should start_with("the greeting could not be sent")
     end
   end
@@ -112,11 +120,11 @@ describe "the wire greeting" do
     serve_remote_end(socket)
 
     begin
-      identity = Bytes.new(Pylon::Wire::IDENTITY.bytesize)
+      identity = Bytes.new(IDENTITY.bytesize)
       client.read_fully(identity)
 
-      String.new(identity).should eq(Pylon::Wire::IDENTITY)
-      client.read_bytes(UInt32, Pylon::Wire::FORMAT).should eq(Pylon::Wire::PROTOCOL)
+      String.new(identity).should eq(IDENTITY)
+      client.read_bytes(UInt32, FORMAT).should eq(Pylon::Wire::PROTOCOL)
     ensure
       client.close
       socket.close
@@ -127,14 +135,14 @@ describe "the wire greeting" do
     client, socket = UNIXSocket.pair
 
     begin
-      Pylon::Wire::Message.write(client, Pylon::Wire::Message::ScanRequest.new(1_i64))
+      Message.write(client, Pylon::Wire::Message::ScanRequest.new(1_i64))
 
       accepted = Server.accept(socket, socket, IO::Memory.new)
 
-      accepted.should be_a(Pylon::Problem)
-      accepted.reason.should contain("must configure this side") if accepted.is_a?(Pylon::Problem)
-      Pylon::Wire::Greeting.read(client).should be_nil
-      Pylon::Wire::Message.read(client).should be_a(Pylon::Wire::Message::Failure)
+      accepted.should be_a(Problem)
+      accepted.reason.should contain("must configure this side") if accepted.is_a?(Problem)
+      Greeting.read(client).should be_nil
+      Message.read(client).should be_a(Pylon::Wire::Message::Failure)
     ensure
       client.close
       socket.close
@@ -154,12 +162,12 @@ describe "the wire greeting" do
         root: root,
         ignores: Array(String).new,
         compression: Pylon::Compress::Zstd::DEFAULT_LEVEL,
-        brand: Pylon::Brand.new("Test Sync"),
+        brand: Brand.new("Test Sync"),
         state: state,
         watch: false,
         tree_fingerprint: nil,
       )
-      Pylon::Wire::Message.write(client, configure)
+      Message.write(client, configure)
 
       Server.accept(socket, socket, log).should be_a(Server)
 

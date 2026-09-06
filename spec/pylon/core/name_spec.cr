@@ -1,7 +1,10 @@
 require "../../spec_helper"
 require "../../../src/pylon/core/name"
 
-describe Pylon::Core::Name do
+private alias Name = Pylon::Core::Name
+private alias Problem = Pylon::Problem
+
+describe Name do
   it "accepts an ordinary path component" do
     parsed = Name.parse("user.rb")
 
@@ -18,35 +21,35 @@ describe Pylon::Core::Name do
   it "rejects an empty component" do
     parsed = Name.parse("")
 
-    parsed.should be_a(Pylon::Problem)
-    parsed.reason.should eq("is empty") if parsed.is_a?(Pylon::Problem)
+    parsed.should be_a(Problem)
+    parsed.reason.should eq("is empty") if parsed.is_a?(Problem)
   end
 
   it "rejects a component with a NUL byte" do
     parsed = Name.parse("a\0b")
 
-    parsed.should be_a(Pylon::Problem)
-    parsed.reason.should eq("is a path component with a NUL byte") if parsed.is_a?(Pylon::Problem)
+    parsed.should be_a(Problem)
+    parsed.reason.should eq("is a path component with a NUL byte") if parsed.is_a?(Problem)
   end
 
   it "rejects a component with a slash" do
     parsed = Name.parse("a/b")
 
-    parsed.should be_a(Pylon::Problem)
-    parsed.reason.should eq("is a path component with a '/'") if parsed.is_a?(Pylon::Problem)
+    parsed.should be_a(Problem)
+    parsed.reason.should eq("is a path component with a '/'") if parsed.is_a?(Problem)
   end
 
   it "rejects the current directory component" do
     parsed = Name.parse(".")
 
-    parsed.should be_a(Pylon::Problem)
-    parsed.reason.should eq("is a '.' path component") if parsed.is_a?(Pylon::Problem)
+    parsed.should be_a(Problem)
+    parsed.reason.should eq("is a '.' path component") if parsed.is_a?(Problem)
   end
 
   it "rejects the parent directory component" do
     parsed = Name.parse("..")
 
-    parsed.should be_a(Pylon::Problem)
-    parsed.reason.should eq("is a '..' path component") if parsed.is_a?(Pylon::Problem)
+    parsed.should be_a(Problem)
+    parsed.reason.should eq("is a '..' path component") if parsed.is_a?(Problem)
   end
 end

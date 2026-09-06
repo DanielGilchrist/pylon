@@ -1,6 +1,10 @@
 require "../../spec_helper"
 require "../../../src/pylon/core/differ"
 
+private alias Differ = Pylon::Core::Differ
+private alias Directory = Pylon::Core::Directory
+private alias Entry = Pylon::Core::Entry
+
 private CONTENTS = {
   nil,
   Fixtures.f1,
@@ -24,17 +28,17 @@ private def random_entry(random : Random, depth : Int32) : Entry?
     end
   end
 
-  Pylon::Core::Directory.new(contents)
+  Directory.new(contents)
 end
 
-describe Pylon::Core::Differ do
+describe Differ do
   it "says nothing about identical trees" do
     Differ.diff(Fixtures.d1, Fixtures.d1).should be_empty
   end
 
   it "describes a single changed file, not the whole tree" do
-    base = Pylon::Core::Directory.new({"a" => Fixtures.f1, "b" => Fixtures.f1})
-    target = Pylon::Core::Directory.new({"a" => Fixtures.f2, "b" => Fixtures.f1})
+    base = Directory.new({"a" => Fixtures.f1, "b" => Fixtures.f1})
+    target = Directory.new({"a" => Fixtures.f2, "b" => Fixtures.f1})
 
     changes = Differ.diff(base, target)
 
@@ -43,17 +47,17 @@ describe Pylon::Core::Differ do
   end
 
   it "describes additions and removals" do
-    base = Pylon::Core::Directory.new({"gone" => Fixtures.f1})
-    target = Pylon::Core::Directory.new({"added" => Fixtures.f2})
+    base = Directory.new({"gone" => Fixtures.f1})
+    target = Directory.new({"added" => Fixtures.f2})
 
     Differ.diff(base, target).map(&.path).sort!.should eq(["added", "gone"])
   end
 
   it "collapses a replaced subtree into one change" do
-    base = Pylon::Core::Directory.new(
-      {"app" => Pylon::Core::Directory.new({"a" => Fixtures.f1, "b" => Fixtures.f2})},
+    base = Directory.new(
+      {"app" => Directory.new({"a" => Fixtures.f1, "b" => Fixtures.f2})},
     )
-    target = Pylon::Core::Directory.new({"app" => Fixtures.f1})
+    target = Directory.new({"app" => Fixtures.f1})
 
     Differ.diff(base, target).map(&.path).should eq(["app"])
   end
@@ -66,7 +70,7 @@ describe Pylon::Core::Differ do
       base = random_entry(random, 3)
       target = random_entry(random, 3)
 
-      rebuilt = Applier.apply(base, Differ.diff(base, target))
+      rebuilt = Pylon::Core::Applier.apply(base, Differ.diff(base, target))
 
       (rebuilt == target).should be_true, "seed=#{seed} iteration=#{iteration}"
     end
@@ -76,10 +80,10 @@ describe Pylon::Core::Differ do
     contents = Hash(String, Entry).new
     500.times { |index| contents["file_#{index}.rb"] = Fixtures.f1 }
 
-    base = Pylon::Core::Directory.new(contents)
+    base = Directory.new(contents)
     changed = contents.dup
     changed["file_250.rb"] = Fixtures.f2
-    target = Pylon::Core::Directory.new(changed)
+    target = Directory.new(changed)
 
     Differ.diff(base, target).size.should eq(1)
   end

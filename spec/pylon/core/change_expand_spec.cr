@@ -1,6 +1,12 @@
 require "../../spec_helper"
 require "../../../src/pylon/core/change"
 
+private alias Applier = Pylon::Core::Applier
+private alias Change = Pylon::Core::Change
+private alias Changes = Pylon::Core::Changes
+private alias Directory = Pylon::Core::Directory
+private alias Entry = Pylon::Core::Entry
+
 private CONTENTS = {
   nil,
   Fixtures.f1,
@@ -23,7 +29,7 @@ private def random_entry(random : Random, depth : Int32) : Entry?
     end
   end
 
-  Pylon::Core::Directory.new(contents)
+  Directory.new(contents)
 end
 
 describe "expanding changes" do
@@ -38,16 +44,16 @@ describe "expanding changes" do
   end
 
   it "turns a subtree into one change per entry" do
-    subtree = Pylon::Core::Directory.new(
-      {"models" => Pylon::Core::Directory.new({"user.rb" => Fixtures.f1})},
+    subtree = Directory.new(
+      {"models" => Directory.new({"user.rb" => Fixtures.f1})},
     )
 
     expanded = Changes.flatten([Change.new("app", nil, subtree)])
 
     expanded.map(&.path).should eq(["app", "app/models", "app/models/user.rb"])
     root = expanded.first.new
-    root.is_a?(Pylon::Core::Directory).should be_true
-    root.contents.should be_empty if root.is_a?(Pylon::Core::Directory)
+    root.is_a?(Directory).should be_true
+    root.contents.should be_empty if root.is_a?(Directory)
   end
 
   it "produces the same tree as the change it replaced" do

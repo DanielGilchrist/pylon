@@ -1,5 +1,9 @@
 require "../../spec_helper"
 
+private alias Changes = Pylon::Core::Changes
+private alias Directory = Pylon::Core::Directory
+private alias Entry = Pylon::Core::Entry
+
 private FILES = 4_000
 
 private def wide_tree(files : Int32) : Entry
@@ -8,14 +12,14 @@ private def wide_tree(files : Int32) : Entry
   20.times do |directory|
     contents = Hash(String, Entry).new
     (files // 20).times { |file| contents["file_#{file}.rb"] = Fixtures.f1 }
-    directories["dir_#{directory}"] = Pylon::Core::Directory.new(contents)
+    directories["dir_#{directory}"] = Directory.new(contents)
   end
 
-  Pylon::Core::Directory.new(directories)
+  Directory.new(directories)
 end
 
 private def changes_for(tree : Entry) : Changes
-  Changes.flatten([Change.new("", nil, tree)])
+  Changes.flatten([Pylon::Core::Change.new("", nil, tree)])
 end
 
 describe "allocation budgets" do
@@ -24,7 +28,7 @@ describe "allocation budgets" do
     changes.size.should be > FILES
 
     assert_allocates_under(8 * MIB, "applying #{changes.size} changes") do
-      Applier.apply(nil, changes)
+      Pylon::Core::Applier.apply(nil, changes)
     end
   end
 
@@ -32,7 +36,7 @@ describe "allocation budgets" do
     tree = wide_tree(FILES)
 
     assert_allocates_under(16 * KIB, "reconciling two identical #{FILES} file trees") do
-      Reconciler.reconcile(tree, tree, tree, Fixtures::NONE)
+      Pylon::Core::Reconciler.reconcile(tree, tree, tree, Fixtures::NONE)
     end
   end
 

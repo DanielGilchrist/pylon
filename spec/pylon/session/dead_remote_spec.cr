@@ -6,8 +6,6 @@ require "../../../src/pylon/session/remote_endpoint"
 require "../../../src/pylon/session/session"
 require "../../support/remote_end"
 
-include Pylon::Session
-
 describe "a remote that is not there" do
   it "reports the remote stopping rather than taking the process down" do
     root = File.join(Dir.tempdir, "pylon-dead-#{Random::Secure.hex(8)}")
@@ -19,11 +17,11 @@ describe "a remote that is not there" do
 
     session = build_session(
       local_endpoint(root),
-      RemoteEndpoint.new(client, client, remote_configuration(root), resume: nil),
+      Pylon::Session::RemoteEndpoint.new(client, client, remote_configuration(root), resume: nil),
     )
 
     begin
-      session.cycle(Time.utc.to_unix_ns.to_i64).should be_a(Stopped)
+      session.cycle(Time.utc.to_unix_ns.to_i64).should be_a(Pylon::Session::Stopped)
     ensure
       FileUtils.rm_rf(root)
     end

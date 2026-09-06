@@ -6,9 +6,10 @@ require "../../../src/pylon/session/remote_endpoint"
 require "../../../src/pylon/session/session"
 require "../../support/remote_end"
 
-include Pylon::Session
+private alias LocalEndpoint = Pylon::Session::LocalEndpoint
+private alias RemoteEndpoint = Pylon::Session::RemoteEndpoint
 
-private alias Paired = Session(LocalEndpoint, RemoteEndpoint, Pylon::Discard)
+private alias Paired = Pylon::Session::Session(LocalEndpoint, RemoteEndpoint, Pylon::Discard)
 
 private class CountingIO < IO
   def initialize(@inner : IO) : Nil

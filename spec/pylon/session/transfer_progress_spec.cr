@@ -3,7 +3,8 @@ require "../../spec_helper"
 require "../../../src/pylon/session/local_endpoint"
 require "../../../src/pylon/session/session"
 
-include Pylon::Session
+private alias LocalEndpoint = Pylon::Session::LocalEndpoint
+private alias TransferProgress = Pylon::Session::TransferProgress
 
 private def tick : Int64
   Time.utc.to_unix_ns.to_i64 + Random.rand(1_000_000_i64)
@@ -19,7 +20,7 @@ end
 
 private def in_progress_pair(
   file_count : Int32,
-  & : Array(TransferProgress), Session(LocalEndpoint, LocalEndpoint, Recorder) ->
+  & : Array(TransferProgress), Pylon::Session::Session(LocalEndpoint, LocalEndpoint, Recorder) ->
 ) : Nil
   base = File.join(Dir.tempdir, "pylon-progress-#{Random::Secure.hex(8)}")
   local_root = File.join(base, "local")

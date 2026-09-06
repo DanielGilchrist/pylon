@@ -5,16 +5,24 @@ require "../../../src/pylon/session/staging"
 require "../../../src/pylon/wire/spliced"
 require "../../../src/pylon/disk"
 
+private alias Change = Pylon::Core::Change
+private alias Changes = Pylon::Core::Changes
+private alias Contents = Pylon::Wire::Contents
+private alias Directory = Pylon::Core::Directory
+private alias Disk = Pylon::Disk
+private alias Staging = Pylon::Session::Staging
+private alias Writer = Pylon::Write::Writer
+
 private FILES = 120
 
 private def build_writer(
-  disk : Pylon::Disk,
-  contents : Pylon::Wire::Contents,
+  disk : Disk,
+  contents : Contents,
   parallelism = Pylon::Write::Writer::DEFAULT_PARALLELISM,
-) : Pylon::Write::Writer(Pylon::Disk, Pylon::Session::Staging(Unrecoverable))
-  Pylon::Write::Writer.new(
+) : Writer(Disk, Staging(Unrecoverable))
+  Writer.new(
     disk,
-    Pylon::Session::Staging.new(contents, Unrecoverable.new),
+    Staging.new(contents, Unrecoverable.new),
     Pylon::Scan::Cache.new,
     Time.utc.to_unix_ns.to_i64,
     Pylon::Scan::Ignores::NONE,
@@ -22,23 +30,23 @@ private def build_writer(
   )
 end
 
-private def bulk_changes : Pylon::Core::Changes
-  changes = Pylon::Core::Changes.new
+private def bulk_changes : Changes
+  changes = Changes.new
 
-  changes << Pylon::Core::Change.new("nested", nil, Pylon::Core::Directory.new)
+  changes << Change.new("nested", nil, Directory.new)
 
   FILES.times do |index|
     digest = Digest::SHA256.digest("file#{index}").to_slice
     entry = Pylon::Core::File.new(digest, executable: index.even?)
     path = index < FILES // 2 ? "file#{index}.cr" : "nested/file#{index}.cr"
-    changes << Pylon::Core::Change.new(path, nil, entry)
+    changes << Change.new(path, nil, entry)
   end
 
   changes
 end
 
-private def staged_contents(changes : Pylon::Core::Changes) : Pylon::Wire::Contents
-  contents = Pylon::Wire::Contents.new
+private def staged_contents(changes : Changes) : Contents
+  contents = Contents.new
 
   changes.each do |change|
     entry = change.new
@@ -61,8 +69,8 @@ describe "Writer running independent file writes in parallel" do
     Dir.mkdir_p(sequential_root)
 
     begin
-      parallel = build_writer(Pylon::Disk.new(parallel_root), contents).write(changes)
-      sequential = build_writer(Pylon::Disk.new(sequential_root), contents, 1).write(changes)
+      parallel = build_writer(Disk.new(parallel_root), contents).write(changes)
+      sequential = build_writer(Disk.new(sequential_root), contents, 1).write(changes)
 
       parallel.size.should eq(changes.size)
       parallel.map(&.path).should eq(changes.map(&.path))
@@ -95,7 +103,7 @@ describe "Writer running independent file writes in parallel" do
     Dir.mkdir_p(root)
 
     begin
-      outcomes = build_writer(Pylon::Disk.new(root), contents, 24).write(changes)
+      outcomes = build_writer(Disk.new(root), contents, 24).write(changes)
 
       outcomes.size.should eq(changes.size)
       outcomes.count(&.applied?).should eq(changes.size)
@@ -105,14 +113,14 @@ describe "Writer running independent file writes in parallel" do
   end
 
   it "creates every directory before the files inside it, whatever ran in parallel" do
-    changes = Pylon::Core::Changes.new
-    contents = Pylon::Wire::Contents.new
+    changes = Changes.new
+    contents = Contents.new
 
     20.times do |index|
       digest = Digest::SHA256.digest("nested#{index}").to_slice
       contents[digest] = "body #{index}".to_slice
-      changes << Pylon::Core::Change.new("d#{index}", nil, Pylon::Core::Directory.new)
-      changes << Pylon::Core::Change.new(
+      changes << Change.new("d#{index}", nil, Directory.new)
+      changes << Change.new(
         "d#{index}/file.rb",
         nil,
         Pylon::Core::File.new(digest, executable: false),
@@ -123,7 +131,7 @@ describe "Writer running independent file writes in parallel" do
     Dir.mkdir_p(root)
 
     begin
-      outcomes = build_writer(Pylon::Disk.new(root), contents).write(changes)
+      outcomes = build_writer(Disk.new(root), contents).write(changes)
 
       outcomes.count(&.applied?).should eq(changes.size)
       20.times do |index|
@@ -147,7 +155,7 @@ describe "Writer running independent file writes in parallel" do
     Dir.mkdir_p(root)
 
     begin
-      outcomes = build_writer(Pylon::Disk.new(root), contents).write(changes)
+      outcomes = build_writer(Disk.new(root), contents).write(changes)
 
       unrecovered = outcomes.count do |outcome|
         outcome.skipped == Pylon::Write::Skip::StagedContentMissing

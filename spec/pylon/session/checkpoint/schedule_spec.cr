@@ -2,7 +2,9 @@ require "file_utils"
 require "../../../spec_helper"
 require "../../../../src/pylon/session/checkpoint/schedule"
 
-include Pylon::Session
+private alias Checkpoint = Pylon::Session::Checkpoint
+private alias Problem = Pylon::Problem
+private alias Schedule = Pylon::Session::Checkpoint::Schedule
 
 private def in_sandbox(& : String ->) : Nil
   root = File.join(Dir.tempdir, "pylon-schedule-#{Random::Secure.hex(8)}")
@@ -15,11 +17,11 @@ private def in_sandbox(& : String ->) : Nil
   end
 end
 
-private def schedule(path : String, interval : Time::Span) : Checkpoint::Schedule
-  Checkpoint::Schedule.new(path, interval)
+private def schedule(path : String, interval : Time::Span) : Schedule
+  Schedule.new(path, interval)
 end
 
-describe Pylon::Session::Checkpoint::Schedule do
+describe Schedule do
   it "saves immediately when it has never saved" do
     in_sandbox do |root|
       path = File.join(root, "state")
@@ -66,8 +68,8 @@ describe Pylon::Session::Checkpoint::Schedule do
       first = due.save(Checkpoint.new)
       second = due.save(Checkpoint.new)
 
-      first.should be_a(Pylon::Problem)
-      first.reason.should contain("was not saved") if first.is_a?(Pylon::Problem)
+      first.should be_a(Problem)
+      first.reason.should contain("was not saved") if first.is_a?(Problem)
       second.should be_nil
     end
   end
@@ -79,12 +81,12 @@ describe Pylon::Session::Checkpoint::Schedule do
 
       due = schedule(File.join(blocked, "state"), 0.seconds)
 
-      due.save(Checkpoint.new).should be_a(Pylon::Problem)
+      due.save(Checkpoint.new).should be_a(Problem)
       File.delete(blocked)
       due.save(Checkpoint.new).should be_nil
       FileUtils.rm_rf(blocked)
       File.write(blocked, "in the way again")
-      due.save(Checkpoint.new).should be_a(Pylon::Problem)
+      due.save(Checkpoint.new).should be_a(Problem)
     end
   end
 end

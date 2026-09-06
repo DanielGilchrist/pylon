@@ -7,7 +7,12 @@ require "../../../src/pylon/session/remote_endpoint"
 require "../../../src/pylon/session/session"
 require "../../support/remote_end"
 
-include Pylon::Session
+private alias Message = Pylon::Wire::Message
+private alias ReceivingTree = Pylon::Session::Inbound::ReceivingTree
+private alias RemoteEndpoint = Pylon::Session::RemoteEndpoint
+private alias Report = Pylon::Session::Report
+private alias Fault = Pylon::Session::Fault
+private alias RemoteScanning = Pylon::Session::Inbound::RemoteScanning
 
 private def scripted_server(& : IO ->) : IO::Memory
   script = IO::Memory.new
@@ -32,7 +37,7 @@ end
 describe "what the client learns while waiting for the remote tree" do
   it "records the remote scan's progress" do
     script = scripted_server do |io|
-      Pylon::Wire::Message.write(
+      Message.write(
         io,
         Pylon::Wire::Message::ScanProgress.new(1234_i64, 5_000_000_i64),
       )
@@ -40,7 +45,7 @@ describe "what the client learns while waiting for the remote tree" do
 
     _, endpoint = cycle_against(script)
 
-    endpoint.inbound.phase.should eq(Inbound::RemoteScanning.new(1234_i64, 5_000_000_i64))
+    endpoint.inbound.phase.should eq(RemoteScanning.new(1234_i64, 5_000_000_i64))
     endpoint.inbound.bytes.should eq(script.size)
   end
 
@@ -54,15 +59,15 @@ describe "what the client learns while waiting for the remote tree" do
     measured = Pylon::Wire::Chunks.measure_entry(root)
 
     script = scripted_server do |io|
-      Pylon::Wire::Message.write(io, Pylon::Wire::Message::TreeAnnounce.new(measured))
-      Pylon::Wire::Message.write(io, Pylon::Wire::Message::ScanResponse.new(root))
+      Message.write(io, Pylon::Wire::Message::TreeAnnounce.new(measured))
+      Message.write(io, Pylon::Wire::Message::ScanResponse.new(root))
     end
 
     _, endpoint = cycle_against(script)
 
     phase = endpoint.inbound.phase
-    phase.should be_a(Inbound::ReceivingTree)
-    next unless phase.is_a?(Inbound::ReceivingTree)
+    phase.should be_a(ReceivingTree)
+    next unless phase.is_a?(ReceivingTree)
 
     phase.expected.should eq(measured.to_i64)
     endpoint.inbound.received(phase).should eq(measured.to_i64)
@@ -89,8 +94,8 @@ describe "what the client learns while waiting for the remote tree" do
       cycle!(build_session(local_endpoint(local), endpoint), Time.utc.to_unix_ns.to_i64)
 
       phase = endpoint.inbound.phase
-      phase.should be_a(Inbound::ReceivingTree)
-      if phase.is_a?(Inbound::ReceivingTree)
+      phase.should be_a(ReceivingTree)
+      if phase.is_a?(ReceivingTree)
         endpoint.inbound.received(phase).should eq(phase.expected)
       end
     ensure

@@ -2,11 +2,21 @@ require "spec"
 require "./support/allocations"
 require "./support/entries"
 require "../src/pylon/discard"
+require "../src/pylon/session/local_endpoint"
+require "../src/pylon/session/session"
 
-include Pylon::Core
+private alias Changes = Pylon::Core::Changes
+private alias Discard = Pylon::Discard
+private alias Entry = Pylon::Core::Entry
+private alias LocalEndpoint = Pylon::Session::LocalEndpoint
+private alias Preferences = Pylon::Core::Preferences
+private alias Report = Pylon::Session::Report
+private alias Session = Pylon::Session::Session
+private alias Trouble = Pylon::Core::Trouble
+private alias Reconciliation = Pylon::Core::Reconciliation
 
-def local_endpoint(root : String) : Pylon::Session::LocalEndpoint
-  Pylon::Session::LocalEndpoint.new(
+def local_endpoint(root : String) : LocalEndpoint
+  LocalEndpoint.new(
     root,
     Pylon::Scan::Ignores::NONE,
     compression: Pylon::Compress::Zstd::DEFAULT_LEVEL,
@@ -20,11 +30,11 @@ def build_session(
   base : Entry? = nil,
   dry_run : Bool = false,
   push_first : Bool = false,
-) : Pylon::Session::Session(A, B, Pylon::Discard) forall A, B
+) : Session(A, B, Discard) forall A, B
   build_session(
     local,
     remote,
-    narrator: Pylon::Discard.new,
+    narrator: Discard.new,
     preferences: preferences,
     base: base,
     dry_run: dry_run,
@@ -41,8 +51,8 @@ def build_session(
   base : Entry? = nil,
   dry_run : Bool = false,
   push_first : Bool = false,
-) : Pylon::Session::Session(A, B, N) forall A, B, N
-  Pylon::Session::Session.new(
+) : Session(A, B, N) forall A, B, N
+  Session.new(
     local,
     remote,
     preferences: preferences,
@@ -53,9 +63,9 @@ def build_session(
   )
 end
 
-def cycle!(session : Pylon::Session::Session, now_ns : Int64) : Pylon::Session::Report
+def cycle!(session : Session, now_ns : Int64) : Report
   result = session.cycle(now_ns)
-  return result if result.is_a?(Pylon::Session::Report)
+  return result if result.is_a?(Report)
 
   raise "the session faulted: #{result.explain}"
 end

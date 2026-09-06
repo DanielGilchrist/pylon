@@ -1,14 +1,19 @@
 require "../../spec_helper"
 
-private def pairs_of(extraction : Relocation::Extraction) : Array({String, String})
+private alias Change = Pylon::Core::Change
+private alias Changes = Pylon::Core::Changes
+private alias Problem = Pylon::Problem
+private alias Relocation = Pylon::Core::Relocation
+
+private def pairs_of(extraction : Pylon::Core::Relocation::Extraction) : Array({String, String})
   extraction.relocations.map { |relocation| {relocation.from, relocation.to} }
 end
 
-private def tree : Entry
+private def tree : Pylon::Core::Entry
   Fixtures.dir({"a.rb" => Fixtures.f1, "deep" => Fixtures.dir({"b.rb" => Fixtures.f2})})
 end
 
-describe Pylon::Core::Relocation do
+describe Relocation do
   it "pairs a deleted tree with the same tree created elsewhere" do
     extraction = Relocation.extract(Changes[
       Change.new("lib", tree, nil),
@@ -106,17 +111,17 @@ describe Pylon::Core::Relocation do
   it "refuses to move the sync root, a path onto itself, or a path into itself" do
     file = Fixtures.file!(Fixtures.f1)
 
-    Relocation.parse("", "x", file).should be_a(Pylon::Problem)
-    Relocation.parse("x", "", file).should be_a(Pylon::Problem)
-    Relocation.parse("x", "x", file).should be_a(Pylon::Problem)
-    Relocation.parse("x", "x/y", file).should be_a(Pylon::Problem)
-    Relocation.parse("x/y", "x", file).should be_a(Pylon::Problem)
+    Relocation.parse("", "x", file).should be_a(Problem)
+    Relocation.parse("x", "", file).should be_a(Problem)
+    Relocation.parse("x", "x", file).should be_a(Problem)
+    Relocation.parse("x", "x/y", file).should be_a(Problem)
+    Relocation.parse("x/y", "x", file).should be_a(Problem)
     Relocation.parse("x", "xy", file).should be_a(Relocation)
   end
 
   it "refuses to move an entry that is not syncable" do
-    Relocation.parse("a", "b", Fixtures.untracked).should be_a(Pylon::Problem)
-    Relocation.parse("a", "b", Fixtures.problematic).should be_a(Pylon::Problem)
-    Relocation.parse("a", "b", nil).should be_a(Pylon::Problem)
+    Relocation.parse("a", "b", Fixtures.untracked).should be_a(Problem)
+    Relocation.parse("a", "b", Fixtures.problematic).should be_a(Problem)
+    Relocation.parse("a", "b", nil).should be_a(Problem)
   end
 end

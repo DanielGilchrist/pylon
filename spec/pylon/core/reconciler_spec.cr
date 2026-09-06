@@ -1,5 +1,10 @@
 require "../../spec_helper"
 
+private alias Change = Pylon::Core::Change
+private alias Changes = Pylon::Core::Changes
+private alias Reconciler = Pylon::Core::Reconciler
+private alias Trouble = Pylon::Core::Trouble
+
 private F1 = Fixtures.f1
 private F2 = Fixtures.f2
 private FX = Fixtures.f1x
@@ -177,7 +182,7 @@ private CASES = {
   ),
 }
 
-describe Pylon::Core::Reconciler do
+describe Reconciler do
   CASES.each do |reconcile_case|
     reconcile_case.preferences.each do |mode|
       it "#{reconcile_case.description} (#{mode.winner("")})" do

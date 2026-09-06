@@ -6,7 +6,10 @@ require "../../../src/pylon/session/remote_endpoint"
 require "../../../src/pylon/session/session"
 require "../../support/remote_end"
 
-include Pylon::Session
+private alias RemoteEndpoint = Pylon::Session::RemoteEndpoint
+private alias Session = Pylon::Session::Session
+private alias LocalEndpoint = Pylon::Session::LocalEndpoint
+private alias Discard = Pylon::Discard
 
 private class MeteredIO < IO
   def initialize(@inner : IO) : Nil
@@ -32,7 +35,7 @@ private class MeteredIO < IO
 end
 
 private def in_metered_pair(
-  & : String, String, Session(LocalEndpoint, RemoteEndpoint, Pylon::Discard), MeteredIO ->
+  & : String, String, Session(LocalEndpoint, RemoteEndpoint, Discard), MeteredIO ->
 ) : Nil
   base = File.join(Dir.tempdir, "pylon-splice-#{Random::Secure.hex(8)}")
   local_root = File.join(base, "local")

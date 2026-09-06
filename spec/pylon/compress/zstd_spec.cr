@@ -2,7 +2,9 @@ require "../../spec_helper"
 require "../../../src/pylon/compress/identity"
 require "../../../src/pylon/compress/zstd"
 
-include Pylon::Compress
+private alias Identity = Pylon::Compress::Identity
+private alias Problem = Pylon::Problem
+private alias Zstd = Pylon::Compress::Zstd
 
 private RUBY = <<-SOURCE
   # typed: strict
@@ -12,7 +14,7 @@ private RUBY = <<-SOURCE
   end
   SOURCE
 
-private def round_trip(codec : Codec, source : Bytes) : Bytes
+private def round_trip(codec : Pylon::Compress::Codec, source : Bytes) : Bytes
   packed = codec.compress(source, Bytes.new(codec.bound(source.size)))
   packed.should be_a(Bytes)
   return Bytes.empty unless packed.is_a?(Bytes)
@@ -22,7 +24,7 @@ private def round_trip(codec : Codec, source : Bytes) : Bytes
   unpacked.is_a?(Bytes) ? unpacked : Bytes.empty
 end
 
-describe Pylon::Compress::Zstd do
+describe Zstd do
   it "round trips text" do
     source = (RUBY * 40).to_slice
 
@@ -52,16 +54,16 @@ describe Pylon::Compress::Zstd do
   end
 
   it "reports an error rather than corrupting when the buffer is too small" do
-    Zstd.new.compress((RUBY * 40).to_slice, Bytes.new(4)).should be_a(Pylon::Problem)
+    Zstd.new.compress((RUBY * 40).to_slice, Bytes.new(4)).should be_a(Problem)
   end
 
   it "reports an error for a corrupt frame" do
     garbage = "not a zstd frame at all".to_slice
-    Zstd.new.decompress(garbage, Bytes.new(1024)).should be_a(Pylon::Problem)
+    Zstd.new.decompress(garbage, Bytes.new(1024)).should be_a(Problem)
   end
 end
 
-describe Pylon::Compress::Identity do
+describe Identity do
   it "round trips unchanged" do
     source = RUBY.to_slice
 
@@ -69,6 +71,6 @@ describe Pylon::Compress::Identity do
   end
 
   it "reports an error rather than overflowing" do
-    Identity.new.compress(RUBY.to_slice, Bytes.new(2)).should be_a(Pylon::Problem)
+    Identity.new.compress(RUBY.to_slice, Bytes.new(2)).should be_a(Problem)
   end
 end

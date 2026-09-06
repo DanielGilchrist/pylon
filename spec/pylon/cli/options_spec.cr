@@ -2,14 +2,18 @@ require "../../spec_helper"
 require "../../../src/pylon/cli/sync"
 require "../../../src/pylon/cli/remote"
 
-private def parse_sync(extra : Array(String) = Array(String).new) : Pylon::CLI::Sync
-  parsed = Pylon::CLI::Sync.parse(["./here", "user@host:/there"] + extra)
-  raise "the sync command did not parse: #{parsed.inspect}" unless parsed.is_a?(Pylon::CLI::Sync)
+private DEFAULT_COMPRESSION = Pylon::CLI::Sync::DEFAULT_COMPRESSION
+private alias Remote = Pylon::CLI::Remote
+private alias Sync = Pylon::CLI::Sync
+
+private def parse_sync(extra : Array(String) = Array(String).new) : Sync
+  parsed = Sync.parse(["./here", "user@host:/there"] + extra)
+  raise "the sync command did not parse: #{parsed.inspect}" unless parsed.is_a?(Sync)
 
   parsed
 end
 
-describe Pylon::CLI::Sync do
+describe Sync do
   it "syncs once, writing and explaining nothing extra, by default" do
     parsed = parse_sync
 
@@ -20,7 +24,7 @@ describe Pylon::CLI::Sync do
     parsed.state.should be_nil
     parsed.remote_binary.should eq(Pylon::CLI::Sync::DEFAULT_REMOTE_BINARY)
     parsed.remote_state.should be_nil
-    parsed.compression.should eq(Pylon::CLI::Sync::DEFAULT_COMPRESSION)
+    parsed.compression.should eq(DEFAULT_COMPRESSION)
     parsed.brand.should eq(Pylon::Brand::DEFAULT)
   end
 
@@ -36,14 +40,14 @@ describe Pylon::CLI::Sync do
   end
 
   it "refuses a blank brand rather than printing nothing in its place" do
-    parsed = Pylon::CLI::Sync.parse(["./here", "user@host:/there", "--brand", "  "])
+    parsed = Sync.parse(["./here", "user@host:/there", "--brand", "  "])
 
     parsed.should be_a(Kebab::Error::InvalidValue)
     parsed.to_s.should contain(%("  " isn't a valid brand for "--brand" (it is blank)))
   end
 
   it "compresses harder than a local sync because the link, not the CPU, is the bottleneck" do
-    Pylon::CLI::Sync::DEFAULT_COMPRESSION.should be > Pylon::Compress::Zstd::DEFAULT_LEVEL
+    DEFAULT_COMPRESSION.should be > Pylon::Compress::Zstd::DEFAULT_LEVEL
     parse_sync(["--compression", "1"]).compression.should eq(1)
   end
 
@@ -74,8 +78,8 @@ describe Pylon::CLI::Sync do
   end
 end
 
-describe Pylon::CLI::Remote do
+describe Remote do
   it "takes nothing on the command line because the client configures it" do
-    Pylon::CLI::Remote.parse(Array(String).new).should be_a(Pylon::CLI::Remote)
+    Remote.parse(Array(String).new).should be_a(Remote)
   end
 end

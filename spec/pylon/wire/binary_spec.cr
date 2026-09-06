@@ -1,7 +1,19 @@
 require "../../spec_helper"
 require "../../../src/pylon/wire/binary"
 
-include Pylon::Wire
+private alias Binary = Pylon::Wire::Binary
+private alias Change = Pylon::Core::Change
+private alias Changes = Pylon::Core::Changes
+private alias Directory = Pylon::Core::Directory
+private alias Entry = Pylon::Core::Entry
+private FORMAT          = Pylon::Wire::FORMAT
+private MAX_FIELD_BYTES = Pylon::Wire::MAX_FIELD_BYTES
+private alias Outcome = Pylon::Write::Outcome
+private alias Problem = Pylon::Problem
+private alias Problematic = Pylon::Core::Problematic
+private alias Reader = Pylon::Wire::Reader
+private alias Relocation = Pylon::Core::Relocation
+private alias SymbolicLink = Pylon::Core::SymbolicLink
 
 private def round_trip_entry(entry : Entry?) : Entry?
   io = IO::Memory.new
@@ -38,10 +50,10 @@ private def random_entry(random : Random, depth : Int32) : Entry?
     end
   end
 
-  Pylon::Core::Directory.new(contents)
+  Directory.new(contents)
 end
 
-describe Pylon::Wire::Binary do
+describe Binary do
   it "round trips every kind of entry" do
     (round_trip_entry(nil) == nil).should be_true
 
@@ -52,17 +64,17 @@ describe Pylon::Wire::Binary do
   end
 
   it "round trips a symlink target and a problem message" do
-    link = round_trip_entry(Pylon::Core::SymbolicLink.new("../elsewhere"))
-    link.is_a?(Pylon::Core::SymbolicLink).should be_true
-    link.target.should eq("../elsewhere") if link.is_a?(Pylon::Core::SymbolicLink)
+    link = round_trip_entry(SymbolicLink.new("../elsewhere"))
+    link.is_a?(SymbolicLink).should be_true
+    link.target.should eq("../elsewhere") if link.is_a?(SymbolicLink)
 
-    problem = round_trip_entry(Pylon::Core::Problematic.new("permission denied"))
-    problem.is_a?(Pylon::Core::Problematic).should be_true
-    problem.problem.should eq("permission denied") if problem.is_a?(Pylon::Core::Problematic)
+    problem = round_trip_entry(Problematic.new("permission denied"))
+    problem.is_a?(Problematic).should be_true
+    problem.problem.should eq("permission denied") if problem.is_a?(Problematic)
   end
 
   it "distinguishes an empty directory from a missing entry" do
-    round_trip_entry(Pylon::Core::Directory.new).should_not be_nil
+    round_trip_entry(Directory.new).should_not be_nil
     round_trip_entry(nil).should be_nil
   end
 
@@ -85,7 +97,7 @@ describe Pylon::Wire::Binary do
     decoded = Binary.read_entry(reader)
 
     reader.failed?.should be_false
-    decoded.is_a?(Pylon::Core::Directory).should be_true
+    decoded.is_a?(Directory).should be_true
   end
 
   it "round trips arbitrary trees" do
@@ -118,8 +130,8 @@ describe Pylon::Wire::Binary do
 
   it "round trips relocations" do
     relocations = [
-      Pylon::Core::Relocation.new("old.rb", "new.rb", Fixtures.file!(Fixtures.f1x)),
-      Pylon::Core::Relocation.new("lib", "moved/lib", Fixtures.directory!(Fixtures.d1)),
+      Relocation.new("old.rb", "new.rb", Fixtures.file!(Fixtures.f1x)),
+      Relocation.new("lib", "moved/lib", Fixtures.directory!(Fixtures.d1)),
     ]
 
     io = IO::Memory.new
@@ -139,7 +151,7 @@ describe Pylon::Wire::Binary do
 
     { {"", "x"}, {"x", ""}, {"x", "x"}, {"x", "x/y"}, {"x/y", "x"} }.each do |source, destination|
       io = IO::Memory.new
-      Binary.write_relocations(io, [Pylon::Core::Relocation.new(source, destination, file)])
+      Binary.write_relocations(io, [Relocation.new(source, destination, file)])
 
       refused = fails_to_decode(io.to_slice) { |reader| Binary.read_relocations(reader) }
       refused.should be_true, "#{source.inspect} to #{destination.inspect}"
@@ -158,9 +170,9 @@ describe Pylon::Wire::Binary do
 
   it "round trips outcomes including the skip reason" do
     outcomes = [
-      Pylon::Write::Outcome.new("ok.rb", Fixtures.f1),
-      Pylon::Write::Outcome.new("bad.rb", nil, Pylon::Write::Skip::ModificationDetected),
-      Pylon::Write::Outcome.new("worse.rb", nil, Pylon::Problem.new("disk full")),
+      Outcome.new("ok.rb", Fixtures.f1),
+      Outcome.new("bad.rb", nil, Pylon::Write::Skip::ModificationDetected),
+      Outcome.new("worse.rb", nil, Problem.new("disk full")),
     ]
 
     io = IO::Memory.new
@@ -171,7 +183,7 @@ describe Pylon::Wire::Binary do
     decoded[0].applied?.should be_true
     decoded[1].skipped.should eq(Pylon::Write::Skip::ModificationDetected)
     decoded[1].entry.should be_nil
-    decoded[2].skipped.should eq(Pylon::Problem.new("disk full"))
+    decoded[2].skipped.should eq(Problem.new("disk full"))
   end
 
   it "round trips an empty byte string distinctly from a missing one" do
@@ -195,14 +207,14 @@ describe Pylon::Wire::Binary do
 
   it "refuses a traversing change path rather than letting it reach disk" do
     io = IO::Memory.new
-    Binary.write_changes(io, Changes[Pylon::Core::Change.new("../../etc/passwd", nil, Fixtures.f1)])
+    Binary.write_changes(io, Changes[Change.new("../../etc/passwd", nil, Fixtures.f1)])
 
     fails_to_decode(io.to_slice) { |reader| Binary.read_changes(reader) }.should be_true
   end
 
   it "refuses a directory child name that is not a single component" do
     io = IO::Memory.new
-    Binary.write_entry(io, Pylon::Core::Directory.new({"../escape" => Fixtures.f1}))
+    Binary.write_entry(io, Directory.new({"../escape" => Fixtures.f1}))
 
     fails_to_decode(io.to_slice) { |reader| Binary.read_entry(reader) }.should be_true
   end
@@ -218,7 +230,7 @@ describe Pylon::Wire::Binary do
 
   it "refuses a field larger than the frame limit before allocating it" do
     io = IO::Memory.new
-    io.write_bytes((Pylon::Wire::MAX_FIELD_BYTES + 2).to_u32, Pylon::Wire::FORMAT)
+    io.write_bytes((MAX_FIELD_BYTES + 2).to_u32, FORMAT)
 
     fails_to_decode(io.to_slice, &.string?).should be_true
   end
@@ -231,7 +243,7 @@ describe Pylon::Wire::Binary do
   end
 
   it "accepts a field of exactly the frame limit" do
-    content = Bytes.new(Pylon::Wire::MAX_FIELD_BYTES) { 'x'.ord.to_u8 }
+    content = Bytes.new(MAX_FIELD_BYTES) { 'x'.ord.to_u8 }
     io = IO::Memory.new
     Binary.write_bytes(io, content)
     io.rewind
@@ -256,7 +268,7 @@ describe Pylon::Wire::Binary do
   it "refuses a directory whose child entry is missing" do
     io = IO::Memory.new
     io.write_byte(1_u8)
-    io.write_bytes(1_u32, Pylon::Wire::FORMAT)
+    io.write_bytes(1_u32, FORMAT)
     Binary.write_string(io, "a")
     io.write_byte(0_u8)
 

@@ -6,10 +6,13 @@ require "../../../src/pylon/session/remote_endpoint"
 require "../../../src/pylon/session/session"
 require "../../support/remote_end"
 
-include Pylon::Session
+private alias RemoteEndpoint = Pylon::Session::RemoteEndpoint
+private alias Session = Pylon::Session::Session
+private alias LocalEndpoint = Pylon::Session::LocalEndpoint
+private alias Discard = Pylon::Discard
 
 private def in_remote_pair(
-  & : String, String, Session(LocalEndpoint, RemoteEndpoint, Pylon::Discard), RemoteEndpoint ->
+  & : String, String, Session(LocalEndpoint, RemoteEndpoint, Discard), RemoteEndpoint ->
 ) : Nil
   base = File.join(Dir.tempdir, "pylon-remote-#{Random::Secure.hex(8)}")
   local_root = File.join(base, "local")
@@ -59,7 +62,7 @@ describe "a session over the wire protocol" do
 
   it "pulls content that does not fit one transfer budget in several batches" do
     in_remote_pair do |local, remote, session, endpoint|
-      third = (Session::TRANSFER_BUDGET // 3 + 1).to_i32
+      third = (Pylon::Session::Session::TRANSFER_BUDGET // 3 + 1).to_i32
       3.times do |index|
         File.write(File.join(remote, "blob#{index}.bin"), Bytes.new(third, (index + 1).to_u8))
       end

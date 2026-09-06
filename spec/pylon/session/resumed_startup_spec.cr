@@ -7,7 +7,10 @@ require "../../../src/pylon/session/remote_endpoint"
 require "../../../src/pylon/session/session"
 require "../../support/remote_end"
 
-include Pylon::Session
+private alias RemoteEndpoint = Pylon::Session::RemoteEndpoint
+private alias Session = Pylon::Session::Session
+private alias LocalEndpoint = Pylon::Session::LocalEndpoint
+private alias Discard = Pylon::Discard
 
 private class CountingReader < IO
   def initialize(@inner : IO) : Nil
@@ -47,8 +50,8 @@ end
 
 private def connect(
   ends : Ends,
-  resume : Core::Entry?,
-  & : Session(LocalEndpoint, RemoteEndpoint, Pylon::Discard), RemoteEndpoint, CountingReader ->
+  resume : Pylon::Core::Entry?,
+  & : Session(LocalEndpoint, RemoteEndpoint, Discard), RemoteEndpoint, CountingReader ->
 ) : Nil
   client, socket = UNIXSocket.pair
   serve_remote_end(socket)
@@ -61,7 +64,7 @@ private def connect(
     brand: Pylon::Brand::DEFAULT,
     state: ends.state,
     watch: false,
-    tree_fingerprint: (Digests.fingerprint(resume) if resume),
+    tree_fingerprint: (Pylon::Core::Digests.fingerprint(resume) if resume),
   )
 
   begin
@@ -119,7 +122,7 @@ describe "resuming from a persisted remote tree" do
       end
       wait_for_state(ends.state)
 
-      stale = Directory.new({"other.rb" => Fixtures.f1})
+      stale = Pylon::Core::Directory.new({"other.rb" => Fixtures.f1})
 
       connect(ends, stale) do |session, _, counting|
         cycle!(session, tick)

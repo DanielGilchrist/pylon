@@ -230,8 +230,8 @@ struct Pylon::CLI
       end
 
       unless fresh.empty?
-        advice = "both sides changed since the last sync; " \
-                 "decide with --prefer-local and --prefer-remote globs"
+        advice = "both sides changed since the last sync. " \
+                 "Decide with --prefer-local and --prefer-remote globs"
         @io.puts "#{indent}  #{advice.colorize.dark_gray}"
       end
 
@@ -261,7 +261,7 @@ struct Pylon::CLI
         where = trouble.replica.remote? ? " on the remote" : ""
         @io.puts "#{indent}#{"!".colorize.yellow.bold} #{"cannot sync#{where}".colorize.yellow} " \
                  "#{trouble.path} " \
-                 "#{"(#{trouble.reason}; it will not sync until this is fixed)".colorize.dark_gray}"
+                 "#{"(#{trouble.reason}. It will not sync until this is fixed)".colorize.dark_gray}"
         spoke = true
       end
 

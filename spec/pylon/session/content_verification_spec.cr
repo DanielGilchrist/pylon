@@ -2,6 +2,11 @@ require "file_utils"
 require "../../spec_helper"
 require "../../../src/pylon/session/local_endpoint"
 
+private alias Bases = Pylon::Wire::Bases
+private alias Chunks = Pylon::Wire::Chunks
+private alias Map = Pylon::Wire::Checksums::Map
+private alias Reader = Pylon::Wire::Reader
+
 private def stale_digest_source(root : String) : {Pylon::Session::LocalEndpoint, Bytes}
   endpoint = local_endpoint(root)
   tree = endpoint.scan(Time.utc.to_unix_ns.to_i64 - 5_000_000_000)
@@ -25,13 +30,13 @@ describe "content verification against the advertised digest" do
       source = endpoint.content_source(
         [digest],
         1_u64 * 1024 * 1024,
-        Pylon::Wire::Checksums::Map.new,
-        Pylon::Wire::Bases.new,
+        Map.new,
+        Bases.new,
       )
       source.write(wire)
       wire.rewind
 
-      contents = Pylon::Wire::Chunks.read_contents(Pylon::Wire::Reader.new(wire))
+      contents = Chunks.read_contents(Reader.new(wire))
       contents.has_key?(digest).should be_false
     ensure
       FileUtils.rm_rf(root)
@@ -54,13 +59,13 @@ describe "content verification against the advertised digest" do
       source = endpoint.content_source(
         [digest],
         1_u64 * 1024 * 1024,
-        Pylon::Wire::Checksums::Map.new,
-        Pylon::Wire::Bases.new,
+        Map.new,
+        Bases.new,
       )
       source.write(wire)
       wire.rewind
 
-      contents = Pylon::Wire::Chunks.read_contents(Pylon::Wire::Reader.new(wire))
+      contents = Chunks.read_contents(Reader.new(wire))
       contents.has_key?(digest).should be_false
     ensure
       FileUtils.rm_rf(root)
@@ -78,8 +83,8 @@ describe "content verification against the advertised digest" do
       contents = endpoint.content_source(
         [digest],
         1_u64 * 1024 * 1024,
-        Pylon::Wire::Checksums::Map.new,
-        Pylon::Wire::Bases.new,
+        Map.new,
+        Bases.new,
       ).contents
       contents.has_key?(digest).should be_false
     ensure

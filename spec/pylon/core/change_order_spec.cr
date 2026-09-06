@@ -1,6 +1,9 @@
 require "../../spec_helper"
 require "../../../src/pylon/core/changes"
 
+private alias Change = Pylon::Core::Change
+private alias Changes = Pylon::Core::Changes
+
 private NOTHING_LATE = Set(Bytes).new
 
 describe "Pylon::Core::Changes#ordered_for_writing" do

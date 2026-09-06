@@ -1,7 +1,13 @@
 require "../../spec_helper"
 require "../../../src/pylon/core/digests"
 
-describe Pylon::Core::Digests do
+private alias Change = Pylon::Core::Change
+private alias Changes = Pylon::Core::Changes
+private alias Collector = Pylon::Core::Digests::Collector
+private alias Digests = Pylon::Core::Digests
+private alias Directory = Pylon::Core::Directory
+
+describe Digests do
   it "asks for each digest once no matter how many changes share it" do
     changes = Changes[
       Change.new("a.rb", nil, Fixtures.f1),
@@ -9,7 +15,7 @@ describe Pylon::Core::Digests do
       Change.new("b.rb", nil, Fixtures.f2),
     ]
 
-    Digests::Collector.new.required(changes, 0).should eq([Fixtures::D1, Fixtures::D2])
+    Collector.new.required(changes, 0).should eq([Fixtures::D1, Fixtures::D2])
   end
 
   it "walks into directories and ignores everything without content" do
@@ -24,7 +30,7 @@ describe Pylon::Core::Digests do
       Change.new("gone.rb", Fixtures.f1, nil),
     ]
 
-    Digests::Collector.new.required(changes, 0).should eq([Fixtures::D2])
+    Collector.new.required(changes, 0).should eq([Fixtures::D2])
   end
 
   it "collects every digest in a tree" do

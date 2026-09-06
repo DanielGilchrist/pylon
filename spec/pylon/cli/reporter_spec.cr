@@ -1,77 +1,87 @@
 require "../../spec_helper"
 require "../../../src/pylon/cli/reporter"
 
+private DEFAULT = Pylon::Brand::DEFAULT
+private alias Inbound = Pylon::Session::Inbound
+private alias Outcome = Pylon::Write::Outcome
+private alias Progress = Pylon::Progress
+private alias Relocation = Pylon::Core::Relocation
+private alias Report = Pylon::Session::Report
+private alias Reporter = Pylon::CLI::Reporter
+private alias Trouble = Pylon::Core::Trouble
+private alias Reason = Pylon::Core::Safety::Reason
+
 private def report_of(
   conflicts = Array(String).new,
-  local = Array(Pylon::Write::Outcome).new,
-  remote = Array(Pylon::Write::Outcome).new,
+  local = Array(Outcome).new,
+  remote = Array(Outcome).new,
   halt = nil,
   troubles = Array(Trouble).new,
-) : Pylon::Session::Report
-  Pylon::Session::Report.new(conflicts, local, remote, troubles, halt)
+) : Report
+  Report.new(conflicts, local, remote, troubles, halt)
 end
 
 private def rendered(
-  report : Pylon::Session::Report,
+  report : Report,
   verbose = false,
   dry_run = false,
   elapsed : Time::Span? = nil,
 ) : String
   Colorize.enabled = false
   io = IO::Memory.new
-  Pylon::CLI::Reporter.new(io, verbose, dry_run, brand: Pylon::Brand::DEFAULT).report(
+  Reporter.new(io, verbose, dry_run, brand: DEFAULT).report(
     report,
     elapsed,
   )
   io.to_s
 end
 
-private def applied(path : String) : Pylon::Write::Outcome
-  Pylon::Write::Outcome.new(path, Fixtures.f1)
+private def applied(path : String) : Outcome
+  Outcome.new(path, Fixtures.f1)
 end
 
-private def removed(path : String) : Pylon::Write::Outcome
-  Pylon::Write::Outcome.new(path, nil)
+private def removed(path : String) : Outcome
+  Outcome.new(path, nil)
 end
 
 private def skipped(
   path : String,
   reason : Pylon::Write::Skipped = Pylon::Write::Skip::ModificationDetected,
-) : Pylon::Write::Outcome
-  Pylon::Write::Outcome.new(path, nil, reason)
+) : Outcome
+  Outcome.new(path, nil, reason)
 end
 
-private def moved(from : String, to : String) : Pylon::Core::Relocation
-  Pylon::Core::Relocation.new(from, to, Fixtures.directory!(Fixtures.d1))
+private def moved(from : String, to : String) : Relocation
+  Relocation.new(from, to, Fixtures.directory!(Fixtures.d1))
 end
 
 private def report_with_moves(
-  remote : Array(Pylon::Write::Outcome),
-  moves : Array(Pylon::Core::Relocation),
-) : Pylon::Session::Report
-  Pylon::Session::Report.new(
+  remote : Array(Outcome),
+  moves : Array(Relocation),
+) : Report
+  Report.new(
     Array(String).new,
-    Array(Pylon::Write::Outcome).new,
+    Array(Outcome).new,
     remote,
     Array(Trouble).new,
     remote_relocations: moves,
   )
 end
 
-private def reporter_waiting_on_the_remote(inbound : Pylon::Session::Inbound) : Pylon::CLI::Reporter
+private def reporter_waiting_on_the_remote(inbound : Inbound) : Reporter
   Colorize.enabled = false
-  reporter = Pylon::CLI::Reporter.new(IO::Memory.new, false, false, brand: Pylon::Brand::DEFAULT)
-  progress = Pylon::Progress.new
+  reporter = Reporter.new(IO::Memory.new, false, false, brand: DEFAULT)
+  progress = Progress.new
   100.times { progress.add_file }
   progress.finish
-  reporter.observe(progress, Pylon::Progress.new)
+  reporter.observe(progress, Progress.new)
   reporter.observe(inbound)
   reporter
 end
 
 describe "the startup status line" do
   it "says the remote has not spoken yet" do
-    inbound = Pylon::Session::Inbound.new
+    inbound = Inbound.new
 
     reporter_waiting_on_the_remote(inbound).scan_status.should eq(
       "waiting for the remote · 100 files here",
@@ -79,7 +89,7 @@ describe "the startup status line" do
   end
 
   it "relays the remote scan's counters" do
-    inbound = Pylon::Session::Inbound.new
+    inbound = Inbound.new
     inbound.scanning(1234_i64, 0_i64)
     reporter_waiting_on_the_remote(inbound).scan_status.should eq("remote scanning · 1234 files")
 
@@ -90,7 +100,7 @@ describe "the startup status line" do
   end
 
   it "shows how much of the announced tree has arrived" do
-    inbound = Pylon::Session::Inbound.new
+    inbound = Inbound.new
     inbound.arrived(700)
     inbound.announced(2_u32 * 1024 * 1024)
     inbound.arrived(512 * 1024)
@@ -101,7 +111,7 @@ describe "the startup status line" do
   end
 
   it "never reports more of the tree than was announced" do
-    inbound = Pylon::Session::Inbound.new
+    inbound = Inbound.new
     inbound.announced(1024_u32)
     inbound.arrived(5000)
 
@@ -111,7 +121,7 @@ describe "the startup status line" do
   end
 end
 
-describe Pylon::CLI::Reporter do
+describe Reporter do
   it "says nothing when a cycle was quiet" do
     rendered(report_of).should be_empty
   end
@@ -127,7 +137,7 @@ describe Pylon::CLI::Reporter do
   end
 
   it "leaves the timing off a halted cycle" do
-    output = rendered(report_of(halt: Safety::Reason::RootDeletion), elapsed: 240.milliseconds)
+    output = rendered(report_of(halt: Reason::RootDeletion), elapsed: 240.milliseconds)
 
     output.should_not contain("synced in")
   end
@@ -196,7 +206,7 @@ describe Pylon::CLI::Reporter do
   it "mentions a conflict once, not on every cycle, and says when it clears" do
     Colorize.enabled = false
     io = IO::Memory.new
-    reporter = Pylon::CLI::Reporter.new(io, false, false, brand: Pylon::Brand::DEFAULT)
+    reporter = Reporter.new(io, false, false, brand: DEFAULT)
     conflict = report_of(conflicts: ["db/structure.sql"])
 
     reporter.report(conflict, nil)
@@ -226,7 +236,7 @@ describe Pylon::CLI::Reporter do
   it "mentions an unsyncable path once, not on every cycle" do
     Colorize.enabled = false
     io = IO::Memory.new
-    reporter = Pylon::CLI::Reporter.new(io, false, false, brand: Pylon::Brand::DEFAULT)
+    reporter = Reporter.new(io, false, false, brand: DEFAULT)
     troubled = report_of(troubles: [Trouble.new("locked.rb", :local, "permission denied")])
 
     reporter.report(troubled, nil)
@@ -265,7 +275,7 @@ describe Pylon::CLI::Reporter do
 
   it "names a move once rather than as a removal and a write" do
     report = report_with_moves(
-      [removed("lib"), Pylon::Write::Outcome.new("moved", Fixtures.d1)],
+      [removed("lib"), Outcome.new("moved", Fixtures.d1)],
       [moved("lib", "moved")],
     )
 
@@ -277,7 +287,7 @@ describe Pylon::CLI::Reporter do
 
   it "counts moves in a summarised batch" do
     outcomes = (1..20).map { |index| applied("app/file_#{index}.rb") }
-    outcomes << removed("lib") << Pylon::Write::Outcome.new("moved", Fixtures.d1)
+    outcomes << removed("lib") << Outcome.new("moved", Fixtures.d1)
 
     output = rendered(report_with_moves(outcomes, [moved("lib", "moved")]))
 
@@ -288,7 +298,7 @@ describe Pylon::CLI::Reporter do
 
   it "previews a move as a move" do
     output = rendered(
-      report_with_moves(Array(Pylon::Write::Outcome).new, [moved("lib", "moved")]),
+      report_with_moves(Array(Outcome).new, [moved("lib", "moved")]),
       dry_run: true,
     )
 
@@ -317,7 +327,7 @@ describe Pylon::CLI::Reporter do
   end
 
   it "leads with the halt and says nothing changed" do
-    output = rendered(report_of(halt: Safety::Reason::RootDeletion))
+    output = rendered(report_of(halt: Reason::RootDeletion))
 
     output.should contain("halted")
     output.should contain("nothing was changed on either side")
@@ -341,12 +351,12 @@ describe Pylon::CLI::Reporter do
     output = IO::Memory.new
     errors = IO::Memory.new
 
-    reporter = Pylon::CLI::Reporter.new(
+    reporter = Reporter.new(
       output,
       false,
       false,
       errors: errors,
-      brand: Pylon::Brand::DEFAULT,
+      brand: DEFAULT,
     )
     reporter.failed("the remote server stopped")
 
@@ -358,7 +368,7 @@ describe Pylon::CLI::Reporter do
     Colorize.enabled = false
     output = IO::Memory.new
     errors = IO::Memory.new
-    reporter = Pylon::CLI::Reporter.new(
+    reporter = Reporter.new(
       output,
       false,
       false,
@@ -381,12 +391,12 @@ describe Pylon::CLI::Reporter do
     output = IO::Memory.new
     errors = IO::Memory.new
 
-    reporter = Pylon::CLI::Reporter.new(
+    reporter = Reporter.new(
       output,
       false,
       false,
       errors: errors,
-      brand: Pylon::Brand::DEFAULT,
+      brand: DEFAULT,
     )
     reporter.relay("sh: pylon: not found")
 

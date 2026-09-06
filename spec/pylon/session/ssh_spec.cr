@@ -2,9 +2,11 @@ require "../../spec_helper"
 require "../../../src/pylon/session/process_transport"
 require "../../../src/pylon/session/ssh"
 
-include Pylon::Session
+private alias Problem = Pylon::Problem
+private alias ProcessTransport = Pylon::Session::ProcessTransport
+private SSH = Pylon::Session::SSH
 
-describe Pylon::Session::SSH do
+describe SSH do
   it "builds a minimal command" do
     SSH.command(host: "user@host", remote_command: "pylon server /srv/app", config: nil, port: nil)
       .should eq(["user@host", "pylon server /srv/app"])
@@ -36,12 +38,12 @@ end
 
 private def opened(command : String, arguments : Array(String)) : ProcessTransport
   case (transport = ProcessTransport.open(command, arguments) { })
-  in Pylon::Problem   then fail(transport.reason)
+  in Problem          then fail(transport.reason)
   in ProcessTransport then transport
   end
 end
 
-describe Pylon::Session::ProcessTransport do
+describe ProcessTransport do
   it "carries bytes to a child process and back" do
     transport = opened("cat", Array(String).new)
 
@@ -64,7 +66,7 @@ describe Pylon::Session::ProcessTransport do
       lines.send(line)
     end
 
-    fail(transport.reason) if transport.is_a?(Pylon::Problem)
+    fail(transport.reason) if transport.is_a?(Problem)
 
     lines.receive.should eq("one")
     lines.receive.should eq("two")
@@ -74,7 +76,7 @@ describe Pylon::Session::ProcessTransport do
   it "reports a command that cannot be started instead of raising" do
     opened = ProcessTransport.open("pylon-no-such-binary", Array(String).new) { }
 
-    fail("expected a problem, got a transport") unless opened.is_a?(Pylon::Problem)
+    fail("expected a problem, got a transport") unless opened.is_a?(Problem)
     opened.reason.should contain("pylon-no-such-binary could not be started")
   end
 end

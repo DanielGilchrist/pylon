@@ -6,7 +6,10 @@ require "../../../src/pylon/session/remote_endpoint"
 require "../../../src/pylon/session/session"
 require "../../support/remote_end"
 
-include Pylon::Session
+private alias RemoteEndpoint = Pylon::Session::RemoteEndpoint
+private alias Session = Pylon::Session::Session
+private alias LocalEndpoint = Pylon::Session::LocalEndpoint
+private alias Discard = Pylon::Discard
 
 private class CountingIO < IO
   def initialize(@inner : IO) : Nil
@@ -29,7 +32,7 @@ private class CountingIO < IO
 end
 
 private def in_counted_pair(
-  & : String, String, Session(LocalEndpoint, RemoteEndpoint, Pylon::Discard), CountingIO ->
+  & : String, String, Session(LocalEndpoint, RemoteEndpoint, Discard), CountingIO ->
 ) : Nil
   base = File.join(Dir.tempdir, "pylon-reuse-#{Random::Secure.hex(8)}")
   local_root = File.join(base, "local")

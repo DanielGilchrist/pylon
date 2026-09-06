@@ -3,8 +3,8 @@ require "../../spec_helper"
 require "../../../src/pylon/session/local_endpoint"
 require "../../../src/pylon/session/session"
 
-include Pylon::Session
-include Pylon::Core
+private alias LocalEndpoint = Pylon::Session::LocalEndpoint
+private alias Session = Pylon::Session::Session
 
 private NOW = Time.utc.to_unix_ns.to_i64
 
@@ -41,7 +41,7 @@ private def tree(root : String) : Hash(String, String)
   files
 end
 
-describe Pylon::Session::Session do
+describe Session do
   it "copies a new file from local to remote" do
     in_pair do |local, remote, session|
       File.write(File.join(local, "hello.rb"), "puts 1")

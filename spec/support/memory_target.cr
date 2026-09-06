@@ -4,6 +4,10 @@ require "../../src/pylon/scan/metadata"
 require "../../src/pylon/scan/observed"
 require "../../src/pylon/problem"
 
+private alias Metadata = Pylon::Scan::Metadata
+private alias Missing = Pylon::Missing
+private alias Problem = Pylon::Problem
+
 class MemoryTarget
   record Node,
     kind : Pylon::Scan::Metadata::Kind,
@@ -23,14 +27,14 @@ class MemoryTarget
   property? writable = true
   property? renamable = true
 
-  def metadata(path : String) : Pylon::Scan::Metadata?
+  def metadata(path : String) : Metadata?
     node = @lock.synchronize { @nodes[path]? }
     return if node.nil?
 
     metadata_for(node)
   end
 
-  def observe(path : String) : Pylon::Scan::Observed | Pylon::Problem | Nil
+  def observe(path : String) : Pylon::Scan::Observed | Problem | Nil
     node = @lock.synchronize { @nodes[path]? }
     return if node.nil?
 
@@ -43,22 +47,22 @@ class MemoryTarget
     end
   end
 
-  def digest(path : String) : Bytes | Pylon::Problem
+  def digest(path : String) : Bytes | Problem
     node = @lock.synchronize { @nodes[path]? }
-    return Pylon::Problem.new("the file vanished after the scan saw it") if node.nil?
+    return Problem.new("the file vanished after the scan saw it") if node.nil?
 
     Digest::SHA256.digest(node.content)
   end
 
-  def each_child(path : String, & : String ->) : Pylon::Missing | Pylon::Problem | Nil
+  def each_child(path : String, & : String ->) : Missing | Problem | Nil
     names = @lock.synchronize { children_of(path) }
-    return Pylon::Missing.new if names.nil?
+    return Missing.new if names.nil?
 
     names.each { |name| yield name }
     nil
   end
 
-  def create_directory(path : String) : Pylon::Problem?
+  def create_directory(path : String) : Problem?
     return read_only unless writable?
 
     @lock.synchronize do
@@ -69,7 +73,7 @@ class MemoryTarget
     nil
   end
 
-  def write_file(path : String, content : Bytes, executable : Bool) : Pylon::Problem?
+  def write_file(path : String, content : Bytes, executable : Bool) : Problem?
     return read_only unless writable?
 
     @lock.synchronize do
@@ -86,7 +90,7 @@ class MemoryTarget
     nil
   end
 
-  def create_symlink(path : String, target : String) : Pylon::Problem?
+  def create_symlink(path : String, target : String) : Problem?
     return read_only unless writable?
 
     @lock.synchronize do
@@ -101,10 +105,10 @@ class MemoryTarget
     nil
   end
 
-  def set_executable(path : String, executable : Bool) : Pylon::Problem?
+  def set_executable(path : String, executable : Bool) : Problem?
     @lock.synchronize do
       node = @nodes[path]?
-      return Pylon::Problem.new("no such file") if node.nil?
+      return Problem.new("no such file") if node.nil?
       return read_only unless writable?
 
       operations << "chmod #{path}"
@@ -114,9 +118,9 @@ class MemoryTarget
     nil
   end
 
-  def rename(from : String, to : String) : Pylon::Problem?
+  def rename(from : String, to : String) : Problem?
     return read_only unless writable?
-    return Pylon::Problem.new("Cross-device link") unless renamable?
+    return Problem.new("Cross-device link") unless renamable?
 
     @lock.synchronize do
       operations << "rename #{from} #{to}"
@@ -129,7 +133,7 @@ class MemoryTarget
     nil
   end
 
-  def remove(path : String) : Pylon::Problem?
+  def remove(path : String) : Problem?
     return read_only unless writable?
 
     @lock.synchronize do
@@ -163,7 +167,7 @@ class MemoryTarget
     @nodes[path] = Node.new(kind: Pylon::Scan::Metadata::Kind::Directory, inode: take_inode)
   end
 
-  private def metadata_for(node : Node) : Pylon::Scan::Metadata
+  private def metadata_for(node : Node) : Metadata
     mode =
       case node.kind
       in Pylon::Scan::Metadata::Kind::Directory then LibC::S_IFDIR | 0o755
@@ -173,7 +177,7 @@ class MemoryTarget
       in Pylon::Scan::Metadata::Kind::Untracked    then LibC::S_IFIFO | 0o644
       end
 
-    Pylon::Scan::Metadata.new(
+    Metadata.new(
       mode: mode.to_u32,
       size: node.content.size.to_u64,
       mtime_ns: node.mtime_ns,
@@ -199,8 +203,8 @@ class MemoryTarget
     names
   end
 
-  private def read_only : Pylon::Problem
-    Pylon::Problem.new("the target is read-only")
+  private def read_only : Problem
+    Problem.new("the target is read-only")
   end
 
   private def take_inode : UInt64

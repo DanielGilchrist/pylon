@@ -1,5 +1,13 @@
 require "../../spec_helper"
 
+private alias Applier = Pylon::Core::Applier
+private alias Directory = Pylon::Core::Directory
+private alias Entry = Pylon::Core::Entry
+private alias Problematic = Pylon::Core::Problematic
+private alias Reconciler = Pylon::Core::Reconciler
+private alias SymbolicLink = Pylon::Core::SymbolicLink
+private alias Untracked = Pylon::Core::Untracked
+
 private CONVERGING_CONTENTS = {
   nil,
   Fixtures.f1,
@@ -33,7 +41,7 @@ private def random_entry(random : Random, depth : Int32, pool : Tuple = ALL_CONT
     end
   end
 
-  Pylon::Core::Directory.new(contents)
+  Directory.new(contents)
 end
 
 private def random_base(random : Random, depth : Int32) : Entry?
@@ -42,24 +50,24 @@ end
 
 private def readable_twin(entry : Entry?) : Entry?
   case entry
-  in Nil, Pylon::Core::File, Pylon::Core::SymbolicLink, Pylon::Core::Untracked
+  in Nil, Pylon::Core::File, SymbolicLink, Untracked
     entry
-  in Pylon::Core::Problematic
+  in Problematic
     Fixtures.f1
-  in Pylon::Core::Directory
+  in Directory
     contents = Hash(String, Entry).new
     entry.contents.each { |name, child| contents[name] = readable_twin(child) || child }
-    Pylon::Core::Directory.new(contents)
+    Directory.new(contents)
   end
 end
 
 private def collect_problematic_paths(path : String, entry : Entry?, into : Set(String)) : Nil
   case entry
-  in Nil, Pylon::Core::File, Pylon::Core::SymbolicLink, Pylon::Core::Untracked
+  in Nil, Pylon::Core::File, SymbolicLink, Untracked
     nil
-  in Pylon::Core::Problematic
+  in Problematic
     into << path
-  in Pylon::Core::Directory
+  in Directory
     entry.contents.each do |name, child|
       collect_problematic_paths(Pylon::Core::Paths.join(path, name), child, into)
     end
@@ -72,7 +80,7 @@ private def dig(entry : Entry?, path : String) : Entry?
   current = entry
 
   path.split('/').each do |name|
-    return unless current.is_a?(Pylon::Core::Directory)
+    return unless current.is_a?(Directory)
 
     current = current.contents[name]?
   end
@@ -81,8 +89,8 @@ private def dig(entry : Entry?, path : String) : Entry?
 end
 
 private def contains_unsyncable?(entry : Entry) : Bool
-  return true unless entry.is_a?(Syncable)
-  return false unless entry.is_a?(Pylon::Core::Directory)
+  return true unless entry.is_a?(Pylon::Core::Syncable)
+  return false unless entry.is_a?(Directory)
 
   entry.contents.each_value.any? { |child| contains_unsyncable?(child) }
 end

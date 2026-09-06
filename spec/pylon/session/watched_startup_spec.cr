@@ -6,7 +6,10 @@ require "../../../src/pylon/session/remote_endpoint"
 require "../../../src/pylon/session/session"
 require "../../support/remote_end"
 
-include Pylon::Session
+private alias RemoteEndpoint = Pylon::Session::RemoteEndpoint
+private alias Session = Pylon::Session::Session
+private alias LocalEndpoint = Pylon::Session::LocalEndpoint
+private alias Discard = Pylon::Discard
 
 private def tick : Int64
   Time.utc.to_unix_ns.to_i64 + Random.rand(1_000_000_i64)
@@ -15,7 +18,7 @@ end
 private def in_pair(
   watch : Bool,
   create_remote : Bool = true,
-  & : String, String, Session(LocalEndpoint, RemoteEndpoint, Pylon::Discard), RemoteEndpoint ->
+  & : String, String, Session(LocalEndpoint, RemoteEndpoint, Discard), RemoteEndpoint ->
 ) : Nil
   base = File.join(Dir.tempdir, "pylon-startup-#{Random::Secure.hex(8)}")
   local = File.join(base, "local")

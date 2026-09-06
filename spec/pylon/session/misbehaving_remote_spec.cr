@@ -5,7 +5,10 @@ require "../../../src/pylon/session/remote_endpoint"
 require "../../../src/pylon/session/session"
 require "../../support/remote_end"
 
-include Pylon::Session
+private alias Fault = Pylon::Session::Fault
+private alias Message = Pylon::Wire::Message
+private alias Misbehaved = Pylon::Session::Misbehaved
+private alias Report = Pylon::Session::Report
 
 private def scripted_server(& : IO ->) : IO::Memory
   script = IO::Memory.new
@@ -22,7 +25,7 @@ private def cycle_against(script : IO::Memory, watch : Bool = false) : Report | 
   begin
     session = build_session(
       local_endpoint(root),
-      RemoteEndpoint.new(
+      Pylon::Session::RemoteEndpoint.new(
         script,
         IO::Memory.new,
         remote_configuration(root, watch: watch),
@@ -38,7 +41,7 @@ end
 describe "a remote that misbehaves" do
   it "stops with the failure a server reports instead of waiting for a reply" do
     script = scripted_server do |io|
-      Pylon::Wire::Message.write(io, Pylon::Wire::Message::Failure.new("the disk is full"))
+      Message.write(io, Pylon::Wire::Message::Failure.new("the disk is full"))
     end
 
     fault = cycle_against(script)
@@ -49,8 +52,8 @@ describe "a remote that misbehaves" do
 
   it "stops when replies pile up that nothing asked for instead of hanging" do
     script = scripted_server do |io|
-      (Session::WRITE_WINDOW + 1).times do
-        Pylon::Wire::Message.write(
+      (Pylon::Session::Session::WRITE_WINDOW + 1).times do
+        Message.write(
           io,
           Pylon::Wire::Message::WriteResponse.new(Array(Pylon::Write::Outcome).new),
         )
@@ -68,12 +71,12 @@ describe "a remote that misbehaves" do
 
     fault = cycle_against(script, watch: true)
 
-    fault.should be_a(Stopped)
+    fault.should be_a(Pylon::Session::Stopped)
   end
 
   it "stops when the server sends a message only clients send" do
     script = scripted_server do |io|
-      Pylon::Wire::Message.write(io, Pylon::Wire::Message::ScanRequest.new(1_i64))
+      Message.write(io, Pylon::Wire::Message::ScanRequest.new(1_i64))
     end
 
     fault = cycle_against(script)

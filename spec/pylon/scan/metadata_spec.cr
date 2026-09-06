@@ -1,7 +1,8 @@
 require "../../spec_helper"
 require "../../../src/pylon/scan/cache_entry"
 
-include Pylon::Scan
+private alias CacheEntry = Pylon::Scan::CacheEntry
+private alias Metadata = Pylon::Scan::Metadata
 
 private BASE_MTIME  = 1_700_000_000_000_000_000_i64
 private GRANULARITY =             1_000_000_000_i64
@@ -18,7 +19,7 @@ end
 
 private NOW = BASE_MTIME + GRANULARITY * 10
 
-describe Pylon::Scan::Metadata do
+describe Metadata do
   it "maps stat mode onto an entry kind" do
     metadata(mode: (LibC::S_IFREG | 0o644).to_u32).kind.should eq(Pylon::Scan::Metadata::Kind::File)
     metadata(mode: (LibC::S_IFDIR | 0o755).to_u32).kind.should eq(
@@ -62,7 +63,7 @@ describe Pylon::Scan::Metadata do
   end
 end
 
-describe Pylon::Scan::CacheEntry do
+describe CacheEntry do
   it "reuses a digest when nothing observable changed" do
     entry = CacheEntry.new(metadata, DIGEST, freshly_written: false)
 

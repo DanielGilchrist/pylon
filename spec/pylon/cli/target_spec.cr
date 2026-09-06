@@ -1,44 +1,47 @@
 require "../../spec_helper"
 require "../../../src/pylon/cli/target"
 
-describe Pylon::CLI::Target do
-  it "splits a user, host and path" do
-    target = Pylon::CLI::Target.parse("user@host:/srv/app")
+private alias Problem = Pylon::Problem
+private alias Target = Pylon::CLI::Target
 
-    target.should be_a(Pylon::CLI::Target)
-    next unless target.is_a?(Pylon::CLI::Target)
+describe Target do
+  it "splits a user, host and path" do
+    target = Target.parse("user@host:/srv/app")
+
+    target.should be_a(Target)
+    next unless target.is_a?(Target)
 
     target.host.should eq("user@host")
     target.path.should eq("/srv/app")
   end
 
   it "keeps a relative remote path" do
-    Pylon::CLI::Target.parse("host:app").as(Pylon::CLI::Target).path.should eq("app")
+    Target.parse("host:app").as(Target).path.should eq("app")
   end
 
   it "splits on the first colon so the path may contain one" do
-    Pylon::CLI::Target.parse("host:/srv/a:b").as(Pylon::CLI::Target).path.should eq("/srv/a:b")
+    Target.parse("host:/srv/a:b").as(Target).path.should eq("/srv/a:b")
   end
 
   it "explains a target with no colon" do
-    Pylon::CLI::Target.parse("host").as(Pylon::Problem).reason.should contain(
+    Target.parse("host").as(Problem).reason.should contain(
       "user@host:/path",
     )
   end
 
   it "explains a target missing a host or a path" do
-    Pylon::CLI::Target.parse(":/srv/app").as(Pylon::Problem).reason.should contain(
+    Target.parse(":/srv/app").as(Problem).reason.should contain(
       "missing a host",
     )
-    Pylon::CLI::Target.parse("host:").as(Pylon::Problem).reason.should contain(
+    Target.parse("host:").as(Problem).reason.should contain(
       "missing a path",
     )
   end
 
   it "refuses a host ssh would read as an option" do
-    result = Pylon::CLI::Target.parse("-oProxyCommand=touch /tmp/x:/srv/app")
+    result = Target.parse("-oProxyCommand=touch /tmp/x:/srv/app")
 
-    result.should be_a(Pylon::Problem)
-    result.as(Pylon::Problem).reason.should contain("ssh would read as an option")
+    result.should be_a(Problem)
+    result.as(Problem).reason.should contain("ssh would read as an option")
   end
 end

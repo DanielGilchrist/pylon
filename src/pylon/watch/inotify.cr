@@ -63,8 +63,6 @@ module Pylon::Watch
 
       watch_tree("")
 
-      # the read blocks its thread, which is precisely what an isolated
-      # context is for; an inotify fd cannot be driven by the event loop
       @context = Fibers.isolated(:inotify) { listen }
     end
 

@@ -1,10 +1,14 @@
 require "../../spec_helper"
 
-private def base_with_d : Entry
+private alias Applier = Pylon::Core::Applier
+private alias Change = Pylon::Core::Change
+private alias Changes = Pylon::Core::Changes
+
+private def base_with_d : Pylon::Core::Entry
   Fixtures.dir({"d" => Fixtures.dir({"x" => Fixtures.f1}), "keep.rb" => Fixtures.f2})
 end
 
-describe Pylon::Core::Applier do
+describe Applier do
   it "returns the base untouched when there are no changes" do
     base = base_with_d
 

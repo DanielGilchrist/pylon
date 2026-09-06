@@ -2,7 +2,8 @@ require "file_utils"
 require "../spec_helper"
 require "../../src/pylon/disk"
 
-include Pylon
+private alias Disk = Pylon::Disk
+private alias Metadata = Pylon::Scan::Metadata
 
 private def in_sandbox(& : String, Disk ->) : Nil
   root = File.join(Dir.tempdir, "pylon-target-#{Random::Secure.hex(8)}")
@@ -15,7 +16,7 @@ private def in_sandbox(& : String, Disk ->) : Nil
   end
 end
 
-describe Pylon::Disk do
+describe Disk do
   it "writes a file and sets the executable bit" do
     in_sandbox do |root, target|
       target.write_file("script.sh", "#!/bin/sh\n".to_slice, true).should be_nil
@@ -29,12 +30,12 @@ describe Pylon::Disk do
     in_sandbox do |root, target|
       path = File.join(root, "notes.txt")
       File.write(path, "before")
-      original_inode = Fixtures.metadata!(Pylon::Scan::Metadata.of(path)).inode
+      original_inode = Fixtures.metadata!(Metadata.of(path)).inode
 
       target.write_file("notes.txt", "after".to_slice, false).should be_nil
 
       File.read(path).should eq("after")
-      Fixtures.metadata!(Pylon::Scan::Metadata.of(path)).inode.should_not eq(original_inode)
+      Fixtures.metadata!(Metadata.of(path)).inode.should_not eq(original_inode)
     end
   end
 
@@ -43,7 +44,7 @@ describe Pylon::Disk do
       target.write_file("a.txt", "x".to_slice, false)
       target.create_symlink("link", "a.txt")
 
-      strays = Dir.children(root).select(&.starts_with?(Disk::TEMPORARY_PREFIX))
+      strays = Dir.children(root).select(&.starts_with?(Pylon::Disk::TEMPORARY_PREFIX))
       strays.should be_empty
     end
   end
@@ -53,7 +54,7 @@ describe Pylon::Disk do
       target.create_symlink("link", "elsewhere.txt").should be_nil
 
       File.readlink(File.join(root, "link")).should eq("elsewhere.txt")
-      Fixtures.metadata!(Pylon::Scan::Metadata.of(File.join(root, "link"))).kind.should eq(
+      Fixtures.metadata!(Metadata.of(File.join(root, "link"))).kind.should eq(
         Pylon::Scan::Metadata::Kind::SymbolicLink,
       )
     end

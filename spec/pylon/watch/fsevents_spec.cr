@@ -4,7 +4,11 @@ require "file_utils"
 require "../../spec_helper"
 require "../../../src/pylon/watch/fsevents"
 
-include Pylon::Watch
+private alias DirtyPaths = Pylon::Watch::DirtyPaths
+private alias Everything = Pylon::Watch::Everything
+private alias FSEvents = Pylon::Watch::FSEvents
+private alias Touched = Pylon::Watch::Touched
+private alias Dirty = Pylon::Watch::Dirty
 
 private def consume_within(watcher : FSEvents, seconds : Float64, & : Dirty -> Bool) : Bool
   deadline = Time.instant + seconds.seconds
@@ -18,7 +22,7 @@ private def consume_within(watcher : FSEvents, seconds : Float64, & : Dirty -> B
   false
 end
 
-describe Pylon::Watch::FSEvents do
+describe FSEvents do
   it "reports touched paths, nested creations and respects ignores" do
     root = File.tempname("pylon-fsevents")
     Dir.mkdir_p(File.join(root, "log"))

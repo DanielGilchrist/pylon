@@ -2,6 +2,14 @@ require "digest/sha256"
 require "../../src/pylon/core"
 require "../../src/pylon/scan/metadata"
 
+private alias Directory = Pylon::Core::Directory
+private alias Entry = Pylon::Core::Entry
+private alias Metadata = Pylon::Scan::Metadata
+private alias Preferences = Pylon::Core::Preferences
+private alias Problem = Pylon::Problem
+private alias Problematic = Pylon::Core::Problematic
+private alias SymbolicLink = Pylon::Core::SymbolicLink
+
 module Fixtures
   include Pylon::Core
 
@@ -23,7 +31,7 @@ module Fixtures
   ) : Preferences
     case (preferences = Preferences.build(local, remote))
     in Preferences then preferences
-    in Pylon::Problem
+    in Problem
       raise "the fixture preferences are not a valid glob: #{preferences.reason}"
     end
   end
@@ -41,11 +49,11 @@ module Fixtures
   end
 
   def self.symlink_relative : Entry
-    Pylon::Core::SymbolicLink.new("other")
+    SymbolicLink.new("other")
   end
 
   def self.symlink_absolute : Entry
-    Pylon::Core::SymbolicLink.new("/other")
+    SymbolicLink.new("/other")
   end
 
   def self.untracked : Entry
@@ -53,44 +61,44 @@ module Fixtures
   end
 
   def self.problematic : Entry
-    Pylon::Core::Problematic.new("permission denied")
+    Problematic.new("permission denied")
   end
 
   def self.d0 : Entry
-    Pylon::Core::Directory.new
+    Directory.new
   end
 
   def self.d1 : Entry
-    Pylon::Core::Directory.new({"file" => f1})
+    Directory.new({"file" => f1})
   end
 
   def self.dir(contents : Hash(String, Entry)) : Entry
-    Pylon::Core::Directory.new(contents)
+    Directory.new(contents)
   end
 end
 
 module Fixtures
-  def self.directory!(entry : Pylon::Core::Entry?) : Pylon::Core::Directory
-    raise "expected a directory, got #{entry.inspect}" unless entry.is_a?(Pylon::Core::Directory)
+  def self.directory!(entry : Entry?) : Directory
+    raise "expected a directory, got #{entry.inspect}" unless entry.is_a?(Directory)
 
     entry
   end
 
-  def self.file!(entry : Pylon::Core::Entry?) : Pylon::Core::File
+  def self.file!(entry : Entry?) : Pylon::Core::File
     raise "expected a file, got #{entry.inspect}" unless entry.is_a?(Pylon::Core::File)
 
     entry
   end
 
-  def self.problem!(entry : Pylon::Core::Entry?) : Pylon::Core::Problematic
-    unless entry.is_a?(Pylon::Core::Problematic)
+  def self.problem!(entry : Entry?) : Problematic
+    unless entry.is_a?(Problematic)
       raise "expected a problematic entry, got #{entry.inspect}"
     end
 
     entry
   end
 
-  def self.dig!(entry : Pylon::Core::Entry?, *names : String) : Pylon::Core::Entry
+  def self.dig!(entry : Entry?, *names : String) : Entry
     current = entry
 
     names.each do |name|
@@ -106,9 +114,9 @@ end
 
 module Fixtures
   def self.metadata!(
-    observed : Pylon::Scan::Metadata | Pylon::Problem | Nil,
-  ) : Pylon::Scan::Metadata
-    raise "expected metadata, got #{observed.inspect}" unless observed.is_a?(Pylon::Scan::Metadata)
+    observed : Metadata | Problem | Nil,
+  ) : Metadata
+    raise "expected metadata, got #{observed.inspect}" unless observed.is_a?(Metadata)
 
     observed
   end

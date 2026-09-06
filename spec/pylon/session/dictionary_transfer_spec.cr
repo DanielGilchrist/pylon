@@ -10,7 +10,9 @@ require "../../../src/pylon/session/session"
 require "../../../src/pylon/session/content_store"
 require "../../support/remote_end"
 
-include Pylon::Session
+private alias ContentStore = Pylon::Session::ContentStore
+private alias LocalEndpoint = Pylon::Session::LocalEndpoint
+private alias RemoteEndpoint = Pylon::Session::RemoteEndpoint
 
 private class MeteredIO < IO
   def initialize(@inner : IO) : Nil
@@ -35,7 +37,7 @@ end
 private record Pair,
   local : String,
   remote : String,
-  session : Session(LocalEndpoint, RemoteEndpoint, Pylon::Discard),
+  session : Pylon::Session::Session(LocalEndpoint, RemoteEndpoint, Pylon::Discard),
   endpoint : RemoteEndpoint,
   metered : MeteredIO,
   left : LocalEndpoint,
@@ -49,7 +51,7 @@ private def in_keeping_pair(keep_from_start : Bool = true, & : Pair ->) : Nil
   Dir.mkdir_p(remote_root)
 
   kept = ContentStore.open(File.join(base, "store"), local_root)
-  raise "the store could not be opened: #{kept.reason}" if kept.is_a?(Problem)
+  raise "the store could not be opened: #{kept.reason}" if kept.is_a?(Pylon::Problem)
 
   client, socket = UNIXSocket.pair
   serve_remote_end(socket)

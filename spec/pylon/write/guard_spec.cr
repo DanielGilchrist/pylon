@@ -1,8 +1,15 @@
 require "../../spec_helper"
 require "../../../src/pylon/write/guard"
 
-include Pylon::Write
-
+private alias CacheEntry = Pylon::Scan::CacheEntry
+private alias Directory = Pylon::Core::Directory
+private alias Guard = Pylon::Write::Guard
+private alias Metadata = Pylon::Scan::Metadata
+private alias ObservedDirectory = Pylon::Scan::ObservedDirectory
+private alias ObservedFile = Pylon::Scan::ObservedFile
+private alias ObservedLink = Pylon::Scan::ObservedLink
+private alias SymbolicLink = Pylon::Core::SymbolicLink
+private alias Verdict = Pylon::Write::Verdict
 private MTIME  = 1_700_000_000_000_000_000_i64
 private DIGEST = "d1".to_slice
 private OTHER  = "d2".to_slice
@@ -12,29 +19,29 @@ private def metadata(
   size : UInt64 = 100_u64,
   mtime_ns : Int64 = MTIME,
   inode : UInt64 = 7_u64,
-) : Pylon::Scan::Metadata
-  Pylon::Scan::Metadata.new(mode: mode, size: size, mtime_ns: mtime_ns, inode: inode)
+) : Metadata
+  Metadata.new(mode: mode, size: size, mtime_ns: mtime_ns, inode: inode)
 end
 
-private def observed_file(**overrides) : Pylon::Scan::ObservedFile
-  Pylon::Scan::ObservedFile.new(metadata(**overrides))
+private def observed_file(**overrides) : ObservedFile
+  ObservedFile.new(metadata(**overrides))
 end
 
-private def cached(digest : Bytes = DIGEST, **overrides) : Pylon::Scan::CacheEntry
-  Pylon::Scan::CacheEntry.new(metadata(**overrides), digest, freshly_written: false)
+private def cached(digest : Bytes = DIGEST, **overrides) : CacheEntry
+  CacheEntry.new(metadata(**overrides), digest, freshly_written: false)
 end
 
 private NOW = MTIME + 1_000_000_000_i64 * 10
 
 private def check(
   expected : Pylon::Core::Entry?,
-  cached : Pylon::Scan::CacheEntry?,
-  observed : Pylon::Scan::Observed | Problem | Nil,
-) : Verdict
+  cached : CacheEntry?,
+  observed : Pylon::Scan::Observed | Pylon::Problem | Nil,
+) : Pylon::Write::Verdict
   Guard.check(expected, cached, observed, NOW)
 end
 
-describe Pylon::Write::Guard do
+describe Guard do
   it "permits creating a path that does not exist" do
     check(nil, nil, nil).should eq(Verdict::Proceed)
   end
@@ -71,7 +78,7 @@ describe Pylon::Write::Guard do
 
   it "cannot conclude anything about a file modified within the clock granularity window" do
     fresh = observed_file(mtime_ns: NOW)
-    entry = Pylon::Scan::CacheEntry.new(metadata(mtime_ns: NOW), DIGEST, freshly_written: false)
+    entry = CacheEntry.new(metadata(mtime_ns: NOW), DIGEST, freshly_written: false)
 
     check(Pylon::Core::File.new(DIGEST, executable: false), entry, fresh).should eq(
       Verdict::Inconclusive,
@@ -79,7 +86,7 @@ describe Pylon::Write::Guard do
   end
 
   it "cannot conclude anything from a digest that was recorded inside the granularity window" do
-    entry = Pylon::Scan::CacheEntry.new(metadata, DIGEST, freshly_written: true)
+    entry = CacheEntry.new(metadata, DIGEST, freshly_written: true)
 
     check(Pylon::Core::File.new(DIGEST, executable: false), entry, observed_file).should eq(
       Verdict::Inconclusive,
@@ -103,27 +110,27 @@ describe Pylon::Write::Guard do
   it "refuses when a file was replaced by a directory" do
     file = Pylon::Core::File.new(DIGEST, executable: false)
 
-    check(file, cached, Pylon::Scan::ObservedDirectory.new).should eq(Verdict::ModificationDetected)
+    check(file, cached, ObservedDirectory.new).should eq(Verdict::ModificationDetected)
   end
 
   it "checks kind for directories and target for symlinks" do
-    check(Pylon::Core::Directory.new, nil, Pylon::Scan::ObservedDirectory.new).should eq(
+    check(Directory.new, nil, ObservedDirectory.new).should eq(
       Verdict::Proceed,
     )
-    check(Pylon::Core::Directory.new, nil, Pylon::Scan::ObservedLink.new("t")).should eq(
+    check(Directory.new, nil, ObservedLink.new("t")).should eq(
       Verdict::ModificationDetected,
     )
-    check(Pylon::Core::SymbolicLink.new("t"), nil, Pylon::Scan::ObservedLink.new("t")).should eq(
+    check(SymbolicLink.new("t"), nil, ObservedLink.new("t")).should eq(
       Verdict::Proceed,
     )
-    check(Pylon::Core::SymbolicLink.new("t"), nil, Pylon::Scan::ObservedDirectory.new).should eq(
+    check(SymbolicLink.new("t"), nil, ObservedDirectory.new).should eq(
       Verdict::ModificationDetected,
     )
   end
 
   it "refuses to overwrite a symlink that was pointed somewhere else" do
-    link = Pylon::Core::SymbolicLink.new("intended")
-    retargeted = Pylon::Scan::ObservedLink.new("retargeted")
+    link = SymbolicLink.new("intended")
+    retargeted = ObservedLink.new("retargeted")
 
     check(link, nil, retargeted).should eq(Verdict::ModificationDetected)
   end

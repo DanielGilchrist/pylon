@@ -1,19 +1,25 @@
 require "../../spec_helper"
 require "../../../src/pylon/wire/chunks"
 
-include Pylon::Wire
+private CHUNK_BYTES  = Pylon::Wire::Chunks::CHUNK_BYTES
+private alias Chunks = Pylon::Wire::Chunks
+private DIGEST_BYTES = Pylon::Wire::DIGEST_BYTES
+private alias Dictionary = Pylon::Wire::Dictionary
+private FORMAT = Pylon::Wire::FORMAT
+private alias Reader = Pylon::Wire::Reader
+private alias Zstd = Pylon::Compress::Zstd
 
 private def read_back(io : IO::Memory) : {Bytes?, Reader}
   io.rewind
   reader = Reader.new(io)
-  {Chunks.read_all(reader, Pylon::Compress::Zstd.new, Chunks.scratch), reader}
+  {Chunks.read_all(reader, Zstd.new, Chunks.scratch), reader}
 end
 
-describe Pylon::Wire::Chunks do
+describe Chunks do
   it "round trips content spanning several chunks" do
-    content = Bytes.new(Chunks::CHUNK_BYTES * 2 + 7) { |index| (index % 251).to_u8 }
+    content = Bytes.new(CHUNK_BYTES * 2 + 7) { |index| (index % 251).to_u8 }
     io = IO::Memory.new
-    Chunks.write_all(io, content, Pylon::Compress::Zstd.new, Chunks.scratch)
+    Chunks.write_all(io, content, Zstd.new, Chunks.scratch)
 
     collected, reader = read_back(io)
 
@@ -22,9 +28,9 @@ describe Pylon::Wire::Chunks do
   end
 
   it "accepts a chunk of exactly the chunk size" do
-    content = Bytes.new(Chunks::CHUNK_BYTES) { |index| (index % 13).to_u8 }
+    content = Bytes.new(CHUNK_BYTES) { |index| (index % 13).to_u8 }
     io = IO::Memory.new
-    Chunks.write_all(io, content, Pylon::Compress::Zstd.new, Chunks.scratch)
+    Chunks.write_all(io, content, Zstd.new, Chunks.scratch)
 
     collected, reader = read_back(io)
 
@@ -34,7 +40,7 @@ describe Pylon::Wire::Chunks do
 
   it "returns nothing when the stream was invalidated by its writer" do
     io = IO::Memory.new
-    Chunks.write_chunk(io, "partial".to_slice, Pylon::Compress::Zstd.new, Chunks.scratch)
+    Chunks.write_chunk(io, "partial".to_slice, Zstd.new, Chunks.scratch)
     Chunks.write_end(io, valid: false)
 
     collected, reader = read_back(io)
@@ -46,7 +52,7 @@ describe Pylon::Wire::Chunks do
   it "refuses a chunk claiming more raw bytes than the chunk size" do
     io = IO::Memory.new
     io.write_bytes(2_u32, FORMAT)
-    io.write_bytes((Chunks::CHUNK_BYTES + 1).to_u32, FORMAT)
+    io.write_bytes((CHUNK_BYTES + 1).to_u32, FORMAT)
 
     _, reader = read_back(io)
 
@@ -67,17 +73,17 @@ describe Pylon::Wire::Chunks do
   end
 
   it "refuses a content item that exceeds the sync limit rather than buffering without bound" do
-    content = Bytes.new(Chunks::CHUNK_BYTES * 3) { |index| (index % 251).to_u8 }
+    content = Bytes.new(CHUNK_BYTES * 3) { |index| (index % 251).to_u8 }
     io = IO::Memory.new
-    Chunks.write_all(io, content, Pylon::Compress::Zstd.new, Chunks.scratch)
+    Chunks.write_all(io, content, Zstd.new, Chunks.scratch)
     io.rewind
 
     reader = Reader.new(io)
     collected = Chunks.read_all(
       reader,
-      Pylon::Compress::Zstd.new,
+      Zstd.new,
       Chunks.scratch,
-      limit: Chunks::CHUNK_BYTES * 2,
+      limit: CHUNK_BYTES * 2,
     )
 
     collected.should be_nil
@@ -87,7 +93,7 @@ describe Pylon::Wire::Chunks do
 
   it "refuses a tree payload that arrived invalidated" do
     io = IO::Memory.new
-    Chunks.write_chunk(io, "half a tree".to_slice, Pylon::Compress::Zstd.new, Chunks.scratch)
+    Chunks.write_chunk(io, "half a tree".to_slice, Zstd.new, Chunks.scratch)
     Chunks.write_end(io, valid: false)
     io.rewind
 
@@ -101,18 +107,18 @@ end
 describe "dictionary payloads in the contents framing" do
   it "round trips the base digest and the frame without recompressing it" do
     frame = Random.new(41).random_bytes(70_000)
-    base = Bytes.new(Pylon::Wire::DIGEST_BYTES, 7_u8)
-    digest = Bytes.new(Pylon::Wire::DIGEST_BYTES, 9_u8)
-    contents = Pylon::Wire::Contents{digest => Pylon::Wire::Dictionary.new(base, frame)}
+    base = Bytes.new(DIGEST_BYTES, 7_u8)
+    digest = Bytes.new(DIGEST_BYTES, 9_u8)
+    contents = Pylon::Wire::Contents{digest => Dictionary.new(base, frame)}
 
     io = IO::Memory.new
-    Pylon::Wire::Chunks.write_contents(io, contents)
+    Chunks.write_contents(io, contents)
     io.rewind
-    decoded = Pylon::Wire::Chunks.read_contents(Pylon::Wire::Reader.new(io))
+    decoded = Chunks.read_contents(Reader.new(io))
 
     payload = decoded[digest]?
-    payload.should be_a(Pylon::Wire::Dictionary)
-    next unless payload.is_a?(Pylon::Wire::Dictionary)
+    payload.should be_a(Dictionary)
+    next unless payload.is_a?(Dictionary)
 
     payload.base.should eq(base)
     payload.frame.should eq(frame)
