@@ -1,6 +1,7 @@
 require "spec"
 require "../src/pylon/prelude"
 require "./support/allocations"
+require "./support/sandbox"
 require "./support/entries"
 
 private alias Changes = Pylon::Core::Changes
@@ -12,6 +13,10 @@ private alias Report = Pylon::Session::Report
 private alias Session = Pylon::Session::Session
 private alias Trouble = Pylon::Core::Trouble
 private alias Reconciliation = Pylon::Core::Reconciliation
+
+def local_endpoint(root : Sandbox) : LocalEndpoint
+  local_endpoint(root.root)
+end
 
 def local_endpoint(root : String) : LocalEndpoint
   LocalEndpoint.new(

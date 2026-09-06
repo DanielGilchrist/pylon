@@ -1,19 +1,10 @@
 require "../spec_helper"
 
-require "file_utils"
-
 private alias Disk = Pylon::Disk
 private alias Metadata = Pylon::Scan::Metadata
 
-private def in_sandbox(& : String, Disk ->) : Nil
-  root = File.join(Dir.tempdir, "pylon-target-#{Random::Secure.hex(8)}")
-  Dir.mkdir_p(root)
-
-  begin
-    yield root, Disk.new(root)
-  ensure
-    FileUtils.rm_rf(root)
-  end
+private def in_sandbox(& : Sandbox, Disk ->) : Nil
+  Sandbox.open { |root| yield root, Disk.new(root.root) }
 end
 
 describe Disk do
@@ -21,14 +12,14 @@ describe Disk do
     in_sandbox do |root, target|
       target.write_file("script.sh", "#!/bin/sh\n".to_slice, true).should be_nil
 
-      File.read(File.join(root, "script.sh")).should eq("#!/bin/sh\n")
-      File.info(File.join(root, "script.sh")).permissions.value.should eq(0o755)
+      root.read("script.sh").should eq("#!/bin/sh\n")
+      root.info("script.sh").permissions.value.should eq(0o755)
     end
   end
 
   it "replaces an existing file without ever leaving the path missing" do
     in_sandbox do |root, target|
-      path = File.join(root, "notes.txt")
+      path = root.path("notes.txt")
       File.write(path, "before")
       original_inode = Fixtures.metadata!(Metadata.of(path)).inode
 
@@ -44,7 +35,7 @@ describe Disk do
       target.write_file("a.txt", "x".to_slice, false)
       target.create_symlink("link", "a.txt")
 
-      strays = Dir.children(root).select(&.starts_with?(Pylon::Disk::TEMPORARY_PREFIX))
+      strays = root.children.select(&.starts_with?(Pylon::Disk::TEMPORARY_PREFIX))
       strays.should be_empty
     end
   end
@@ -53,8 +44,8 @@ describe Disk do
     in_sandbox do |root, target|
       target.create_symlink("link", "elsewhere.txt").should be_nil
 
-      File.readlink(File.join(root, "link")).should eq("elsewhere.txt")
-      Fixtures.metadata!(Metadata.of(File.join(root, "link"))).kind.should eq(
+      File.readlink(root.path("link")).should eq("elsewhere.txt")
+      Fixtures.metadata!(Metadata.of(root.path("link"))).kind.should eq(
         Pylon::Scan::Metadata::Kind::SymbolicLink,
       )
     end
@@ -65,13 +56,13 @@ describe Disk do
       target.create_symlink("link", "first").should be_nil
       target.create_symlink("link", "second").should be_nil
 
-      File.readlink(File.join(root, "link")).should eq("second")
+      File.readlink(root.path("link")).should eq("second")
     end
   end
 
   it "toggles the executable bit while preserving other permissions" do
     in_sandbox do |root, target|
-      path = File.join(root, "f")
+      path = root.path("f")
       File.write(path, "x")
       File.chmod(path, 0o640)
 
@@ -85,28 +76,27 @@ describe Disk do
 
   it "reports why a directory could not be removed instead of pretending it was" do
     in_sandbox do |root, target|
-      stuck = File.join(root, "stuck")
-      Dir.mkdir_p(stuck)
-      File.write(File.join(stuck, "kept.txt"), "still here")
-      File.chmod(stuck, 0o555)
+      stuck = root.directory("stuck")
+      stuck.write("kept.txt", "still here")
+      root.chmod("stuck", 0o555)
 
       begin
         problem = target.remove("stuck")
         problem.should be_a(Pylon::Problem)
-        File.exists?(File.join(stuck, "kept.txt")).should be_true
+        stuck.exists?("kept.txt").should be_true
       ensure
-        File.chmod(stuck, 0o755)
+        root.chmod("stuck", 0o755)
       end
     end
   end
 
   it "removes files and whole directories" do
     in_sandbox do |root, target|
-      Dir.mkdir_p(File.join(root, "app", "models"))
-      File.write(File.join(root, "app", "models", "user.rb"), "x")
+      root.directory("app/models")
+      root.write("app/models/user.rb", "x")
 
       target.remove("app").should be_nil
-      Dir.exists?(File.join(root, "app")).should be_false
+      root.directory?("app").should be_false
     end
   end
 
@@ -118,24 +108,24 @@ describe Disk do
 
   it "does not follow a symlink when removing it" do
     in_sandbox do |root, target|
-      File.write(File.join(root, "real.txt"), "keep me")
+      root.write("real.txt", "keep me")
       target.create_symlink("link", "real.txt")
 
       target.remove("link").should be_nil
-      File.exists?(File.join(root, "real.txt")).should be_true
-      File.exists?(File.join(root, "link")).should be_false
+      root.exists?("real.txt").should be_true
+      root.exists?("link").should be_false
     end
   end
 
   it "removes a symlink to a directory without touching what it points at" do
     in_sandbox do |root, target|
-      Dir.mkdir_p(File.join(root, "real"))
-      File.write(File.join(root, "real", "keep.txt"), "keep me")
+      root.directory("real")
+      root.write("real/keep.txt", "keep me")
       target.create_symlink("link", "real")
 
       target.remove("link").should be_nil
-      File.symlink?(File.join(root, "link")).should be_false
-      File.read(File.join(root, "real", "keep.txt")).should eq("keep me")
+      File.symlink?(root.path("link")).should be_false
+      root.read("real/keep.txt").should eq("keep me")
     end
   end
 end

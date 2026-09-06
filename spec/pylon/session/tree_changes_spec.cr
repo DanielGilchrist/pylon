@@ -1,6 +1,5 @@
 require "../../spec_helper"
 
-require "file_utils"
 require "socket"
 require "../../support/remote_end"
 
@@ -16,36 +15,34 @@ end
 # The server only pushes tree changes when it has a watcher, so this is the only
 # topology that exercises the shared tree baseline.
 private def in_watched_pair(
-  & : String, String, Session(LocalEndpoint, RemoteEndpoint, Discard), ::Channel(Nil) ->
+  & : Sandbox, Sandbox, Session(LocalEndpoint, RemoteEndpoint, Discard), ::Channel(Nil) ->
 ) : Nil
-  base = File.join(Dir.tempdir, "pylon-splice-#{Random::Secure.hex(8)}")
-  local = File.join(base, "local")
-  remote = File.join(base, "remote")
-  Dir.mkdir_p(local)
-  Dir.mkdir_p(remote)
+  Sandbox.open do |sandbox|
+    local = sandbox.directory("local")
+    remote = sandbox.directory("remote")
 
-  client, socket = UNIXSocket.pair
-  serve_remote_end(socket)
+    client, socket = UNIXSocket.pair
+    serve_remote_end(socket)
 
-  pushes = ::Channel(Nil).new(16)
+    pushes = ::Channel(Nil).new(16)
 
-  begin
-    session = build_session(
-      local_endpoint(local),
-      RemoteEndpoint.new(
-        client,
-        client,
-        remote_configuration(remote, watch: true),
-        pushes,
-        resume: nil,
-      ),
-      push_first: true,
-    )
-    yield local, remote, session, pushes
-  ensure
-    client.close
-    socket.close
-    FileUtils.rm_rf(base)
+    begin
+      session = build_session(
+        local_endpoint(local),
+        RemoteEndpoint.new(
+          client,
+          client,
+          remote_configuration(remote, watch: true),
+          pushes,
+          resume: nil,
+        ),
+        push_first: true,
+      )
+      yield local, remote, session, pushes
+    ensure
+      client.close
+      socket.close
+    end
   end
 end
 
@@ -60,25 +57,25 @@ end
 describe "the shared tree baseline" do
   it "stays correct across the client's own writes" do
     in_watched_pair do |local, remote, session, pushes|
-      20.times { |index| File.write(File.join(local, "f#{index}.rb"), "body #{index}") }
+      20.times { |index| local.write("f#{index}.rb", "body #{index}") }
       cycle!(session, tick)
       await_push(pushes)
 
-      File.write(File.join(local, "mine.rb"), "written by the client")
+      local.write("mine.rb", "written by the client")
       cycle!(session, tick)
       await_push(pushes)
 
-      File.write(File.join(remote, "theirs.rb"), "written on the box")
+      remote.write("theirs.rb", "written on the box")
 
       5.times do
         await_push(pushes)
         cycle!(session, tick).halted?.should be_false
-        break if File.exists?(File.join(local, "theirs.rb"))
+        break if local.exists?("theirs.rb")
       end
 
-      File.read(File.join(local, "theirs.rb")).should eq("written on the box")
-      File.read(File.join(remote, "mine.rb")).should eq("written by the client")
-      Dir.children(remote).size.should eq(22)
+      local.read("theirs.rb").should eq("written on the box")
+      remote.read("mine.rb").should eq("written by the client")
+      remote.children.size.should eq(22)
 
       cycle!(session, tick).quiet?.should be_true
     end
@@ -86,12 +83,12 @@ describe "the shared tree baseline" do
 
   it "survives a push larger than a single batch" do
     in_watched_pair do |local, remote, session, pushes|
-      Dir.mkdir_p(File.join(local, "app", "models"))
-      Dir.mkdir_p(File.join(local, "db"))
+      local.directory("app/models")
+      local.directory("db")
       400.times do |index|
-        File.write(File.join(local, "app", "models", "f#{index}.rb"), "class F#{index}; end")
+        local.write("app/models/f#{index}.rb", "class F#{index}; end")
       end
-      File.write(File.join(local, "db", "structure.sql"), "-- schema")
+      local.write("db/structure.sql", "-- schema")
 
       cycle!(session, tick)
       await_push(pushes)
@@ -101,10 +98,10 @@ describe "the shared tree baseline" do
         report.halted?.should be_false, "a cycle halted, which means a side looked emptied"
       end
 
-      Dir.exists?(File.join(local, "app", "models")).should be_true, "the local tree was deleted"
-      Dir.children(File.join(local, "app", "models")).size.should eq(400)
-      Dir.children(File.join(remote, "app", "models")).size.should eq(400)
-      File.exists?(File.join(local, "db", "structure.sql")).should be_true
+      local.directory?("app/models").should be_true, "the local tree was deleted"
+      local.children("app/models").size.should eq(400)
+      remote.children("app/models").size.should eq(400)
+      local.exists?("db/structure.sql").should be_true
     end
   end
 end

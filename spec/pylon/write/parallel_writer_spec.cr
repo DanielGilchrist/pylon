@@ -60,14 +60,12 @@ describe "Writer running independent file writes in parallel" do
     changes = bulk_changes
     contents = staged_contents(changes)
 
-    parallel_root = File.tempname("pylon-parallel")
-    sequential_root = File.tempname("pylon-sequential")
-    Dir.mkdir_p(parallel_root)
-    Dir.mkdir_p(sequential_root)
+    Sandbox.open do |sandbox|
+      parallel_root = sandbox.directory("parallel_root")
+      sequential_root = sandbox.directory("sequential_root")
 
-    begin
-      parallel = build_writer(Disk.new(parallel_root), contents).write(changes)
-      sequential = build_writer(Disk.new(sequential_root), contents, 1).write(changes)
+      parallel = build_writer(Disk.new(parallel_root.root), contents).write(changes)
+      sequential = build_writer(Disk.new(sequential_root.root), contents, 1).write(changes)
 
       parallel.size.should eq(changes.size)
       parallel.map(&.path).should eq(changes.map(&.path))
@@ -78,17 +76,14 @@ describe "Writer running independent file writes in parallel" do
         entry = change.new
         next unless entry.is_a?(Pylon::Core::File)
 
-        left = File.read(File.join(parallel_root, change.path))
-        right = File.read(File.join(sequential_root, change.path))
+        left = parallel_root.read(change.path)
+        right = sequential_root.read(change.path)
         left.should eq(right)
 
-        File.info(File.join(parallel_root, change.path)).permissions.owner_execute?.should eq(
+        parallel_root.info(change.path).permissions.owner_execute?.should eq(
           entry.executable?,
         )
       end
-    ensure
-      FileUtils.rm_rf(parallel_root)
-      FileUtils.rm_rf(sequential_root)
     end
   end
 
@@ -96,16 +91,13 @@ describe "Writer running independent file writes in parallel" do
     changes = bulk_changes.batch(0, 101)
     contents = staged_contents(changes)
 
-    root = File.tempname("pylon-parallel-uneven")
-    Dir.mkdir_p(root)
+    Sandbox.open do |sandbox|
+      root = sandbox.directory("root")
 
-    begin
-      outcomes = build_writer(Disk.new(root), contents, 24).write(changes)
+      outcomes = build_writer(Disk.new(root.root), contents, 24).write(changes)
 
       outcomes.size.should eq(changes.size)
       outcomes.count(&.applied?).should eq(changes.size)
-    ensure
-      FileUtils.rm_rf(root)
     end
   end
 
@@ -124,18 +116,15 @@ describe "Writer running independent file writes in parallel" do
       )
     end
 
-    root = File.tempname("pylon-parallel-nested")
-    Dir.mkdir_p(root)
+    Sandbox.open do |sandbox|
+      root = sandbox.directory("root")
 
-    begin
-      outcomes = build_writer(Disk.new(root), contents).write(changes)
+      outcomes = build_writer(Disk.new(root.root), contents).write(changes)
 
       outcomes.count(&.applied?).should eq(changes.size)
       20.times do |index|
-        File.read(File.join(root, "d#{index}", "file.rb")).should eq("body #{index}")
+        root.read("d#{index}/file.rb").should eq("body #{index}")
       end
-    ensure
-      FileUtils.rm_rf(root)
     end
   end
 
@@ -148,11 +137,10 @@ describe "Writer running independent file writes in parallel" do
     end.first(5)
     missing.each { |digest| contents.delete(digest) }
 
-    root = File.tempname("pylon-parallel-skip")
-    Dir.mkdir_p(root)
+    Sandbox.open do |sandbox|
+      root = sandbox.directory("root")
 
-    begin
-      outcomes = build_writer(Disk.new(root), contents).write(changes)
+      outcomes = build_writer(Disk.new(root.root), contents).write(changes)
 
       unrecovered = outcomes.count do |outcome|
         outcome.skipped == Pylon::Write::Skip::StagedContentMissing
@@ -160,8 +148,6 @@ describe "Writer running independent file writes in parallel" do
 
       unrecovered.should eq(missing.size)
       outcomes.count(&.applied?).should eq(changes.size - missing.size)
-    ensure
-      FileUtils.rm_rf(root)
     end
   end
 end

@@ -19,6 +19,16 @@ def remote_configuration(
   )
 end
 
+def remote_configuration(
+  root : Sandbox,
+  ignores : Array(String) = Array(String).new,
+  watch : Bool = false,
+  brand : Pylon::Brand = Pylon::Brand::DEFAULT,
+  state : String? = nil,
+) : Configure
+  remote_configuration(root.root, ignores, watch, brand, state)
+end
+
 def serve_remote_end(socket : IO) : Nil
   spawn do
     accepted = Server.accept(socket, socket, IO::Memory.new)

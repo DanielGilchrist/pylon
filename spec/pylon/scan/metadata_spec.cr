@@ -91,10 +91,8 @@ end
 
 describe "Pylon::Scan::Metadata.of" do
   it "reads real inode, size and mode from the filesystem" do
-    path = File.join(Dir.tempdir, "pylon-metadata-#{Random.rand(UInt32)}")
-    File.write(path, "hello")
-
-    begin
+    Sandbox.open do |sandbox|
+      path = sandbox.write("file", "hello")
       observed = Metadata.of(path)
       observed.is_a?(Metadata).should be_true
       next unless observed.is_a?(Metadata)
@@ -108,12 +106,10 @@ describe "Pylon::Scan::Metadata.of" do
       changed = Metadata.of(path)
       changed.executable?.should be_true if changed.is_a?(Metadata)
       changed.is_a?(Metadata).should be_true
-    ensure
-      File.delete?(path)
     end
   end
 
   it "returns nil for a path that does not exist" do
-    Metadata.of(File.join(Dir.tempdir, "pylon-missing-#{Random.rand(UInt32)}")).should be_nil
+    Sandbox.open { |sandbox| Metadata.of(sandbox.path("missing")).should be_nil }
   end
 end

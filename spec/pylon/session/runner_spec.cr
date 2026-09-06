@@ -1,7 +1,5 @@
 require "../../spec_helper"
 
-require "file_utils"
-
 private alias DirtyPaths = Pylon::Watch::DirtyPaths
 private alias LocalEndpoint = Pylon::Session::LocalEndpoint
 private alias Report = Pylon::Session::Report
@@ -13,25 +11,20 @@ private def burst(dirty_paths : DirtyPaths) : Nil
 end
 
 private def in_pair(
-  & : String, String, Pylon::Session::Session(LocalEndpoint, LocalEndpoint, Pylon::Discard) ->
+  & : Sandbox, Sandbox, Pylon::Session::Session(LocalEndpoint, LocalEndpoint, Pylon::Discard) ->
 ) : Nil
-  base = File.join(Dir.tempdir, "pylon-runner-#{Random::Secure.hex(8)}")
-  local = File.join(base, "local")
-  remote = File.join(base, "remote")
-  Dir.mkdir_p(local)
-  Dir.mkdir_p(remote)
+  Sandbox.open do |sandbox|
+    local = sandbox.directory("local")
+    remote = sandbox.directory("remote")
 
-  begin
     yield local, remote, build_session(local_endpoint(local), local_endpoint(remote))
-  ensure
-    FileUtils.rm_rf(base)
   end
 end
 
 describe Runner do
   it "cycles once immediately, before any change arrives" do
     in_pair do |local, remote, session|
-      File.write(File.join(local, "first.rb"), "x")
+      local.write("first.rb", "x")
 
       runner = Runner.new(
         session,
@@ -51,7 +44,7 @@ describe Runner do
       Fiber.yield
       sleep 50.milliseconds
 
-      File.read(File.join(remote, "first.rb")).should eq("x")
+      remote.read("first.rb").should eq("x")
       reports.size.should eq(1)
     end
   end
@@ -73,13 +66,13 @@ describe Runner do
       sleep 30.milliseconds
       reports.size.should eq(1)
 
-      File.write(File.join(local, "later.rb"), "y")
+      local.write("later.rb", "y")
       dirty_paths.add("later.rb")
       dirty_paths.signals.send(nil)
       sleep 60.milliseconds
 
       runner.stop
-      File.read(File.join(remote, "later.rb")).should eq("y")
+      remote.read("later.rb").should eq("y")
       reports.size.should be >= 2
     end
   end
@@ -122,7 +115,7 @@ describe Runner do
       sleep 20.milliseconds
 
       10.times do |index|
-        File.write(File.join(local, "burst_#{index}.rb"), "b")
+        local.write("burst_#{index}.rb", "b")
         burst(dirty_paths)
       end
 
@@ -152,7 +145,7 @@ describe Runner do
       sleep 20.milliseconds
 
       5.times do |index|
-        File.write(File.join(local, "spread_#{index}.rb"), "s")
+        local.write("spread_#{index}.rb", "s")
         burst(dirty_paths)
         burst(dirty_paths)
         sleep 25.milliseconds
@@ -184,7 +177,7 @@ describe Runner do
       Fiber.yield
       sleep 20.milliseconds
 
-      File.write(File.join(local, "endless.rb"), "e")
+      local.write("endless.rb", "e")
       dirty_paths.add("endless.rb")
       streaming = true
 

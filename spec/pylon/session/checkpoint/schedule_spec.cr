@@ -6,15 +6,8 @@ private alias Checkpoint = Pylon::Session::Checkpoint
 private alias Problem = Pylon::Problem
 private alias Schedule = Pylon::Session::Checkpoint::Schedule
 
-private def in_sandbox(& : String ->) : Nil
-  root = File.join(Dir.tempdir, "pylon-schedule-#{Random::Secure.hex(8)}")
-  Dir.mkdir_p(root)
-
-  begin
-    yield root
-  ensure
-    FileUtils.rm_rf(root)
-  end
+private def in_sandbox(& : Sandbox ->) : Nil
+  Sandbox.open { |root| yield root }
 end
 
 private def schedule(path : String, interval : Time::Span) : Schedule
@@ -24,7 +17,7 @@ end
 describe Schedule do
   it "saves immediately when it has never saved" do
     in_sandbox do |root|
-      path = File.join(root, "state")
+      path = root.path("state")
 
       schedule(path, 1.hour).save_if_due(Checkpoint.new)
 
@@ -34,7 +27,7 @@ describe Schedule do
 
   it "does not save again within the interval" do
     in_sandbox do |root|
-      path = File.join(root, "state")
+      path = root.path("state")
       due = schedule(path, 1.hour)
 
       due.save_if_due(Checkpoint.new)
@@ -47,7 +40,7 @@ describe Schedule do
 
   it "saves again once the interval has passed" do
     in_sandbox do |root|
-      path = File.join(root, "state")
+      path = root.path("state")
       due = schedule(path, 0.seconds)
 
       due.save_if_due(Checkpoint.new)
@@ -60,10 +53,10 @@ describe Schedule do
 
   it "reports a failed save once rather than on every attempt" do
     in_sandbox do |root|
-      blocked = File.join(root, "occupied")
+      blocked = root.path("occupied")
       File.write(blocked, "a file where the state directory should be")
 
-      due = schedule(File.join(blocked, "state"), 0.seconds)
+      due = schedule(root.path("occupied/state"), 0.seconds)
 
       first = due.save(Checkpoint.new)
       second = due.save(Checkpoint.new)
@@ -76,10 +69,10 @@ describe Schedule do
 
   it "complains again after a save succeeds in between failures" do
     in_sandbox do |root|
-      blocked = File.join(root, "occupied")
+      blocked = root.path("occupied")
       File.write(blocked, "in the way")
 
-      due = schedule(File.join(blocked, "state"), 0.seconds)
+      due = schedule(root.path("occupied/state"), 0.seconds)
 
       due.save(Checkpoint.new).should be_a(Problem)
       File.delete(blocked)

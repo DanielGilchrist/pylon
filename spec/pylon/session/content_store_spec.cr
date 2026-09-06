@@ -1,31 +1,26 @@
 require "../../spec_helper"
 
 require "digest/sha256"
-require "file_utils"
 
 private alias ContentStore = Pylon::Session::ContentStore
 private alias Locations = Pylon::Session::Locations
 private ORPHAN_LIMIT = Pylon::Session::ContentStore::ORPHAN_LIMIT
 private alias Problem = Pylon::Problem
 
-private def in_store(& : String, ContentStore, String ->) : Nil
-  base = File.join(Dir.tempdir, "pylon-store-#{Random::Secure.hex(8)}")
-  tree = File.join(base, "tree")
-  directory = File.join(base, "store")
-  Dir.mkdir_p(tree)
+private def in_store(& : Sandbox, ContentStore, Sandbox ->) : Nil
+  Sandbox.open do |base|
+    tree = base.directory("tree")
+    directory = Sandbox.new(base.path("store"))
 
-  opened = ContentStore.open(directory, tree)
-  raise "the store could not be opened: #{opened.reason}" if opened.is_a?(Problem)
+    opened = ContentStore.open(directory.root, tree.root)
+    raise "the store could not be opened: #{opened.reason}" if opened.is_a?(Problem)
 
-  begin
     yield tree, opened, directory
-  ensure
-    FileUtils.rm_rf(base)
   end
 end
 
-private def place(tree : String, name : String, content : String) : Bytes
-  File.write(File.join(tree, name), content)
+private def place(tree : Sandbox, name : String, content : String) : Bytes
+  tree.write(name, content)
   Digest::SHA256.digest(content).to_slice
 end
 
@@ -34,7 +29,7 @@ describe ContentStore do
     in_store do |tree, store, _|
       digest = place(tree, "a.rb", "version one")
       store.keep("a.rb", digest)
-      File.delete(File.join(tree, "a.rb"))
+      tree.remove("a.rb")
 
       store.holds?(digest).should be_true
       store.held([digest, Bytes.new(32, 9_u8)]).should eq([digest])
@@ -46,8 +41,8 @@ describe ContentStore do
     in_store do |tree, store, _|
       digest = place(tree, "a.rb", "version one")
       store.keep("a.rb", digest)
-      File.write(File.join(tree, "a.rb.tmp"), "version two")
-      File.rename(File.join(tree, "a.rb.tmp"), File.join(tree, "a.rb"))
+      tree.write("a.rb.tmp", "version two")
+      tree.rename("a.rb.tmp", "a.rb")
 
       String.new(store.content(digest) || Bytes.empty).should eq("version one")
     end
@@ -56,12 +51,12 @@ describe ContentStore do
   it "forgets content that no longer matches its digest" do
     in_store do |tree, store, directory|
       digest = place(tree, "a.rb", "original")
-      File.write(File.join(tree, "a.rb"), "changed before the snapshot")
+      tree.write("a.rb", "changed before the snapshot")
       store.keep("a.rb", digest)
 
       store.content(digest).should be_nil
       store.holds?(digest).should be_false
-      Dir.children(directory).should be_empty
+      directory.children.should be_empty
     end
   end
 
@@ -70,19 +65,19 @@ describe ContentStore do
       store.keep("vanished.rb", Bytes.new(32, 1_u8))
 
       store.holds?(Bytes.new(32, 1_u8)).should be_false
-      Dir.children(directory).should be_empty
+      directory.children.should be_empty
     end
   end
 
   it "prunes orphans past the bound and keeps what the tree still holds" do
     in_store do |tree, _, directory|
       kept = Array.new(3) { |index| place(tree, "kept#{index}", "kept #{index}") }
-      kept.each { |digest| File.write(File.join(directory, digest.hexstring), "") }
+      kept.each { |digest| directory.write(digest.hexstring, "") }
       (ORPHAN_LIMIT + 5).times do |index|
-        File.write(File.join(directory, Digest::SHA256.hexdigest(index.to_s)), "")
+        directory.write(Digest::SHA256.hexdigest(index.to_s), "")
       end
 
-      reopened = ContentStore.open(directory, tree)
+      reopened = ContentStore.open(directory.root, tree.root)
       raise "the store could not be reopened" if reopened.is_a?(Problem)
       live = Locations.new
       kept.each_with_index { |digest, index| live.remember(digest, "kept#{index}", 0_u64) }
@@ -90,7 +85,7 @@ describe ContentStore do
       reopened.prune(live)
 
       reopened.held(kept).should eq(kept)
-      Dir.children(directory).size.should eq(ORPHAN_LIMIT + kept.size)
+      directory.children.size.should eq(ORPHAN_LIMIT + kept.size)
     end
   end
 
@@ -104,7 +99,7 @@ describe ContentStore do
       store.prune(live)
 
       store.held(digests).should eq(digests)
-      Dir.children(directory).size.should eq(4)
+      directory.children.size.should eq(4)
     end
   end
 
@@ -113,7 +108,7 @@ describe ContentStore do
       digest = place(tree, "a.rb", "persisted")
       store.keep("a.rb", digest)
 
-      reopened = ContentStore.open(directory, tree)
+      reopened = ContentStore.open(directory.root, tree.root)
       raise "the store could not be reopened" if reopened.is_a?(Problem)
 
       reopened.holds?(digest).should be_true

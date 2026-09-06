@@ -1,6 +1,5 @@
 require "../../spec_helper"
 
-require "file_utils"
 require "socket"
 require "../../support/remote_end"
 
@@ -42,26 +41,24 @@ private def rejected_with(
   brand : Brand = Pylon::Brand::DEFAULT,
   & : UNIXSocket ->
 ) : Nil
-  root = File.join(Dir.tempdir, "pylon-greeting-#{Random::Secure.hex(8)}")
-  Dir.mkdir_p(root)
+  Sandbox.open do |root|
+    client, socket = UNIXSocket.pair
 
-  client, socket = UNIXSocket.pair
+    begin
+      yield socket
+      session = build_session(
+        local_endpoint(root),
+        RemoteEndpoint.new(client, client, remote_configuration(root, brand: brand), resume: nil),
+      )
 
-  begin
-    yield socket
-    session = build_session(
-      local_endpoint(root),
-      RemoteEndpoint.new(client, client, remote_configuration(root, brand: brand), resume: nil),
-    )
+      result = session.cycle(Time.utc.to_unix_ns.to_i64)
 
-    result = session.cycle(Time.utc.to_unix_ns.to_i64)
-
-    fail "expected an incompatible fault, got #{result.class}" unless result.is_a?(Incompatible)
-    result.explain.should contain(message)
-  ensure
-    client.close
-    socket.close
-    FileUtils.rm_rf(root)
+      fail "expected an incompatible fault, got #{result.class}" unless result.is_a?(Incompatible)
+      result.explain.should contain(message)
+    ensure
+      client.close
+      socket.close
+    end
   end
 end
 
@@ -147,33 +144,31 @@ describe "the wire greeting" do
   end
 
   it "takes its brand from the client's configuration" do
-    root = File.join(Dir.tempdir, "pylon-greeting-#{Random::Secure.hex(8)}")
-    state = File.join(Dir.tempdir, "pylon-greeting-state-#{Random::Secure.hex(8)}")
-    Dir.mkdir_p(root)
-    File.write(state, "not a state file")
-    client, socket = UNIXSocket.pair
-    log = IO::Memory.new
+    Sandbox.open do |sandbox|
+      root = sandbox.directory("root")
+      state = sandbox.write("state", "not a state file")
+      client, socket = UNIXSocket.pair
+      log = IO::Memory.new
 
-    begin
-      configure = Pylon::Wire::Message::Configure.new(
-        root: root,
-        ignores: Array(String).new,
-        compression: Pylon::Compress::Zstd::DEFAULT_LEVEL,
-        brand: Brand.new("Test Sync"),
-        state: state,
-        watch: false,
-        tree_fingerprint: nil,
-      )
-      Message.write(client, configure)
+      begin
+        configure = Pylon::Wire::Message::Configure.new(
+          root: root.root,
+          ignores: Array(String).new,
+          compression: Pylon::Compress::Zstd::DEFAULT_LEVEL,
+          brand: Brand.new("Test Sync"),
+          state: state,
+          watch: false,
+          tree_fingerprint: nil,
+        )
+        Message.write(client, configure)
 
-      Server.accept(socket, socket, log).should be_a(Server)
+        Server.accept(socket, socket, log).should be_a(Server)
 
-      log.to_s.should start_with("Test Sync: ignoring the sync state at #{state}")
-    ensure
-      client.close
-      socket.close
-      File.delete(state)
-      FileUtils.rm_rf(root)
+        log.to_s.should start_with("Test Sync: ignoring the sync state at #{state}")
+      ensure
+        client.close
+        socket.close
+      end
     end
   end
 end

@@ -1,6 +1,5 @@
 require "../../spec_helper"
 
-require "file_utils"
 require "socket"
 require "../../support/remote_end"
 
@@ -33,29 +32,27 @@ private class MeteredIO < IO
 end
 
 private def in_metered_pair(
-  & : String, String, Session(LocalEndpoint, RemoteEndpoint, Discard), MeteredIO ->
+  & : Sandbox, Sandbox, Session(LocalEndpoint, RemoteEndpoint, Discard), MeteredIO ->
 ) : Nil
-  base = File.join(Dir.tempdir, "pylon-splice-#{Random::Secure.hex(8)}")
-  local_root = File.join(base, "local")
-  remote_root = File.join(base, "remote")
-  Dir.mkdir_p(local_root)
-  Dir.mkdir_p(remote_root)
+  Sandbox.open do |sandbox|
+    local_root = sandbox.directory("local")
+    remote_root = sandbox.directory("remote")
 
-  client, socket = UNIXSocket.pair
-  serve_remote_end(socket)
+    client, socket = UNIXSocket.pair
+    serve_remote_end(socket)
 
-  metered = MeteredIO.new(client)
+    metered = MeteredIO.new(client)
 
-  begin
-    session = build_session(
-      local_endpoint(local_root),
-      RemoteEndpoint.new(metered, metered, remote_configuration(remote_root), resume: nil),
-    )
-    yield local_root, remote_root, session, metered
-  ensure
-    client.close
-    socket.close
-    FileUtils.rm_rf(base)
+    begin
+      session = build_session(
+        local_endpoint(local_root),
+        RemoteEndpoint.new(metered, metered, remote_configuration(remote_root), resume: nil),
+      )
+      yield local_root, remote_root, session, metered
+    ensure
+      client.close
+      socket.close
+    end
   end
 end
 
@@ -76,17 +73,17 @@ end
 describe "splicing over the wire protocol" do
   it "pushes an append as a splice instead of the whole file" do
     in_metered_pair do |local, remote, session, metered|
-      File.write(File.join(local, "big.bin"), INCOMPRESSIBLE)
+      local.write("big.bin", INCOMPRESSIBLE)
 
       cycle!(session, tick)
 
       edited = appended_copy
-      File.write(File.join(local, "big.bin"), edited)
+      local.write("big.bin", edited)
 
       before = metered.written
       cycle!(session, tick)
 
-      File.read(File.join(remote, "big.bin")).to_slice.should eq(edited)
+      remote.read("big.bin").to_slice.should eq(edited)
       (metered.written - before).should be < 32 * 1024
 
       cycle!(session, tick).quiet?.should be_true
@@ -95,17 +92,17 @@ describe "splicing over the wire protocol" do
 
   it "pulls an append as a splice instead of the whole file" do
     in_metered_pair do |local, remote, session, metered|
-      File.write(File.join(remote, "big.bin"), INCOMPRESSIBLE)
+      remote.write("big.bin", INCOMPRESSIBLE)
 
       cycle!(session, tick)
 
       edited = appended_copy
-      File.write(File.join(remote, "big.bin"), edited)
+      remote.write("big.bin", edited)
 
       before = metered.consumed
       cycle!(session, tick)
 
-      File.read(File.join(local, "big.bin")).to_slice.should eq(edited)
+      local.read("big.bin").to_slice.should eq(edited)
       (metered.consumed - before).should be < 32 * 1024
 
       cycle!(session, tick).quiet?.should be_true
@@ -114,16 +111,16 @@ describe "splicing over the wire protocol" do
 
   it "falls back to the full content when nothing of the old file survives" do
     in_metered_pair do |local, remote, session, _metered|
-      File.write(File.join(local, "big.bin"), INCOMPRESSIBLE)
+      local.write("big.bin", INCOMPRESSIBLE)
 
       cycle!(session, tick)
 
       rewritten = Random.new(23).random_bytes(64 * 1024)
-      File.write(File.join(local, "big.bin"), rewritten)
+      local.write("big.bin", rewritten)
 
       cycle!(session, tick)
 
-      File.read(File.join(remote, "big.bin")).to_slice.should eq(rewritten)
+      remote.read("big.bin").to_slice.should eq(rewritten)
       cycle!(session, tick).quiet?.should be_true
     end
   end

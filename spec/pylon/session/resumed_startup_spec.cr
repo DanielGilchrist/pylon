@@ -1,6 +1,5 @@
 require "../../spec_helper"
 
-require "file_utils"
 require "socket"
 require "../../support/remote_end"
 
@@ -26,22 +25,15 @@ private class CountingReader < IO
   end
 end
 
-private record Ends, local : String, remote : String, state : String
+private record Ends, local : Sandbox, remote : Sandbox, state : String
 
 private def with_roots(& : Ends ->) : Nil
-  base = File.join(Dir.tempdir, "pylon-resume-#{Random::Secure.hex(8)}")
-  ends = Ends.new(
-    File.join(base, "local"),
-    File.join(base, "remote"),
-    File.join(base, "remote-state"),
-  )
-  Dir.mkdir_p(ends.local)
-  Dir.mkdir_p(ends.remote)
-
-  begin
-    yield ends
-  ensure
-    FileUtils.rm_rf(base)
+  Sandbox.open do |sandbox|
+    yield Ends.new(
+      sandbox.directory("local"),
+      sandbox.directory("remote"),
+      sandbox.path("remote-state"),
+    )
   end
 end
 
@@ -55,7 +47,7 @@ private def connect(
   counting = CountingReader.new(client)
 
   configure = Pylon::Wire::Message::Configure.new(
-    root: ends.remote,
+    root: ends.remote.root,
     ignores: Array(String).new,
     compression: Pylon::Compress::Zstd::DEFAULT_LEVEL,
     brand: Pylon::Brand::DEFAULT,
@@ -90,7 +82,7 @@ end
 describe "resuming from a persisted remote tree" do
   it "receives only what changed since the tree both sides persisted" do
     with_roots do |ends|
-      300.times { |index| File.write(File.join(ends.remote, "file_#{index}.rb"), "body #{index}") }
+      300.times { |index| ends.remote.write("file_#{index}.rb", "body #{index}") }
 
       shared_tree = nil
       connect(ends, nil) do |session, endpoint, _|
@@ -99,12 +91,12 @@ describe "resuming from a persisted remote tree" do
       end
       wait_for_state(ends.state)
 
-      File.write(File.join(ends.remote, "file_300.rb"), "late arrival")
+      ends.remote.write("file_300.rb", "late arrival")
 
       connect(ends, shared_tree) do |session, _, counting|
         cycle!(session, tick)
 
-        File.read(File.join(ends.local, "file_300.rb")).should eq("late arrival")
+        ends.local.read("file_300.rb").should eq("late arrival")
         counting.read_bytes.should be < 2048
       end
     end
@@ -112,7 +104,7 @@ describe "resuming from a persisted remote tree" do
 
   it "falls back to the whole tree when the fingerprints differ" do
     with_roots do |ends|
-      300.times { |index| File.write(File.join(ends.remote, "file_#{index}.rb"), "body #{index}") }
+      300.times { |index| ends.remote.write("file_#{index}.rb", "body #{index}") }
 
       connect(ends, nil) do |session, _, _|
         cycle!(session, tick)
@@ -124,7 +116,7 @@ describe "resuming from a persisted remote tree" do
       connect(ends, stale) do |session, _, counting|
         cycle!(session, tick)
 
-        Dir.children(ends.local).size.should eq(300)
+        ends.local.children.size.should eq(300)
         counting.read_bytes.should be > 8192
       end
     end

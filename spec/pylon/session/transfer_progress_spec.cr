@@ -1,7 +1,5 @@
 require "../../spec_helper"
 
-require "file_utils"
-
 private alias LocalEndpoint = Pylon::Session::LocalEndpoint
 private alias TransferProgress = Pylon::Session::TransferProgress
 
@@ -21,27 +19,22 @@ private def in_progress_pair(
   file_count : Int32,
   & : Array(TransferProgress), Pylon::Session::Session(LocalEndpoint, LocalEndpoint, Recorder) ->
 ) : Nil
-  base = File.join(Dir.tempdir, "pylon-progress-#{Random::Secure.hex(8)}")
-  local_root = File.join(base, "local")
-  remote_root = File.join(base, "remote")
-  Dir.mkdir_p(local_root)
-  Dir.mkdir_p(remote_root)
+  Sandbox.open do |sandbox|
+    local_root = sandbox.directory("local")
+    remote_root = sandbox.directory("remote")
 
-  file_count.times do |index|
-    File.write(File.join(local_root, "file_#{index}.rb"), "body #{index}")
-  end
+    file_count.times do |index|
+      local_root.write("file_#{index}.rb", "body #{index}")
+    end
 
-  recorder = Recorder.new
-  session = build_session(
-    local_endpoint(local_root),
-    local_endpoint(remote_root),
-    narrator: recorder,
-  )
+    recorder = Recorder.new
+    session = build_session(
+      local_endpoint(local_root),
+      local_endpoint(remote_root),
+      narrator: recorder,
+    )
 
-  begin
     yield recorder.updates, session
-  ensure
-    FileUtils.rm_rf(base)
   end
 end
 

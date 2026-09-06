@@ -1,29 +1,25 @@
 require "../../spec_helper"
 
 require "digest/sha256"
-require "file_utils"
 
 private FILES = 400
 
-private def in_tree(& : String ->) : Nil
-  root = File.join(Dir.tempdir, "pylon-hash-#{Random::Secure.hex(8)}")
-  Dir.mkdir_p(File.join(root, "nested"))
+private def in_tree(& : Sandbox ->) : Nil
+  Sandbox.open do |root|
+    nested = root.directory("nested")
 
-  FILES.times do |index|
-    directory = index.even? ? root : File.join(root, "nested")
-    File.write(File.join(directory, "file_#{index}.txt"), "content #{index}\n" * (index % 7 + 1))
-  end
+    FILES.times do |index|
+      directory = index.even? ? root : nested
+      directory.write("file_#{index}.txt", "content #{index}\n" * (index % 7 + 1))
+    end
 
-  begin
     yield root
-  ensure
-    FileUtils.rm_rf(root)
   end
 end
 
-private def digests(root : String, parallelism : Int32) : Hash(String, String)
+private def digests(root : Sandbox, parallelism : Int32) : Hash(String, String)
   snapshot = Pylon::Scan::Scanner.new(
-    Pylon::Disk.new(root),
+    Pylon::Disk.new(root.root),
     Pylon::Scan::Cache.new,
     Time.utc.to_unix_ns.to_i64,
     Pylon::Scan::Ignores::NONE,
@@ -46,7 +42,7 @@ describe "parallel hashing" do
       computed.size.should eq(FILES)
 
       computed.each do |path, hex|
-        Digest::SHA256.digest(File.read(File.join(root, path)).to_slice).hexstring.should eq(hex)
+        Digest::SHA256.digest(root.read(path).to_slice).hexstring.should eq(hex)
       end
     end
   end

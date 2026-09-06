@@ -1,6 +1,5 @@
 require "../../spec_helper"
 
-require "file_utils"
 require "socket"
 require "../../support/remote_end"
 
@@ -12,32 +11,30 @@ end
 
 describe "server scans" do
   it "does not hold onto file descriptors across cycles" do
-    base = File.join(Dir.tempdir, "pylon-descriptors-#{Random::Secure.hex(8)}")
-    local_root = File.join(base, "local")
-    remote_root = File.join(base, "remote")
-    Dir.mkdir_p(local_root)
-    Dir.mkdir_p(remote_root)
-    File.write(File.join(remote_root, "thing.rb"), "puts 1")
+    Sandbox.open do |sandbox|
+      local_root = sandbox.directory("local")
+      remote_root = sandbox.directory("remote")
+      remote_root.write("thing.rb", "puts 1")
 
-    client, socket = UNIXSocket.pair
-    serve_remote_end(socket)
+      client, socket = UNIXSocket.pair
+      serve_remote_end(socket)
 
-    begin
-      remote = RemoteEndpoint.new(client, client, remote_configuration(remote_root), resume: nil)
-      session = build_session(local_endpoint(local_root), remote)
+      begin
+        remote = RemoteEndpoint.new(client, client, remote_configuration(remote_root), resume: nil)
+        session = build_session(local_endpoint(local_root), remote)
 
-      cycle!(session, tick)
+        cycle!(session, tick)
 
-      assert_descriptor_change(0) do
-        30.times do |round|
-          File.write(File.join(remote_root, "thing.rb"), "puts #{round}")
-          cycle!(session, tick)
+        assert_descriptor_change(0) do
+          30.times do |round|
+            remote_root.write("thing.rb", "puts #{round}")
+            cycle!(session, tick)
+          end
         end
+      ensure
+        client.close
+        socket.close
       end
-    ensure
-      client.close
-      socket.close
-      FileUtils.rm_rf(base)
     end
   end
 end

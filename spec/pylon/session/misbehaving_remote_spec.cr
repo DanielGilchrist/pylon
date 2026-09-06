@@ -1,6 +1,5 @@
 require "../../spec_helper"
 
-require "file_utils"
 require "../../support/remote_end"
 
 private alias Fault = Pylon::Session::Fault
@@ -17,10 +16,7 @@ private def scripted_server(& : IO ->) : IO::Memory
 end
 
 private def cycle_against(script : IO::Memory, watch : Bool = false) : Report | Fault
-  root = File.join(Dir.tempdir, "pylon-misbehaving-#{Random::Secure.hex(8)}")
-  Dir.mkdir_p(root)
-
-  begin
+  Sandbox.open do |root|
     session = build_session(
       local_endpoint(root),
       Pylon::Session::RemoteEndpoint.new(
@@ -31,8 +27,6 @@ private def cycle_against(script : IO::Memory, watch : Bool = false) : Report | 
       ),
     )
     session.cycle(Time.utc.to_unix_ns.to_i64)
-  ensure
-    FileUtils.rm_rf(root)
   end
 end
 

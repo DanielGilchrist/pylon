@@ -2,8 +2,6 @@ require "../../spec_helper"
 
 Pylon::Platform.skip_file_unless :linux
 
-require "file_utils"
-
 private DEFAULT = Pylon::Brand::DEFAULT
 private alias DirtyPaths = Pylon::Watch::DirtyPaths
 private alias Inotify = Pylon::Watch::Inotify
@@ -33,120 +31,115 @@ end
 
 describe Inotify do
   it "reports touched paths, nested creations and respects ignores" do
-    root = File.tempname("pylon-inotify")
-    Dir.mkdir_p(File.join(root, "log"))
+    Sandbox.open do |root|
+      root.directory("log")
 
-    dirty_paths = DirtyPaths.new(Channel(Nil).new(1))
-    watcher = Inotify.open(root, ["log"], dirty_paths, brand: DEFAULT)
-    watcher.should be_a(Inotify)
-    next unless watcher.is_a?(Inotify)
+      dirty_paths = DirtyPaths.new(Channel(Nil).new(1))
+      watcher = Inotify.open(root.root, ["log"], dirty_paths, brand: DEFAULT)
+      watcher.should be_a(Inotify)
+      next unless watcher.is_a?(Inotify)
 
-    begin
-      File.write(File.join(root, "code.rb"), "puts 1")
+      begin
+        root.write("code.rb", "puts 1")
 
-      seen = collect_until(watcher, &.includes?("code.rb"))
-      seen.includes?("code.rb").should be_true
+        seen = collect_until(watcher, &.includes?("code.rb"))
+        seen.includes?("code.rb").should be_true
 
-      Dir.mkdir_p(File.join(root, "nested", "deeper"))
-      File.write(File.join(root, "nested", "deeper", "inner.rb"), "puts 2")
+        root.write("nested/deeper/inner.rb", "puts 2")
 
-      seen = collect_until(watcher, &.includes?("nested/deeper/inner.rb"))
-      seen.includes?("nested/deeper/inner.rb").should be_true
+        seen = collect_until(watcher, &.includes?("nested/deeper/inner.rb"))
+        seen.includes?("nested/deeper/inner.rb").should be_true
 
-      File.write(File.join(root, "log", "noise.log"), "ignored")
-      File.write(File.join(root, "sentinel.rb"), "puts 3")
+        root.write("log/noise.log", "ignored")
+        root.write("sentinel.rb", "puts 3")
 
-      seen = collect_until(watcher, &.includes?("sentinel.rb"))
-      seen.includes?("sentinel.rb").should be_true
-      seen.none?(&.starts_with?("log")).should be_true
-    ensure
-      watcher.close
-      FileUtils.rm_rf(root)
+        seen = collect_until(watcher, &.includes?("sentinel.rb"))
+        seen.includes?("sentinel.rb").should be_true
+        seen.none?(&.starts_with?("log")).should be_true
+      ensure
+        watcher.close
+      end
     end
   end
 
   it "notices modification and deletion of a watched file" do
-    root = File.tempname("pylon-inotify-edit")
-    Dir.mkdir_p(root)
-    File.write(File.join(root, "kept.rb"), "before")
+    Sandbox.open do |root|
+      root.write("kept.rb", "before")
 
-    watcher = Inotify.open(
-      root,
-      Array(String).new,
-      DirtyPaths.new(Channel(Nil).new(1)),
-      brand: DEFAULT,
-    )
-    watcher.should be_a(Inotify)
-    next unless watcher.is_a?(Inotify)
+      watcher = Inotify.open(
+        root.root,
+        Array(String).new,
+        DirtyPaths.new(Channel(Nil).new(1)),
+        brand: DEFAULT,
+      )
+      watcher.should be_a(Inotify)
+      next unless watcher.is_a?(Inotify)
 
-    begin
-      File.write(File.join(root, "kept.rb"), "after")
+      begin
+        root.write("kept.rb", "after")
 
-      collect_until(watcher, &.includes?("kept.rb")).includes?("kept.rb").should be_true
+        collect_until(watcher, &.includes?("kept.rb")).includes?("kept.rb").should be_true
 
-      File.delete(File.join(root, "kept.rb"))
+        root.remove("kept.rb")
 
-      collect_until(watcher, &.includes?("kept.rb")).includes?("kept.rb").should be_true
-    ensure
-      watcher.close
-      FileUtils.rm_rf(root)
+        collect_until(watcher, &.includes?("kept.rb")).includes?("kept.rb").should be_true
+      ensure
+        watcher.close
+      end
     end
   end
 
   it "reports the files inside a directory moved into the root" do
-    root = File.tempname("pylon-inotify-move")
-    staging = File.tempname("pylon-inotify-staging")
-    Dir.mkdir_p(root)
-    Dir.mkdir_p(File.join(staging, "incoming", "sub"))
-    File.write(File.join(staging, "incoming", "top.rb"), "puts 1")
-    File.write(File.join(staging, "incoming", "sub", "inner.rb"), "puts 2")
+    Sandbox.open do |sandbox|
+      root = sandbox.directory("root")
+      staging = sandbox.directory("staging")
+      staging.write("incoming/top.rb", "puts 1")
+      staging.write("incoming/sub/inner.rb", "puts 2")
 
-    watcher = Inotify.open(
-      root,
-      Array(String).new,
-      DirtyPaths.new(Channel(Nil).new(1)),
-      brand: DEFAULT,
-    )
-    watcher.should be_a(Inotify)
-    next unless watcher.is_a?(Inotify)
+      watcher = Inotify.open(
+        root.root,
+        Array(String).new,
+        DirtyPaths.new(Channel(Nil).new(1)),
+        brand: DEFAULT,
+      )
+      watcher.should be_a(Inotify)
+      next unless watcher.is_a?(Inotify)
 
-    begin
-      File.rename(File.join(staging, "incoming"), File.join(root, "incoming"))
+      begin
+        File.rename(staging.path("incoming"), root.path("incoming"))
 
-      seen = collect_until(watcher, &.includes?("incoming/sub/inner.rb"))
-      seen.includes?("incoming/sub/inner.rb").should be_true
-      seen.includes?("incoming/top.rb").should be_true
-    ensure
-      watcher.close
-      FileUtils.rm_rf(root)
-      FileUtils.rm_rf(staging)
+        seen = collect_until(watcher, &.includes?("incoming/sub/inner.rb"))
+        seen.includes?("incoming/sub/inner.rb").should be_true
+        seen.includes?("incoming/top.rb").should be_true
+      ensure
+        watcher.close
+      end
     end
   end
 
   it "keeps watching a directory created after the watcher started" do
-    root = File.tempname("pylon-inotify-late")
-    Dir.mkdir_p(root)
+    Sandbox.open do |root|
+      watcher = Inotify.open(
+        root.root,
+        Array(String).new,
+        DirtyPaths.new(Channel(Nil).new(1)),
+        brand: DEFAULT,
+      )
+      watcher.should be_a(Inotify)
+      next unless watcher.is_a?(Inotify)
 
-    watcher = Inotify.open(
-      root,
-      Array(String).new,
-      DirtyPaths.new(Channel(Nil).new(1)),
-      brand: DEFAULT,
-    )
-    watcher.should be_a(Inotify)
-    next unless watcher.is_a?(Inotify)
+      begin
+        root.directory("fresh")
 
-    begin
-      Dir.mkdir(File.join(root, "fresh"))
+        collect_until(watcher, &.includes?("fresh")).includes?("fresh").should be_true
 
-      collect_until(watcher, &.includes?("fresh")).includes?("fresh").should be_true
+        root.write("fresh/born.rb", "puts 1")
 
-      File.write(File.join(root, "fresh", "born.rb"), "puts 1")
-
-      collect_until(watcher, &.includes?("fresh/born.rb")).includes?("fresh/born.rb").should be_true
-    ensure
-      watcher.close
-      FileUtils.rm_rf(root)
+        seen = collect_until(watcher, &.includes?("fresh/born.rb"))
+        seen.includes?("fresh/born.rb").should be_true
+      ensure
+        watcher.close
+      end
     end
   end
 end

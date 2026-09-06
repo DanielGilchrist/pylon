@@ -1,21 +1,12 @@
 require "../../spec_helper"
 
-require "file_utils"
-
 private alias Cache = Pylon::Scan::Cache
 private alias Checkpoint = Pylon::Session::Checkpoint
 private alias Directory = Pylon::Core::Directory
 private alias Problem = Pylon::Problem
 
 private def in_sandbox(& : String ->) : Nil
-  root = File.join(Dir.tempdir, "pylon-store-#{Random::Secure.hex(8)}")
-  Dir.mkdir_p(root)
-
-  begin
-    yield File.join(root, "state")
-  ensure
-    FileUtils.rm_rf(root)
-  end
+  Sandbox.open { |root| yield root.path("state") }
 end
 
 private def sample_cache : Cache

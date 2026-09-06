@@ -1,7 +1,5 @@
 require "../../spec_helper"
 
-require "file_utils"
-
 private alias Bases = Pylon::Wire::Bases
 private alias Change = Pylon::Core::Change
 private alias Changes = Pylon::Core::Changes
@@ -13,24 +11,19 @@ private alias Touched = Pylon::Watch::Touched
 
 private def in_endpoint(
   files : Hash(String, String),
-  & : LocalEndpoint, Hash(String, Bytes) ->
+  & : LocalEndpoint, Hash(String, Bytes), Sandbox ->
 ) : Nil
-  root = File.join(Dir.tempdir, "pylon-endpoint-#{Random::Secure.hex(8)}")
-  Dir.mkdir_p(root)
+  Sandbox.open do |root|
+    digests = Hash(String, Bytes).new
+    files.each do |name, content|
+      root.write(name, content)
+      digests[name] = Digest::SHA256.digest(content).to_slice
+    end
 
-  digests = Hash(String, Bytes).new
-  files.each do |name, content|
-    File.write(File.join(root, name), content)
-    digests[name] = Digest::SHA256.digest(content).to_slice
-  end
+    endpoint = local_endpoint(root)
+    endpoint.scan(Time.utc.to_unix_ns.to_i64)
 
-  endpoint = local_endpoint(root)
-  endpoint.scan(Time.utc.to_unix_ns.to_i64)
-
-  begin
-    yield endpoint, digests
-  ensure
-    FileUtils.rm_rf(root)
+    yield endpoint, digests, root
   end
 end
 
@@ -38,8 +31,8 @@ private SHARED = "x" * 2048
 
 describe "resolving a patch base" do
   it "reads the base from the file being patched when another holder of the digest has changed" do
-    in_endpoint({"a.bin" => SHARED, "b.bin" => SHARED}) do |endpoint, digests|
-      File.write(File.join(endpoint.root, "a.bin"), "rewritten already")
+    in_endpoint({"a.bin" => SHARED, "b.bin" => SHARED}) do |endpoint, digests, root|
+      root.write("a.bin", "rewritten already")
 
       content = endpoint.content(digests["b.bin"], prefer: "b.bin") || Bytes.empty
       String.new(content).should eq(SHARED)
@@ -47,8 +40,8 @@ describe "resolving a patch base" do
   end
 
   it "reads the base from the file being patched whichever holder the digest index chose" do
-    in_endpoint({"a.bin" => SHARED, "b.bin" => SHARED}) do |endpoint, digests|
-      File.write(File.join(endpoint.root, "b.bin"), "rewritten already")
+    in_endpoint({"a.bin" => SHARED, "b.bin" => SHARED}) do |endpoint, digests, root|
+      root.write("b.bin", "rewritten already")
 
       content = endpoint.content(digests["a.bin"], prefer: "a.bin") || Bytes.empty
       String.new(content).should eq(SHARED)
@@ -112,7 +105,7 @@ describe LocalEndpoint do
   end
 
   it "writes a file from its own disk when the content arrived without bytes" do
-    in_endpoint({"a.rb" => "shared body"}) do |endpoint, digests|
+    in_endpoint({"a.rb" => "shared body"}) do |endpoint, digests, root|
       changes = Changes[Change.new(
         "copy.rb",
         nil,
@@ -126,7 +119,7 @@ describe LocalEndpoint do
 
       outcomes.size.should eq(1)
       outcomes[0].applied?.should be_true
-      File.read(File.join(endpoint.root, "copy.rb")).should eq("shared body")
+      root.read("copy.rb").should eq("shared body")
     end
   end
 
@@ -153,8 +146,8 @@ describe LocalEndpoint do
   end
 
   it "refuses recovered content whose bytes no longer match the digest" do
-    in_endpoint({"a.rb" => "original"}) do |endpoint, digests|
-      File.write(File.join(endpoint.root, "a.rb"), "mutated")
+    in_endpoint({"a.rb" => "original"}) do |endpoint, digests, root|
+      root.write("a.rb", "mutated")
       changes = Changes[Change.new(
         "copy.rb",
         nil,
@@ -168,14 +161,14 @@ describe LocalEndpoint do
 
       outcomes.size.should eq(1)
       outcomes[0].applied?.should be_false
-      File.exists?(File.join(endpoint.root, "copy.rb")).should be_false
+      root.exists?("copy.rb").should be_false
     end
   end
 end
 
 describe "watched scanning" do
   it "keeps the tree from the first scan after dirty paths are reported and rechecks only them" do
-    in_endpoint({"a.rb" => "a", "b.rb" => "b", "c.rb" => "c"}) do |endpoint, _|
+    in_endpoint({"a.rb" => "a", "b.rb" => "b", "c.rb" => "c"}) do |endpoint, _, root|
       endpoint.scanned.files.should eq(3)
 
       endpoint.scan(Time.utc.to_unix_ns.to_i64)
@@ -186,7 +179,7 @@ describe "watched scanning" do
       endpoint.scanned.files.should eq(3)
 
       endpoint.mark_dirty(Touched.new(["b.rb"])).should eq(1)
-      File.write(File.join(endpoint.root, "b.rb"), "changed")
+      root.write("b.rb", "changed")
       tree = endpoint.scan(Time.utc.to_unix_ns.to_i64)
       endpoint.scanned.files.should eq(1)
       changed = Fixtures.directory!(tree).contents["b.rb"]?

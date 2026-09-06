@@ -1,6 +1,5 @@
 require "../../spec_helper"
 
-require "file_utils"
 require "socket"
 require "../../support/remote_end"
 
@@ -20,14 +19,9 @@ private def scripted_server(& : IO ->) : IO::Memory
 end
 
 private def cycle_against(script : IO::Memory) : {Report | Fault, RemoteEndpoint}
-  root = File.join(Dir.tempdir, "pylon-inbound-#{Random::Secure.hex(8)}")
-  Dir.mkdir_p(root)
-
-  begin
+  Sandbox.open do |root|
     endpoint = RemoteEndpoint.new(script, IO::Memory.new, remote_configuration(root), resume: nil)
     {build_session(local_endpoint(root), endpoint).cycle(Time.utc.to_unix_ns.to_i64), endpoint}
-  ensure
-    FileUtils.rm_rf(root)
   end
 end
 
@@ -71,34 +65,32 @@ describe "what the client learns while waiting for the remote tree" do
   end
 
   it "hears the real server announce its tree before sending it" do
-    base = File.join(Dir.tempdir, "pylon-announce-#{Random::Secure.hex(8)}")
-    local = File.join(base, "local")
-    remote = File.join(base, "remote")
-    Dir.mkdir_p(local)
-    Dir.mkdir_p(remote)
-    File.write(File.join(remote, "pushed.rb"), "from the box")
+    Sandbox.open do |sandbox|
+      local = sandbox.directory("local")
+      remote = sandbox.directory("remote")
+      remote.write("pushed.rb", "from the box")
 
-    client, socket = UNIXSocket.pair
-    serve_remote_end(socket)
+      client, socket = UNIXSocket.pair
+      serve_remote_end(socket)
 
-    begin
-      endpoint = RemoteEndpoint.new(
-        client,
-        client,
-        remote_configuration(remote, watch: true),
-        resume: nil,
-      )
-      cycle!(build_session(local_endpoint(local), endpoint), Time.utc.to_unix_ns.to_i64)
+      begin
+        endpoint = RemoteEndpoint.new(
+          client,
+          client,
+          remote_configuration(remote, watch: true),
+          resume: nil,
+        )
+        cycle!(build_session(local_endpoint(local), endpoint), Time.utc.to_unix_ns.to_i64)
 
-      phase = endpoint.inbound.phase
-      phase.should be_a(ReceivingTree)
-      if phase.is_a?(ReceivingTree)
-        endpoint.inbound.received(phase).should eq(phase.expected)
+        phase = endpoint.inbound.phase
+        phase.should be_a(ReceivingTree)
+        if phase.is_a?(ReceivingTree)
+          endpoint.inbound.received(phase).should eq(phase.expected)
+        end
+      ensure
+        client.close
+        socket.close
       end
-    ensure
-      client.close
-      socket.close
-      FileUtils.rm_rf(base)
     end
   end
 end
