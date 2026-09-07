@@ -139,6 +139,16 @@ describe Splice do
     Splice.apply(base, ops.to_slice).should be_nil
   end
 
+  it "reconstructs an edit to a base whose blocks all repeat" do
+    block = Bytes.new(512) { |offset| (offset % 251).to_u8 }
+    base = Bytes.new(block.size * 40) { |offset| block[offset % block.size] }
+    edited = Bytes.new(base.size + 5)
+    base.copy_to(edited)
+    "pylon".to_slice.copy_to(edited + base.size)
+
+    roundtrip(base, edited).should eq(edited)
+  end
+
   it "reconstructs identical content as one copy run" do
     base = source_like(100_000, 11_u64)
 

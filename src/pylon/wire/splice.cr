@@ -4,6 +4,7 @@ module Pylon::Wire
   module Splice
     extend self
 
+    LONGEST_WALK    = 1024
     MINIMUM_CONTENT = 1024
     LARGEST_FILE    = 64_u64 * 1024 * 1024
     SMALLEST_FILE   = 8_u64 * 1024
@@ -37,7 +38,7 @@ module Pylon::Wire
       block_size = checksums.block_size
       return if block_size <= 0
 
-      index = Index.of(checksums)
+      index = Index.of(checksums, LONGEST_WALK)
       encoder = Encoder.new
       hasher = Digest::SHA256.new
       sum = Bytes.new(DIGEST_BYTES)
