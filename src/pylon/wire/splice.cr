@@ -37,7 +37,7 @@ module Pylon::Wire
       block_size = checksums.block_size
       return if block_size <= 0
 
-      candidates = index(checksums)
+      index = Index.of(checksums)
       encoder = Encoder.new
       hasher = Digest::SHA256.new
       sum = Bytes.new(DIGEST_BYTES)
@@ -47,7 +47,7 @@ module Pylon::Wire
       matched = 0_i64
 
       while position + block_size <= content.size
-        found = match(content, position, block_size, rolled, candidates, checksums, hasher, sum)
+        found = match(content, position, block_size, rolled, index, checksums, hasher, sum)
 
         if found
           encoder.insert(content[literal_start, position - literal_start])
@@ -123,43 +123,35 @@ module Pylon::Wire
       rebuilt.to_slice
     end
 
-    private def index(checksums : Checksums) : Hash(UInt32, Array(Int32))
-      full_blocks = checksums.full_block_count
-      candidates = Hash(UInt32, Array(Int32)).new(initial_capacity: full_blocks)
-
-      checksums.blocks.each_with_index do |block, position|
-        break if position >= full_blocks
-
-        (candidates[block.weak] ||= Array(Int32).new) << position
-      end
-
-      candidates
-    end
-
     private def match(
       content : Bytes,
       position : Int32,
       block_size : Int32,
       rolled : UInt32,
-      candidates : Hash(UInt32, Array(Int32)),
+      index : Index,
       checksums : Checksums,
       hasher : Digest::SHA256,
       sum : Bytes,
     ) : Int64?
-      indices = candidates[rolled]?
-      return if indices.nil?
+      found = nil
+      strong = nil
 
-      window = content[position, block_size]
-      hasher.reset
-      hasher.update(window)
-      hasher.final(sum)
-      strong = sum[0, Checksums::STRONG_BYTES]
+      index.each_candidate(rolled) do |candidate|
+        if strong.nil?
+          window = content[position, block_size]
+          hasher.reset
+          hasher.update(window)
+          hasher.final(sum)
+          strong = sum[0, Checksums::STRONG_BYTES]
+        end
 
-      indices.each do |index|
-        return index.to_i64 * block_size if checksums.blocks[index].strong == strong
+        if checksums.blocks[candidate].strong == strong
+          found = candidate.to_i64 * block_size
+          break
+        end
       end
 
-      nil
+      found
     end
 
     private def short_match(
