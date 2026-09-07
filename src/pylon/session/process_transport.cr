@@ -18,13 +18,19 @@ module Pylon::Session
         errors = process.error
 
         Fibers.detach(:stderr_relay) do
-          while (line = errors.gets)
+          while (line = next_line(errors))
             relay.call(line)
           end
         end
 
         new(process)
       end
+    end
+
+    def self.next_line(errors : IO) : String?
+      errors.gets
+    rescue IO::Error
+      nil
     end
 
     private def self.start(

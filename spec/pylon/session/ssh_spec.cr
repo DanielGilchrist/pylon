@@ -71,6 +71,18 @@ describe ProcessTransport do
     transport.close.success?.should be_true
   end
 
+  it "ends the error relay when the child's stream closes under it" do
+    reader, writer = IO.pipe
+    writer.puts("one")
+
+    ProcessTransport.next_line(reader).should eq("one")
+
+    reader.close
+    ProcessTransport.next_line(reader).should be_nil
+
+    writer.close
+  end
+
   it "reports a command that cannot be started instead of raising" do
     opened = ProcessTransport.open("pylon-no-such-binary", Array(String).new) { }
 
