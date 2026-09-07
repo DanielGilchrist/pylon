@@ -239,6 +239,9 @@ module Pylon::Session
       @written.close
       @greeting.close
       @initial.close
+
+      # The client would otherwise sit like nothing has happened until a trigger happens on its end
+      signal
     end
 
     private def signal : Nil
