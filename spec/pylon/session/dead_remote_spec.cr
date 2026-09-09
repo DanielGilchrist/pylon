@@ -61,7 +61,7 @@ describe "a remote that is not there" do
         socket.close
 
         await(faults, for: "the run to stop because the remote did")
-          .should be_a(Pylon::Session::Stopped)
+          .should be_a(Pylon::Session::Disconnected)
       ensure
         runner.stop
         client.close

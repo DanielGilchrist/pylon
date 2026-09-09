@@ -4,6 +4,8 @@ module Pylon::Session
     DEFAULT_POLL         = 250.milliseconds
     DEFAULT_BURST_QUIET  = 300.milliseconds
     DEFAULT_SETTLE_LIMIT = 10.seconds
+    DEFAULT_HEARTBEAT    = 30.seconds
+    DEFAULT_DEADLINE     = 60.seconds
     BURST_PATHS          = 8
 
     def initialize(
@@ -13,6 +15,8 @@ module Pylon::Session
       @poll : Time::Span = DEFAULT_POLL,
       @burst_quiet : Time::Span = DEFAULT_BURST_QUIET,
       @settle_limit : Time::Span = DEFAULT_SETTLE_LIMIT,
+      @heartbeat : Time::Span = DEFAULT_HEARTBEAT,
+      @deadline : Time::Span = DEFAULT_DEADLINE,
     ) : Nil
       @stopping = false
     end
@@ -29,7 +33,12 @@ module Pylon::Session
       block.call(report, Time.instant - started)
 
       until @stopping
-        next unless wait_for_work
+        unless wait_for_work
+          fault = @session.heartbeat(Time.instant, after: @heartbeat, deadline: @deadline)
+          return fault if fault
+
+          next
+        end
 
         {% if flag?(:timing) %}
           woke = Time.instant

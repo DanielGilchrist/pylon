@@ -22,7 +22,9 @@ module Pylon::Wire
                 ScanProgress |
                 TreeAnnounce |
                 ReusableRequest |
-                ReusableResponse
+                ReusableResponse |
+                HeartbeatRequest |
+                HeartbeatResponse
 
     def write(io : IO, message : Any) : Problem?
       message.write(io)
@@ -70,6 +72,8 @@ module Pylon::Wire
       in .tree_announce?      then TreeAnnounce.new(reader.u32)
       in .reusable_request?   then ReusableRequest.new(Binary.read_digests(reader))
       in .reusable_response?  then ReusableResponse.new(Binary.read_digests(reader))
+      in .heartbeat_request?  then HeartbeatRequest.new
+      in .heartbeat_response? then HeartbeatResponse.new
       end
     end
 

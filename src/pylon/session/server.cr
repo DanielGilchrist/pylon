@@ -31,7 +31,9 @@ module Pylon::Session
          Wire::Message::ScanProgress,
          Wire::Message::TreeAnnounce,
          Wire::Message::ReusableRequest,
-         Wire::Message::ReusableResponse
+         Wire::Message::ReusableResponse,
+         Wire::Message::HeartbeatRequest,
+         Wire::Message::HeartbeatResponse
         refusal = "the first message must configure this side, not a #{message.class.name}"
         Wire::Message.write(output, Wire::Message::Failure.new(refusal))
         Problem.new(refusal)
@@ -335,6 +337,10 @@ module Pylon::Session
             checkpoint { |schedule, checkpoint| schedule.save_if_due(checkpoint) } if failed.nil?
             failed
           end
+        in Wire::Message::HeartbeatRequest
+          @lock.synchronize do
+            Wire::Message.write(@output, Wire::Message::HeartbeatResponse.new)
+          end
         in Wire::Message::Failure,
            Wire::Message::ScanResponse,
            Wire::Message::TreeUpdate,
@@ -345,7 +351,8 @@ module Pylon::Session
            Wire::Message::Configure,
            Wire::Message::ScanProgress,
            Wire::Message::TreeAnnounce,
-           Wire::Message::ReusableResponse
+           Wire::Message::ReusableResponse,
+           Wire::Message::HeartbeatResponse
           @lock.synchronize do
             failure = Wire::Message::Failure.new(
               "the client sent a #{request.class.name} where a request was expected",

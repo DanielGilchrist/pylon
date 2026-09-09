@@ -210,6 +210,8 @@ struct Pylon::CLI
           reporter,
           "#{fault.explain}. Check that #{remote_binary.inspect} exists on #{target.host}",
         )
+      in Session::Disconnected
+        fail_with(reporter, "#{fault.explain}. Start the sync again once #{target.host} is back")
       in Session::Incompatible, Session::Misbehaved
         fail_with(reporter, fault.explain)
       end

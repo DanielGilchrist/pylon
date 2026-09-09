@@ -63,7 +63,7 @@ describe "a remote that misbehaves" do
 
     fault = cycle_against(script, watch: true)
 
-    fault.should be_a(Pylon::Session::Stopped)
+    fault.should be_a(Pylon::Session::Disconnected)
   end
 
   it "stops when the server sends a message only clients send" do

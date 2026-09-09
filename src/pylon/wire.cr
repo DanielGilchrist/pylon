@@ -1,5 +1,5 @@
 module Pylon::Wire
-  PROTOCOL = 10_u32
+  PROTOCOL = 11_u32
   IDENTITY = "PYLON"
 
   FORMAT            = IO::ByteFormat::LittleEndian

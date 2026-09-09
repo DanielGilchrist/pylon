@@ -24,6 +24,8 @@ module Pylon::Session
       @initial = Channel(Nil).new
       @live = false
       @sequence = 0_u32
+      @last_heard = Time.instant
+      @probed = nil
 
       Fibers.detach(:endpoint_listen) { listen }
     end
@@ -104,8 +106,26 @@ module Pylon::Session
       @tree
     end
 
+    def heartbeat(now : Time::Instant, *, after : Time::Span, deadline : Time::Span) : Fault?
+      if (fault = @fault)
+        return fault
+      end
+
+      if (probed = @probed)
+        return if now - probed < deadline
+
+        stop_with(Disconnected.new)
+        return @fault
+      end
+
+      return if now - @last_heard < after
+
+      @probed = now
+      transmit(Wire::Message::HeartbeatRequest.new)
+    end
+
     protected def receive(channel : Channel(T)) : T | Fault forall T
-      channel.receive? || @fault || Stopped.new
+      channel.receive? || @fault || Disconnected.new
     end
 
     private def initial_tree : Core::Entry? | Fault
@@ -146,12 +166,15 @@ module Pylon::Session
       end
 
       loop do
-        case (message = Wire::Message.read(@input))
+        message = Wire::Message.read(@input)
+        @last_heard = Time.instant
+
+        case message
         in Wire::Closed
-          stop_with(Stopped.new)
+          stop_with(Disconnected.new)
           return
         in Problem
-          stop_with(Stopped.new(message.reason))
+          stop_with(Disconnected.new(message.reason))
           return
         in Wire::Message::TreeUpdate
           @unapplied.clear
@@ -178,6 +201,8 @@ module Pylon::Session
             @unapplied << Core::Change.new(outcome.path, nil, outcome.entry)
           end
           return unless deliver(@written, message)
+        in Wire::Message::HeartbeatResponse
+          @probed = nil
         in Wire::Message::ScanProgress
           @inbound.scanning(message.files, message.bytes)
         in Wire::Message::TreeAnnounce
@@ -190,6 +215,7 @@ module Pylon::Session
            Wire::Message::ChecksumsRequest,
            Wire::Message::WriteRequest,
            Wire::Message::ReusableRequest,
+           Wire::Message::HeartbeatRequest,
            Wire::Message::Configure
           stop_with(
             Misbehaved.new("the server sent a #{message.class.name}, which only clients send"),
@@ -272,7 +298,7 @@ module Pylon::Session
       @exchanges += 1
 
       if (problem = Wire::Message.write(@output, request))
-        return (@fault ||= Stopped.new(problem.reason))
+        return (@fault ||= Disconnected.new(problem.reason))
       end
 
       nil

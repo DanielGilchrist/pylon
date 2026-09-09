@@ -16,5 +16,7 @@ module Pylon::Wire::Message
     TreeAnnounce
     ReusableRequest
     ReusableResponse
+    HeartbeatRequest
+    HeartbeatResponse
   end
 end

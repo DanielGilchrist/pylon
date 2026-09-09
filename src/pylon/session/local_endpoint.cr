@@ -69,6 +69,9 @@ module Pylon::Session
       false
     end
 
+    def heartbeat(now : Time::Instant, *, after : Time::Span, deadline : Time::Span) : Fault?
+    end
+
     def request_checksums(bases : Wire::Bases) : Settled(Wire::Checksums::Map)
       Settled.new(checksums(bases))
     end

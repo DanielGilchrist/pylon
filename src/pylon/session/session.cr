@@ -37,6 +37,10 @@ module Pylon::Session
     getter base : Core::Entry?
     getter local : A
 
+    def heartbeat(now : Time::Instant, *, after : Time::Span, deadline : Time::Span) : Fault?
+      @remote.heartbeat(now, after: after, deadline: deadline)
+    end
+
     def cycle(now_ns : Int64) : Report | Fault
       {% if flag?(:timing) %}
         started = Time.instant
