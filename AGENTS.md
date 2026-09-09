@@ -14,8 +14,13 @@ bin/ameba                                           # lint, config lives in .ame
 crystal spec lint/spec                              # specs for the custom ameba rules
 crystal build --no-codegen bench/<file>.cr          # bench/ is NOT compiled by crystal spec, check after renames
 crystal build --release -o bin/pylon src/pylon.cr   # mac binary
-./build-linux.sh                                    # static linux binaries, needs docker
+./build-linux.sh [amd64|arm64]                      # static linux binaries, needs docker
+script/build-macos [output]                         # a mac binary for release, no brew dylibs
+script/release <version>                            # bump shard.yml, commit, tag
 ```
+
+Releases and versioning live in [RELEASING.md](RELEASING.md). `shard.yml` is the
+only place the version is written, `Pylon::VERSION` reads it at compile time.
 
 Run the specs, the end-to-end script, the formatter and ameba before considering a change done. The end-to-end script catches client/server mismatches that in-process specs cannot, because the server is a separate process. Ameba must finish with zero failures, NEVER disable lint rules, if a rule genuinely conflicts with the principles below, raise it rather than silencing it yourself.
 

@@ -1,0 +1,92 @@
+name: Release
+
+# Pushing a v<version> tag publishes a release with a binary per platform.
+# `script/release <version>` makes the commit and the tag.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  version:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: The tag and shard.yml must agree
+        run: |
+          tagged=${GITHUB_REF_NAME#v}
+          declared=$(sed -n 's/^version: *//p' shard.yml)
+
+          if [ "$tagged" != "$declared" ]; then
+            echo "tag $GITHUB_REF_NAME does not match shard.yml version $declared"
+            exit 1
+          fi
+
+  linux:
+    needs: version
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-latest
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - run: ./build-linux.sh ${{ matrix.arch }}
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pylon-linux-${{ matrix.arch }}
+          path: dist/pylon-linux-${{ matrix.arch }}
+          if-no-files-found: error
+
+  macos:
+    needs: version
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - run: brew install zstd pcre2 bdw-gc openssl@3
+
+      - uses: crystal-lang/install-crystal@v1
+        with:
+          crystal: 1.21.0
+
+      - run: shards install --production
+
+      - run: script/build-macos dist/pylon-darwin-arm64
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pylon-darwin-arm64
+          path: dist/pylon-darwin-arm64
+          if-no-files-found: error
+
+  publish:
+    needs: [linux, macos]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Checksums
+        working-directory: dist
+        run: sha256sum pylon-* > checksums.txt
+
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" dist/* \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "$GITHUB_REF_NAME" \
+            --generate-notes

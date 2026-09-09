@@ -1,0 +1,30 @@
+#!/bin/sh
+# A mac binary for release: everything homebrew supplies is linked statically.
+# This is specifically for release, for local simply running `crystal build --release -o bin/pylon` is fine.
+set -e
+
+cd "$(dirname "$0")/.."
+output=${1:-dist/pylon-darwin-$(uname -m)}
+mkdir -p "$(dirname "$output")"
+
+# The github mac runners point this at openssl@1.1, which compiles the 1.1 code
+# path and then fails to link against the openssl 3 archive copied below.
+PKG_CONFIG_PATH="$(brew --prefix openssl@3)/lib/pkgconfig"
+export PKG_CONFIG_PATH
+
+archives=$(mktemp -d)
+trap 'rm -rf "$archives"' EXIT
+
+for formula in zstd pcre2 bdw-gc openssl@3; do
+  cp "$(brew --prefix "$formula")"/lib/*.a "$archives"/
+done
+
+crystal build --release --no-debug -o "$output" src/pylon.cr --link-flags "-L$archives"
+
+if otool -L "$output" | grep -q "$(brew --prefix)"; then
+  echo "$output still links a homebrew dylib:"
+  otool -L "$output"
+  exit 1
+fi
+
+ls -lh "$output"

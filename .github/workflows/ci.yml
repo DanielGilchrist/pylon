@@ -1,0 +1,58 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install zstd
+        run: |
+          if [ "$RUNNER_OS" = "Linux" ]; then
+            sudo apt-get update
+            sudo apt-get install -y libzstd-dev
+          else
+            brew install zstd
+          fi
+
+      - uses: crystal-lang/install-crystal@v1
+        with:
+          crystal: 1.21.0
+
+      - run: shards install
+
+      - run: crystal tool format --check
+
+      - name: Ameba
+        run: |
+          shards build ameba
+          bin/ameba
+
+      - run: crystal spec
+
+      - name: Custom ameba rule specs
+        run: crystal spec lint/spec
+
+      - name: Benches still compile
+        run: |
+          for file in bench/*.cr; do
+            crystal build --no-codegen "$file"
+          done
+
+      - name: End to end
+        run: |
+          crystal build -o bin/pylon src/pylon.cr
+          script/check-end-to-end

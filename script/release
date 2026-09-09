@@ -1,0 +1,44 @@
+#!/bin/sh
+set -e
+
+cd "$(dirname "$0")/.."
+version=$1
+
+if [ -z "$version" ]; then
+  echo "usage: script/release <version>, e.g. script/release 0.2.0"
+  exit 1
+fi
+
+case "$version" in
+  v*) echo "give the version without the leading v"; exit 1 ;;
+esac
+
+if [ -n "$(git status --porcelain)" ]; then
+  echo "commit or set aside your changes first"
+  exit 1
+fi
+
+if [ "$(git rev-parse --abbrev-ref HEAD)" != "main" ]; then
+  echo "release from main"
+  exit 1
+fi
+
+if git rev-parse -q --verify "refs/tags/v$version" >/dev/null; then
+  echo "v$version is already tagged"
+  exit 1
+fi
+
+awk -v version="$version" '/^version:/ { print "version: " version; next } { print }' \
+  shard.yml > shard.yml.bumped
+mv shard.yml.bumped shard.yml
+
+if [ -n "$(git status --porcelain shard.yml)" ]; then
+  git add shard.yml
+  git commit --quiet -m "Release $version"
+fi
+
+git tag -a "v$version" -m "v$version"
+
+echo "tagged v$version, publish it with:"
+echo
+echo "  git push origin main v$version"

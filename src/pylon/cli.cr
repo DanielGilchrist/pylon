@@ -8,5 +8,5 @@ struct Pylon::CLI
   include Kebab::Parseable
 
   @[Kebab::Subcommand]
-  getter command : Remote | Sync
+  getter command : Remote | Sync | Version
 end
