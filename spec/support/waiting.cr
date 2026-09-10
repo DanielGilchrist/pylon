@@ -31,15 +31,3 @@ def never_arrives(channel : Channel(T), *, for what : String, within : Time::Spa
   when timeout(within)
   end
 end
-
-# The one wait that has to poll: another process owns the state and there is no channel to block
-# on. Anything a fiber in this process produces goes through `await` instead.
-def await_path(path : String) : Nil
-  deadline = Time.instant + STALLED
-
-  until File.exists?(path)
-    fail("nothing appeared at #{path} before the run stalled") if Time.instant >= deadline
-
-    sleep(1.millisecond)
-  end
-end

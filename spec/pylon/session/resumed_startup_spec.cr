@@ -43,7 +43,7 @@ private def connect(
   & : Session(LocalEndpoint, RemoteEndpoint, Discard), RemoteEndpoint, CountingReader ->
 ) : Nil
   client, socket = UNIXSocket.pair
-  serve_remote_end(socket)
+  finished = serve_remote_end(socket)
   counting = CountingReader.new(client)
 
   configure = Pylon::Wire::Message::Configure.new(
@@ -62,6 +62,7 @@ private def connect(
   ensure
     client.close
     socket.close
+    await(finished, for: "the remote to finish and write its state")
   end
 end
 
@@ -79,8 +80,6 @@ describe "resuming from a persisted remote tree" do
         cycle!(session, tick)
         shared_tree = endpoint.tree
       end
-      await_path(ends.state)
-
       ends.remote.write("file_300.rb", "late arrival")
 
       connect(ends, shared_tree) do |session, _, counting|
@@ -99,8 +98,6 @@ describe "resuming from a persisted remote tree" do
       connect(ends, nil) do |session, _, _|
         cycle!(session, tick)
       end
-      await_path(ends.state)
-
       stale = Pylon::Core::Directory.new({"other.rb" => Fixtures.f1})
 
       connect(ends, stale) do |session, _, counting|

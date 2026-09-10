@@ -41,28 +41,53 @@ check() {
   fi
 }
 
+files_in() {
+  find "$1" -type f | wc -l | tr -d ' '
+}
+
+files_are() {
+  [[ "$(files_in "$1")" == "$2" ]]
+}
+
+wait_until() {
+  local what="$1"
+  shift
+  local deadline=$(( $(date +%s) + 30 ))
+
+  until "$@"; do
+    if [[ "$(date +%s)" -ge "$deadline" ]]; then
+      echo "  FAIL  timed out waiting for $what"
+      failures=$((failures + 1))
+      return 0
+    fi
+
+    sleep 0.05
+  done
+}
+
 "$PYLON" sync "$WORK/a" "user@host:$WORK/b" --state "$WORK/state" --watch --brand "Test Sync" \
   --remote-binary "$PYLON" --remote-state "$WORK/rstate" > "$WORK/log" 2>&1 &
 PID=$!
 disown 2>/dev/null || true
-sleep 5
 
-check "initial push landed"        401 "$(find "$WORK/b" -type f | wc -l | tr -d ' ')"
-check "local tree intact"          401 "$(find "$WORK/a" -type f | wc -l | tr -d ' ')"
+wait_until "the first sync to finish" grep -q "watching for changes" "$WORK/log"
+
+check "initial push landed"        401 "$(files_in "$WORK/b")"
+check "local tree intact"          401 "$(files_in "$WORK/a")"
 check "box only file removed"      0   "$(find "$WORK/b" -name old.rb | wc -l | tr -d ' ')"
 check "runs under the given brand" yes "$(grep -q 'Test Sync' "$WORK/log" && echo yes || echo no)"
 
 echo "class New; end" > "$WORK/a/app/models/new_model.rb"
-sleep 2
-check "local add went up"          402 "$(find "$WORK/b" -type f | wc -l | tr -d ' ')"
-check "local still intact"         402 "$(find "$WORK/a" -type f | wc -l | tr -d ' ')"
+wait_until "the local add to reach the box" test -f "$WORK/b/app/models/new_model.rb"
+check "local add went up"          402 "$(files_in "$WORK/b")"
+check "local still intact"         402 "$(files_in "$WORK/a")"
 
 echo "generated" > "$WORK/b/from_box.rbi"
-sleep 2
-check "box add came down"          403 "$(find "$WORK/a" -type f | wc -l | tr -d ' ')"
+wait_until "the box add to come down" test -f "$WORK/a/from_box.rbi"
+check "box add came down"          403 "$(files_in "$WORK/a")"
 
-sleep 2
-check "nothing drifted"            403 "$(find "$WORK/b" -type f | wc -l | tr -d ' ')"
+wait_until "the box to settle" files_are "$WORK/b" 403
+check "nothing drifted"            403 "$(files_in "$WORK/b")"
 
 if grep -q "halted" "$WORK/log"; then
   echo "  FAIL  a cycle halted"

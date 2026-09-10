@@ -29,9 +29,14 @@ def remote_configuration(
   remote_configuration(root.root, ignores, watch, brand, state)
 end
 
-def serve_remote_end(socket : IO) : Nil
+def serve_remote_end(socket : IO) : Channel(Nil)
+  finished = Channel(Nil).new(1)
+
   spawn do
     accepted = Server.accept(socket, socket, IO::Memory.new)
     accepted.run if accepted.is_a?(Server)
+    finished.send(nil)
   end
+
+  finished
 end
