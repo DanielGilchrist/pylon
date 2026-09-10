@@ -42,7 +42,7 @@ See what a sync would do without touching anything:
 pylon sync ~/code/app user@devbox:/home/ubuntu/app --dry-run
 ```
 
-### Options worth knowing
+### Sync Flags
 
 - `--state <path>` where to keep state from a previous run. Without it every start is cold requiring the whole tree to be rehashed and any discrepencies to be sent in full.
 - `--remote-state <path>` the same thing on the remote host.
