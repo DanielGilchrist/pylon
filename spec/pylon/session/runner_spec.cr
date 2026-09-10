@@ -10,6 +10,13 @@ private def burst(dirty_paths : DirtyPaths) : Nil
   dirty_paths.signals.send(nil)
 end
 
+private def release(dirty_paths : DirtyPaths) : Nil
+  select
+  when dirty_paths.signals.receive?
+  else
+  end
+end
+
 private def cycles : Channel(Report)
   Channel(Report).new(16)
 end
@@ -125,13 +132,13 @@ describe Runner do
     end
   end
 
-  it "keeps waiting while signals arrive in gaps longer than the debounce" do
+  it "keeps waiting while signals keep arriving" do
     in_pair do |local, _, session|
-      dirty_paths = DirtyPaths.new(Channel(Nil).new(16))
+      dirty_paths = DirtyPaths.new(Channel(Nil).new)
       runner = Runner.new(
         session,
         dirty_paths,
-        debounce: 2.milliseconds,
+        debounce: 1.millisecond,
         poll: 1.second,
         burst_quiet: 120.milliseconds,
       )
@@ -144,12 +151,10 @@ describe Runner do
       5.times do |index|
         local.write("spread_#{index}.rb", "s")
         burst(dirty_paths)
-        burst(dirty_paths)
-        sleep 25.milliseconds
       end
 
-      coalesced = await(reports, for: "the cycle for the spread out signals")
-      never_arrives(reports, for: "a cycle before the signals stopped", within: 80.milliseconds)
+      coalesced = await(reports, for: "the cycle for the signals that kept arriving")
+      never_arrives(reports, for: "a second cycle for the same signals", within: 80.milliseconds)
       runner.stop
 
       coalesced.remote_outcomes.count(&.applied?).should eq(5)
@@ -158,14 +163,14 @@ describe Runner do
 
   it "cycles anyway when a burst never goes quiet" do
     in_pair do |local, _, session|
-      dirty_paths = DirtyPaths.new(Channel(Nil).new(16))
+      dirty_paths = DirtyPaths.new(Channel(Nil).new)
       runner = Runner.new(
         session,
         dirty_paths,
-        debounce: 2.milliseconds,
+        debounce: 1.millisecond,
         poll: 1.second,
-        burst_quiet: 60.milliseconds,
-        settle_limit: 100.milliseconds,
+        burst_quiet: 1.hour,
+        settle_limit: 20.milliseconds,
       )
       reports = cycles
 
@@ -174,22 +179,18 @@ describe Runner do
       await(reports, for: "the first cycle")
 
       local.write("endless.rb", "e")
-      dirty_paths.add("endless.rb")
+      Runner::BURST_PATHS.times { |index| dirty_paths.add("endless_#{index}.rb") }
       streaming = true
 
       spawn do
         while streaming
-          select
-          when dirty_paths.signals.send(nil)
-          else
-          end
-
-          sleep 20.milliseconds
+          dirty_paths.signals.send(nil)
         end
       end
 
       forced = await(reports, for: "the cycle the settle limit forced")
       streaming = false
+      release(dirty_paths)
       runner.stop
 
       forced.remote_outcomes.count(&.applied?).should eq(1)
