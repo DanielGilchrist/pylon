@@ -13,7 +13,8 @@ for arch in ${*:-amd64 arm64}; do
     apk add --no-cache zstd-static zstd-dev pkgconf >/dev/null
     rm -rf lib .shards
     shards install --production >/dev/null 2>&1
-    crystal build --release --static --no-debug -o dist/pylon-linux-$arch src/pylon.cr
+    crystal build --release --static --no-debug --link-flags '-Wl,--strip-debug' \
+      -o dist/pylon-linux-$arch src/pylon.cr
   "
 done
 
