@@ -8,7 +8,7 @@ mkdir -p dist
 
 for arch in ${*:-amd64 arm64}; do
   echo "building linux/$arch"
-  docker run --rm --platform "linux/$arch" -v "$PWD":/w -w /w crystallang/crystal:1.21.0-alpine sh -c "
+  docker run --rm --platform "linux/$arch" -v "$PWD":/w -w /w crystallang/crystal:1.22.2-alpine sh -c "
     set -e
     apk add --no-cache zstd-static zstd-dev pkgconf >/dev/null
     rm -rf lib .shards

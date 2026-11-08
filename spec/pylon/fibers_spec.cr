@@ -57,6 +57,8 @@ end
 describe Fibers, "isolated work" do
   it "keeps one isolated context per name however much work runs on it" do
     done = Channel(Nil).new
+    Fibers.isolated(:spinner, Blip.new(done))
+    done.receive
 
     assert_descriptor_change(0) do
       50.times do
